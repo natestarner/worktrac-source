@@ -702,6 +702,11 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // every hold queued against it is then rejected with a 400 on sync -- which shouldRetryWrite
         // treats as terminal, so those sets would be destroyed rather than retried.
         trackingType: vars.trackingType,
+        // Optional, and absent on every create queued by a build from before muscles existed (a
+        // handler must accept every shape its key was ever persisted with). The server treats
+        // absent as none and drops codes it does not know, so neither can refuse the create.
+        primaryMuscles: vars.primaryMuscles,
+        secondaryMuscles: vars.secondaryMuscles,
       });
       if (vars.personId) await favoriteExercise(vars.personId, created.id);
       return created;

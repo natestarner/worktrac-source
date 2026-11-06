@@ -46,6 +46,44 @@ export function muscleName(code) {
   return BY_CODE.get(code)?.name;
 }
 
+// Words that name equipment or a variation rather than the movement, so they say nothing about
+// which muscles work. "Cable Fly" should match "Dumbbell Chest Fly" on "fly", not "Cable Crunch" on
+// "cable".
+const NOT_A_MOVEMENT = new Set([
+  'barbell', 'dumbbell', 'db', 'cable', 'machine', 'smith', 'kettlebell', 'ez', 'bar', 'band',
+  'banded', 'weighted', 'seated', 'standing', 'single', 'arm', 'leg', 'one', 'two', 'alternating',
+  'incline', 'decline', 'close', 'wide', 'grip', 'assisted', 'the', 'a', 'with', 'on', 'and',
+]);
+
+function movementWords(name) {
+  return (name || '')
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((w) => w.length > 1 && !NOT_A_MOVEMENT.has(w));
+}
+
+// A starting guess at a new custom exercise's muscles: those of the library exercise sharing the
+// most movement words with its name ("Zercher Squat" -> a squat's). Returned as the picker's
+// prefill, never saved on its own; null when nothing shares a word. Reads the cached catalog, so it
+// works offline exactly as online.
+export function suggestMuscles(name, catalog) {
+  const words = new Set(movementWords(name));
+  if (words.size === 0) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const row of catalog || []) {
+    if (!row?.isGlobal) continue;
+    const muscles = exerciseMuscles(row);
+    if (muscles.primary.length === 0) continue;
+    const score = movementWords(row.name).filter((w) => words.has(w)).length;
+    if (score > bestScore) {
+      best = { from: row.name, ...muscles };
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 // An exercise's muscles, tolerant of every shape a client can hold: a catalog row cached before the
 // fields existed (absent), a temp row created offline (absent), and codes this build does not know
 // (dropped). Always returns arrays, so callers never branch on "has muscles data".

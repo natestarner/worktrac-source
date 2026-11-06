@@ -29,12 +29,14 @@ public class ExerciseService {
     private final AccountMembershipRepository membershipRepository;
     private final ExerciseAttributionResolver attributionResolver;
     private final ExerciseMuscleResolver muscleResolver;
+    private final ExerciseMuscleWriter muscleWriter;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
                             QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
                             AccountMembershipRepository membershipRepository,
                             ExerciseAttributionResolver attributionResolver,
-                            ExerciseMuscleResolver muscleResolver) {
+                            ExerciseMuscleResolver muscleResolver,
+                            ExerciseMuscleWriter muscleWriter) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
@@ -42,6 +44,7 @@ public class ExerciseService {
         this.membershipRepository = membershipRepository;
         this.attributionResolver = attributionResolver;
         this.muscleResolver = muscleResolver;
+        this.muscleWriter = muscleWriter;
     }
 
     // One row's DTO, for the single-exercise responses (create, rename).
@@ -190,7 +193,33 @@ public class ExerciseService {
         // over the optimistic row, so a wrong answer here makes a just-created exercise render as
         // somebody else's.
         Exercise saved = exerciseRepository.save(exercise);
+        // Muscles only on the branch that genuinely inserts, like the creator stamp: a create that
+        // resolved to an existing row (a replay, a duplicate name, a library exercise) leaves that
+        // row's muscles alone -- a replay is not a request to change them. The writer drops what it
+        // does not recognise rather than refusing (see ExerciseRequest).
+        muscleWriter.replace(saved.getId(), request.primaryMuscles(), request.secondaryMuscles());
         return toDto(access, saved);
+    }
+
+    // Replaces the muscles of one of the household's OWN exercises. Library exercises are described
+    // by the app and are not editable (403, like rename). Same "who may" as rename -- the person who
+    // added it, or the owner -- and deliberately WITHOUT rename's "nobody else is using it" 409: a
+    // name labels everyone's history, but muscles only describe the movement, so correcting them
+    // relabels nothing anybody logged.
+    //
+    // A GATED (online-only) write on the client, so refusing here is honest: there is no outbox
+    // behind it to discard. Never refused for WHAT was sent -- unknown codes are dropped.
+    @Transactional
+    public ExerciseDto updateMuscles(AccountAccess access, Long exerciseId, ExerciseMusclesRequest request) {
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
+        if (exercise.isGlobal()) {
+            throw new ForbiddenException("The muscles of preloaded exercises can't be changed");
+        }
+        if (!access.mayEditSharedResource(exercise.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this exercise, or the account owner, can change its muscles");
+        }
+        muscleWriter.replace(exercise.getId(), request.primaryMuscles(), request.secondaryMuscles());
+        return toDto(access, exercise);
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared

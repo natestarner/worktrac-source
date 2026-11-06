@@ -1,6 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import shared from '../../../shared/muscles/muscles.json';
-import { MUSCLES, muscleName, exerciseMuscles } from './muscles';
+import { MUSCLES, muscleName, exerciseMuscles, suggestMuscles } from './muscles';
+
+describe('suggestMuscles', () => {
+  const catalog = [
+    { name: 'Dumbbell Chest Fly', isGlobal: true, primaryMuscles: ['chest'], secondaryMuscles: ['shoulders'] },
+    { name: 'Cable Crunch', isGlobal: true, primaryMuscles: ['abs'], secondaryMuscles: [] },
+    { name: 'My Fly', isGlobal: false, primaryMuscles: ['biceps'], secondaryMuscles: [] },
+  ];
+
+  // Equipment words say nothing about muscles: "Cable Fly" is a fly, not a crunch.
+  it('matches on the movement, not the equipment', () => {
+    expect(suggestMuscles('Cable Fly', catalog)).toEqual({ from: 'Dumbbell Chest Fly', primary: ['chest'], secondary: ['shoulders'] });
+  });
+
+  it('only learns from the library, and gives up when nothing shares a word', () => {
+    expect(suggestMuscles('Turkish Thing', catalog)).toBeNull();
+    expect(suggestMuscles('', catalog)).toBeNull();
+    expect(suggestMuscles('Fly', [catalog[2]])).toBeNull();
+  });
+});
 
 // The server sends muscle CODES; every name a person reads comes from MUSCLES. So the two lists
 // drifting apart is invisible on both sides: the server sends a code the client drops, or the

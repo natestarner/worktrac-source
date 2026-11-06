@@ -794,8 +794,13 @@ export default function HelpTab() {
           see them drawn on a body, front and back: the main muscles in solid red, the helping ones
           lighter, and every one named underneath. The first time, it asks whether to draw a male
           or female body, and you can switch whenever you like. That choice is per person and is
-          saved on this device. All of this works offline. Exercises you add yourself don&rsquo;t
-          list any muscles yet.
+          saved on this device. All of this works offline.
+        </p>
+        <p>
+          When you add your own exercise you can pick its muscles too: tap a muscle once for a main
+          one, twice for a helper. Huddle suggests a starting point from the closest exercise in its
+          library. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
+          connection, and only whoever added the exercise or the account owner can.
         </p>
         <HelpTable
           head={['What', 'Does', 'Offline?']}

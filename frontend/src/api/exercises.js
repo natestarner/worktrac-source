@@ -11,8 +11,17 @@ export function listExercises() {
 // trackingType is create-only ('strength' | 'duration') -- what a set of this exercise measures.
 // Absent => 'strength'. The backend has no setter for it after creation: flipping it would
 // reinterpret every set already logged against the exercise.
-export function addExercise({ name, idempotencyKey, trackingType }) {
-  return apiClient.post('/api/exercises', { name, idempotencyKey, trackingType });
+// primaryMuscles / secondaryMuscles are optional muscle codes (utils/muscles.js). The server drops
+// codes it does not know rather than refusing -- this is a durable write -- and ignores them when
+// the create resolves to an existing exercise.
+export function addExercise({ name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles }) {
+  return apiClient.post('/api/exercises', { name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles });
+}
+
+// Replaces a household exercise's muscles. Online-only (gated): the person who added it, or the
+// account owner; library exercises refuse. Answers with the exercise's catalog row.
+export function updateExerciseMuscles(exerciseId, { primary, secondary }) {
+  return apiClient.put(`/api/exercises/${exerciseId}/muscles`, { primaryMuscles: primary, secondaryMuscles: secondary });
 }
 
 export function updateExercise(exerciseId, { name }) {

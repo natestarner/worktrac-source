@@ -1750,6 +1750,17 @@ export default function ExerciseDetail({
           bodyFigure={bodyFigure}
           onChooseFigure={setBodyFigure}
           onClose={() => setShowAboutSheet(false)}
+          // An own exercise nobody has described yet: offer to describe it, through Customize (the
+          // one place muscles are edited). Not for library exercises, which the app describes, and
+          // not for a temp row, whose Customize is disabled until its create syncs.
+          onAddMuscles={
+            !exercise.isGlobal && !isTempExerciseId(exercise.id) && exercise.createdByYou !== false
+              ? () => {
+                  setShowAboutSheet(false);
+                  setShowConfigureModal(true);
+                }
+              : null
+          }
         />
       )}
 
@@ -1766,6 +1777,15 @@ export default function ExerciseDetail({
           onTagsChanged={onPersonalizationChanged || (() => {})}
           onExerciseChanged={onPersonalizationChanged || (() => {})}
           onRequestDelete={handleRequestDelete}
+          muscles={muscles}
+          // The server's row, written into the cached catalog in place (muscles live there), so the
+          // strip and sheet show the change at once. Patches an existing entry only -- never builds
+          // the catalog from one row (offline-internals.md).
+          onMusclesSaved={(updated) =>
+            queryClient.setQueryData(queryKeys.exercises(), (rows) =>
+              rows === undefined ? undefined : rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+            )
+          }
         />
       )}
 

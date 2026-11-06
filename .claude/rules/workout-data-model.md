@@ -102,7 +102,12 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
 - **Never make muscles required on a create.** A custom exercise's muscles are optional, and
   `ExerciseService.add` is a durable write: a 400 for missing or unknown muscles would discard the
   create and every set queued behind its temp id. An unknown code from a newer client is dropped,
-  not refused.
+  not refused — `ExerciseMuscleWriter` normalises, it never validates.
+- **A create writes muscles only on the insert branch.** Like the creator stamp: a replay or a
+  duplicate-name match returns the existing row untouched.
+- **`PUT /{id}/muscles` is rename's "who may" without rename's 409.** The annotation admits every
+  member; `ExerciseService.updateMuscles`'s `mayEditSharedResource` check is what refuses, and only
+  `MemberPermissionsTest` notices if it goes.
 
 ## Creating an exercise that already exists returns it -- never a 409
 
