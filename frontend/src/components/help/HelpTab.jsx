@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
+import { MUSCLE_MAP_HELP } from '../trends/chartHelp';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
 import { useAuth } from '../../context/AuthContext';
@@ -738,6 +739,16 @@ export default function HelpTab() {
           head={['Metric', 'Each bar is']}
           rows={Object.values(WEEKLY_METRICS).map((m) => [m.label, m.barMeaning])}
         />
+
+        <h3 className="help-h3">Muscles worked</h3>
+        {/* Read from the card's own "?" copy, so the two cannot disagree (user-facing-help.md). */}
+        {MUSCLE_MAP_HELP.lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        <p>
+          The body is the one you picked in an exercise&rsquo;s About sheet. Every shade on it is also a
+          row underneath, with the muscle&rsquo;s name and its number of sets.
+        </p>
 
         <h3 className="help-h3">Per-exercise progress</h3>
         <p>

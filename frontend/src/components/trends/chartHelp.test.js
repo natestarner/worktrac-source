@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONSISTENCY_HELP,
+  MUSCLE_MAP_HELP,
   exerciseTrendHelp,
   prRecordHelp,
   weeklyMetricHelp,
@@ -10,6 +11,7 @@ import { WEEKLY_METRICS } from './weeklyMetrics';
 
 const allHelp = [
   CONSISTENCY_HELP,
+  MUSCLE_MAP_HELP,
   ...Object.keys(WEEKLY_METRICS).map(weeklyMetricHelp),
   ...Object.keys(EXERCISE_METRICS).map(exerciseTrendHelp),
   ...Object.keys(EXERCISE_METRICS).map(prRecordHelp),
@@ -85,7 +87,7 @@ describe('chart help copy', () => {
     expect(prRecordHelp('nonsense').lines[1]).toBe(EXERCISE_METRICS.est1rm.recordMeaning);
   });
 
-  it('keeps the four button labels mutually non-containing', () => {
+  it('keeps the five button labels mutually non-containing', () => {
     // The three Trends "?" buttons are on one screen at once, and Playwright matches an accessible
     // name as a case-insensitive SUBSTRING -- so one label containing another turns a single
     // getByRole into a strict-mode violation. The PRs one is on its own screen, but it is checked
@@ -94,9 +96,10 @@ describe('chart help copy', () => {
     //
     // This count dropping from five is the workouts-per-week chart folding into the weekly metric
     // switcher: its "?" went with it. Adding a weekly METRIC must not add a label here -- they all
-    // share 'What the weekly totals chart shows', which is the point of the merge.
+    // share 'What the weekly totals chart shows', which is the point of the merge. The muscle map
+    // (2026-11-06) is a chart of its own, so its "?" is the fifth.
     const labels = [...new Set(allHelp.map((h) => h.label))];
-    expect(labels).toHaveLength(4);
+    expect(labels).toHaveLength(5);
 
     for (const a of labels) {
       for (const b of labels) {

@@ -1811,6 +1811,99 @@ input[type='search']::-webkit-search-results-decoration {
   cursor: pointer;
 }
 
+/* The Trends muscle map (MuscleMapCard.jsx): two bodies, then one row per worked muscle whose bar
+   carries the same shade as the muscle on the body, so the list and the bodies read as one chart. */
+.muscle-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.muscle-map-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.muscle-map-layout {
+  container-type: inline-size;
+}
+
+.muscle-map-bodies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.muscle-map-readout {
+  margin-top: var(--space-5);
+}
+
+.muscle-map-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.muscle-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 6.5rem) 1fr 2.5rem;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.muscle-map-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (min-width: 600px) {
+  .muscle-map-grid:has(.muscle-map-readout) {
+    display: grid;
+    grid-template-columns: minmax(0, 360px) 1fr;
+    gap: var(--space-6);
+    align-items: center;
+  }
+
+  .muscle-map-readout {
+    margin-top: 0;
+  }
+}
+
+.muscle-map-track {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-subtle-bg);
+  overflow: hidden;
+}
+
+.muscle-map-bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-muscle);
+}
+
+.muscle-map-sets {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.muscle-map-notes p {
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
 /* MusclePicker: a chip per muscle cycling not worked -> main -> helping. Main is filled, helping is
    outlined in the accent, so the state reads without relying on colour alone. */
 .muscle-picker-hint {
