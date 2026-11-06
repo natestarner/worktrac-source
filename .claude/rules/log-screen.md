@@ -720,6 +720,62 @@ is selectable and searchable the moment the modal closes.
 Mechanism and the general form of the rule: `.claude/rules/offline-internals.md`. Post-mortem:
 `docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md`.
 
+## The strip under the name: "About this exercise" + the exercise's actions (2026-11-06)
+
+The name has its own full-width line; directly under it, `ExerciseAboutStrip` holds the About
+button (a tiny body with the main muscles shaded, plus their names when there is room), the
+favorite / session-note / customize buttons, and the how-to video slot. Tapping About opens
+`ExerciseAboutSheet` (muscles on a body, front and back). Decided with Nate; plan in the PR.
+
+- **Fixed height, and nothing in it waits on data.** It renders synchronously from the props, and
+  an exercise with no muscles gets the same box. The steppers sit below it.
+- **The layout follows the strip's own width** (`@container`, index.css), never the device:
+  narrow = five equal slots, no muscle text; wide = the About button takes the spare width.
+- **The video slot is always present, and last.** No video leaves it empty, so the actions never
+  shift sideways between exercises. With one (`exercise.video` on the catalog row, library only,
+  read through `utils/exerciseVideo.js` like the muscles) it holds "Show how-to video", which
+  opens the same sheet scrolled to `ExerciseVideoCard`. Not wrapped in `ReadOnlyWrap`: watching is
+  not a write. It was "Watch how it's done" until real videos arrived: that contains "Done", and 20
+  e2e tests clicking the past-workout frame's Done hit two buttons.
+- **The video loads nothing until "Play the video" is tapped** -- no poster, no YouTube request --
+  and plays this app's own `/embed/youtube.html` (muted, from `start`). Closing the sheet unmounts
+  the frame, which is what stops it. Offline the button becomes a sentence; that is the one
+  connectivity branch here, and it is on `resilience.md`'s register. In the App Store app the
+  embed page comes from the web host (`config.js#getEmbedOrigin`, written by
+  `write-native-config.mjs`), because YouTube refuses to play inside `capacitor://localhost`.
+- **Muscles come from the CATALOG row**, which `LogTab` looks up by id and passes in as `muscles`
+  (`selectedExercise` is usually the person's picker row, which carries none). Absent fields are
+  empty lists (`utils/muscles.js#exerciseMuscles`), never an error.
+- **Not a connectivity branch.** Muscles are in the cached catalog and the body art is a build
+  asset (precached on the web: `webp` is in `vite.config.js`'s `globPatterns`).
+  `parity-exercise-about.spec.ts` covers all four modes; verified red by hiding muscles offline.
+- **Labels:** the About button's name starts "About this exercise" and contains no other label on
+  the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
+  "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
+- **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **An undescribed own exercise offers "Add muscles worked"** in the sheet, which opens Customize
+  (the one place muscles are edited). Not for library exercises, and not for a temp row: Customize
+  is disabled until its create syncs. Customize hands the server's row back through
+  `onMusclesSaved`, which patches the cached catalog in place — never builds it.
+
+### The same sheet away from the Log screen: "Preview exercise"
+
+`components/exercise/ExercisePreview.jsx` shows an exercise's muscles and video **before** it is
+chosen: a "Preview exercise" button on each search result (the picker, the routine editor), and
+"About this exercise" in History's and PRs' per-exercise menu. One lookup for all of them (the
+catalog row by id), so it shows exactly what the strip would.
+
+- **The button's name never contains the exercise's name.** Specs click a result by
+  `getByRole('button', { name: 'Barbell Bench Press' })` and Playwright matches by substring; the
+  row is named to a screen reader through `aria-describedby` instead.
+- **One dialog at a time.** History and PRs close their menu as the sheet opens; the routine
+  editor draws the preview INSIDE its own dialog (`ExerciseAboutContent`), with a back link,
+  because a sheet over a dialog is two scrims and two focus traps. The editor's draft is its own
+  state, so it is all there on the way back.
+- **Read-only.** No "Add muscles worked" in a preview; muscles are edited in Customize.
+- Not a connectivity branch: `parity-exercise-preview.spec.ts` covers the picker in all four
+  modes (verified red by hiding muscles offline).
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

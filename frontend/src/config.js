@@ -96,6 +96,14 @@ export async function loadConfig() {
   return config;
 }
 
+// Where the how-to video page lives (public/embed/youtube.html). On the web it is this origin, so
+// the answer is '' and the path stays relative. The App Store app's config.json names the web host
+// (scripts/write-native-config.mjs), because a YouTube player framed from capacitor://localhost
+// refuses to play.
+export function getEmbedOrigin() {
+  return config?.embedOrigin ?? '';
+}
+
 export function getApiUrl(path) {
   if (!config || !config.apiUrl) return path;
   return `${config.apiUrl}${path}`;

@@ -36,6 +36,7 @@
     "@tanstack/react-query-persist-client": "^5.104.1",
     "fflate": "^0.8.3",
     "idb-keyval": "^6.3.0",
+    "js-rich-body-highlighter": "0.1.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",

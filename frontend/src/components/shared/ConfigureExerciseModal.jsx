@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import SectionLabel from './SectionLabel';
-import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
+import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise, updateExerciseMuscles } from '../../api/exercises';
+import MusclePicker from '../exercise/MusclePicker';
 import { setPersistentNote } from '../../api/notes';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
@@ -35,6 +36,9 @@ export default function ConfigureExerciseModal({
   onTagsChanged,
   onExerciseChanged,
   onRequestDelete,
+  // { primary, secondary } -- the exercise's catalog-row muscles (ExerciseDetail passes its own).
+  muscles = { primary: [], secondary: [] },
+  onMusclesSaved,
 }) {
   const { isMember, ownerName } = useAccountAccess();
   const isHousehold = !!exercise && !exercise.isGlobal;
@@ -67,6 +71,13 @@ export default function ConfigureExerciseModal({
   const [newFieldName, setNewFieldName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [busy, setBusy] = useState(false);
+  // Unsaved muscle edits, or null while the picker shows what is saved.
+  const [musclesDraft, setMusclesDraft] = useState(null);
+  // Who may change an exercise's muscles: whoever added it, or the account owner -- rename's rule
+  // without its "nobody else is using it" part (muscles relabel nobody's history). Fails OPEN like
+  // canRename above: an older cached DTO lacks createdByYou, and the server is the authority.
+  const canEditMuscles = isHousehold && (exercise.createdByYou !== false || !isMember);
+  const shownMuscles = musclesDraft ?? muscles;
   // `busy` stays the source of truth for `locked` because it also covers the non-write work these
   // handlers do (onExerciseChanged/onTagsChanged refetches). useGatedMutation adds the error path
   // every one of these handlers was missing -- each had try/finally with no catch, so a failed
@@ -81,6 +92,22 @@ export default function ConfigureExerciseModal({
     try {
       await updateExercise(exercise.id, { name: trimmed });
       if (onExerciseChanged) await onExerciseChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Muscles worked, for the household's own exercises (library ones are described by the app).
+  // A gated write: it replaces the set on the server, then hands the server's row to
+  // onMusclesSaved, which writes it into the cached catalog so the strip and the About sheet update
+  // without a round trip.
+  async function saveMuscles() {
+    if (!musclesDraft || busy) return;
+    setBusy(true);
+    try {
+      const updated = await updateExerciseMuscles(exercise.id, musclesDraft);
+      if (onMusclesSaved) onMusclesSaved(updated);
+      setMusclesDraft(null);
     } finally {
       setBusy(false);
     }
@@ -163,6 +190,11 @@ export default function ConfigureExerciseModal({
     showServerMessage: true,
   });
   const guardedSaveNote = run(saveNote, { offlineMessage: 'Editing needs a connection.' });
+  // showServerMessage for the same reason as rename: a 403 here says whose exercise it is.
+  const guardedSaveMuscles = run(saveMuscles, {
+    offlineMessage: 'Editing needs a connection.',
+    showServerMessage: true,
+  });
   const guardedToggleTag = run(toggleTag, { offlineMessage: 'Editing needs a connection.' });
   const guardedAddTag = run(addTag, { offlineMessage: 'Editing needs a connection.' });
   const guardedAddField = run(addField, { offlineMessage: 'Editing needs a connection.' });
@@ -237,6 +269,22 @@ export default function ConfigureExerciseModal({
         placeholder="e.g. Keep elbows tucked, bad knee — go light"
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
+
+      {canEditMuscles && (
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <SectionLabel>Muscles worked</SectionLabel>
+          <MusclePicker value={shownMuscles} onChange={setMusclesDraft} disabled={locked} />
+          {musclesDraft && (
+            <button
+              onClick={guardedSaveMuscles}
+              disabled={locked}
+              style={{ ...smallButtonStyle, marginTop: 'var(--space-3)', opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}
+            >
+              Update muscles
+            </button>
+          )}
+        </div>
+      )}
 
       <SectionLabel>Tags</SectionLabel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>

@@ -28,17 +28,36 @@ public class ExerciseService {
     private final WorkoutSetRepository workoutSetRepository;
     private final AccountMembershipRepository membershipRepository;
     private final ExerciseAttributionResolver attributionResolver;
+    private final ExerciseMuscleResolver muscleResolver;
+    private final ExerciseMuscleWriter muscleWriter;
+    private final ExerciseVideoRepository videoRepository;
+    private final ExerciseAliasRepository aliasRepository;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
                             QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
                             AccountMembershipRepository membershipRepository,
-                            ExerciseAttributionResolver attributionResolver) {
+                            ExerciseAttributionResolver attributionResolver,
+                            ExerciseMuscleResolver muscleResolver,
+                            ExerciseMuscleWriter muscleWriter,
+                            ExerciseVideoRepository videoRepository,
+                            ExerciseAliasRepository aliasRepository) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
         this.workoutSetRepository = workoutSetRepository;
         this.membershipRepository = membershipRepository;
         this.attributionResolver = attributionResolver;
+        this.muscleResolver = muscleResolver;
+        this.muscleWriter = muscleWriter;
+        this.videoRepository = videoRepository;
+        this.aliasRepository = aliasRepository;
+    }
+
+    // One row's DTO, for the single-exercise responses (create, rename).
+    private ExerciseDto toDto(AccountAccess access, Exercise exercise) {
+        return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise),
+                muscleResolver.forExercise(exercise), videoRepository.activeForExercise(exercise.getId()),
+                aliasRepository.forExercise(exercise.getId()));
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
@@ -53,8 +72,17 @@ public class ExerciseService {
         // ⚠️ Resolved ONCE, outside the mapping below. Per-row it is an N+1 across the whole
         // catalog -- see ExerciseAttributionResolver.
         Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, exercises);
+        // Same: one query for the whole catalogue (ExerciseMuscleResolver), looked up per row.
+        Map<Long, ExerciseMuscles> muscles = muscleResolver.forAccount(access.accountId());
+        // And videos: one query, library rows only (ExerciseVideoRepository).
+        Map<Long, ExerciseVideoDto> videos = videoRepository.activeByExercise();
+        // And search aliases: one query, library rows only (ExerciseAliasRepository).
+        Map<Long, List<String>> aliases = aliasRepository.byExercise();
         return exercises.stream()
-                .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId())))
+                .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId()),
+                        muscles.getOrDefault(exercise.getId(), ExerciseMuscles.NONE),
+                        videos.get(exercise.getId()),
+                        aliases.getOrDefault(exercise.getId(), List.of())))
                 .toList();
     }
 
@@ -119,8 +147,7 @@ public class ExerciseService {
             if (existing.isPresent()) {
                 // Resolved, never assumed: a replayed create returns a row this caller may not
                 // have created, and the stamp was deliberately not transferred above.
-                return ExerciseDto.from(existing.get(),
-                        attributionResolver.resolveOne(access, existing.get()));
+                return toDto(access, existing.get());
             }
         }
         // IllegalArgumentException is the app's existing route to an honest 400
@@ -159,7 +186,7 @@ public class ExerciseService {
         if (!sameNameAndMeasure.isEmpty()) {
             // Same as the idempotency branch: this row is whoever's it already was.
             Exercise existing = sameNameAndMeasure.get(0);
-            return ExerciseDto.from(existing, attributionResolver.resolveOne(access, existing));
+            return toDto(access, existing);
         }
 
         // Deliberately here, AFTER both dedup branches above. A create that resolves to an
@@ -179,7 +206,33 @@ public class ExerciseService {
         // over the optimistic row, so a wrong answer here makes a just-created exercise render as
         // somebody else's.
         Exercise saved = exerciseRepository.save(exercise);
-        return ExerciseDto.from(saved, attributionResolver.resolveOne(access, saved));
+        // Muscles only on the branch that genuinely inserts, like the creator stamp: a create that
+        // resolved to an existing row (a replay, a duplicate name, a library exercise) leaves that
+        // row's muscles alone -- a replay is not a request to change them. The writer drops what it
+        // does not recognise rather than refusing (see ExerciseRequest).
+        muscleWriter.replace(saved.getId(), request.primaryMuscles(), request.secondaryMuscles());
+        return toDto(access, saved);
+    }
+
+    // Replaces the muscles of one of the household's OWN exercises. Library exercises are described
+    // by the app and are not editable (403, like rename). Same "who may" as rename -- the person who
+    // added it, or the owner -- and deliberately WITHOUT rename's "nobody else is using it" 409: a
+    // name labels everyone's history, but muscles only describe the movement, so correcting them
+    // relabels nothing anybody logged.
+    //
+    // A GATED (online-only) write on the client, so refusing here is honest: there is no outbox
+    // behind it to discard. Never refused for WHAT was sent -- unknown codes are dropped.
+    @Transactional
+    public ExerciseDto updateMuscles(AccountAccess access, Long exerciseId, ExerciseMusclesRequest request) {
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
+        if (exercise.isGlobal()) {
+            throw new ForbiddenException("The muscles of preloaded exercises can't be changed");
+        }
+        if (!access.mayEditSharedResource(exercise.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this exercise, or the account owner, can change its muscles");
+        }
+        muscleWriter.replace(exercise.getId(), request.primaryMuscles(), request.secondaryMuscles());
+        return toDto(access, exercise);
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared
@@ -237,7 +290,7 @@ public class ExerciseService {
         }
 
         exercise.setName(request.name().trim());
-        return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise));
+        return toDto(access, exercise);
     }
 
     // Deleting is only for an account's own exercises. Removing a preloaded exercise from your

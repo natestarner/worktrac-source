@@ -29,6 +29,14 @@ describe('the YouTube embed page on the web host', () => {
     expect(directive('default-src')).toBe("default-src 'none'");
   });
 
+  // The app frames this page itself (the exercise sheet's video), so the app's own CSP must let
+  // it: frame-src is set explicitly there, so default-src 'self' does not cover frames.
+  it('may be framed by the app on the same origin', () => {
+    const global = webAppConfig.globalHeaders['Content-Security-Policy'];
+    const frameSrc = global.split(';').map((d) => d.trim()).find((d) => d.startsWith('frame-src '));
+    expect(frameSrc.split(' ')).toContain("'self'");
+  });
+
   it('leaves the rest of the site unframeable', () => {
     const global = webAppConfig.globalHeaders['Content-Security-Policy'];
     expect(global).toContain("frame-ancestors 'none'");
@@ -59,6 +67,23 @@ describe('youtube.js', () => {
   it('uses youtube.com when asked', () => {
     const frame = run('?v=j7ULT6dznNc&host=youtube').querySelector('iframe');
     expect(frame.src).toBe('https://www.youtube.com/embed/j7ULT6dznNc?playsinline=1&rel=0');
+  });
+
+  it('starts at a given second, and muted and playing when asked', () => {
+    const frame = run('?v=j7ULT6dznNc&start=42&mute=1').querySelector('iframe');
+    expect(frame.src).toBe(
+      'https://www.youtube-nocookie.com/embed/j7ULT6dznNc?playsinline=1&rel=0&start=42&mute=1&autoplay=1',
+    );
+  });
+
+  it.each([
+    ['a negative start', '?v=j7ULT6dznNc&start=-5'],
+    ['a start with markup', '?v=j7ULT6dznNc&start=%3Cb%3E'],
+    ['a start that is too long', '?v=j7ULT6dznNc&start=123456'],
+    ['a mute that is not 1', '?v=j7ULT6dznNc&mute=true'],
+  ])('ignores %s and still frames the video', (_label, search) => {
+    const frame = run(search).querySelector('iframe');
+    expect(frame.src).toBe('https://www.youtube-nocookie.com/embed/j7ULT6dznNc?playsinline=1&rel=0');
   });
 
   it.each([

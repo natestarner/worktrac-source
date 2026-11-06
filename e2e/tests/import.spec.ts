@@ -149,6 +149,28 @@ test.describe('CSV import', () => {
     await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
   });
 
+  // An exercise the file adds arrives described: its muscles come from the Main/Helping Muscles
+  // columns an export writes, so a household's own exercise keeps them when it moves.
+  test('an exercise the file adds keeps the muscles the file gives it', async ({ page, request }) => {
+    await registerAsPro(page, request, 'Casey');
+
+    await openImportModal(page);
+    await chooseCsv(
+      page,
+      'muscles.csv',
+      ['Exercise,Date,Reps,Main Muscles,Helping Muscles', 'Prowler Drive,2026-08-20,12,Quads; Glutes,Calves'].join('\n'),
+    );
+    await page.getByRole('button', { name: /^Import 1 set into Casey/ }).click();
+    await expect(page.getByText('Import complete')).toBeVisible();
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    await page.getByRole('link', { name: 'Log' }).click();
+    await pickExercise(page, 'Prowler Drive');
+    await expect(
+      page.getByRole('button', { name: 'About this exercise: works Glutes and Quads, helped by Calves' }),
+    ).toBeVisible();
+  });
+
   test('the entry point refuses offline, in the offline-gating idiom', async ({ page, request, context }) => {
     await registerAsPro(page, request, 'Casey');
     await page.locator('.header-bar').getByRole('button').click();

@@ -23,6 +23,25 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
 
     Optional<Exercise> findByIdAndAccount_Id(Long id, Long accountId);
 
+    // "Muscles worked" (V92) for every global exercise plus this account's own -- the same scope as
+    // findVisibleToAccount, keyed on the account rather than on an id list (ExerciseMuscleResolver).
+    // Ordered by the vocabulary's sort_order so each exercise's lists read head to toe; the result
+    // is a few rows per exercise, nothing like the stats loads whose SQL sorts spill.
+    @Query(value = "SELECT em.exercise_id AS exerciseId, em.muscle_code AS muscleCode, em.role AS role "
+            + "FROM exercise_muscles em "
+            + "JOIN exercises e ON e.id = em.exercise_id "
+            + "JOIN muscles m ON m.code = em.muscle_code "
+            + "WHERE e.is_deleted = 0 AND (e.account_id IS NULL OR e.account_id = :accountId) "
+            + "ORDER BY em.exercise_id, m.sort_order", nativeQuery = true)
+    List<ExerciseMuscleRow> findMuscleRowsVisibleToAccount(@Param("accountId") Long accountId);
+
+    @Query(value = "SELECT em.exercise_id AS exerciseId, em.muscle_code AS muscleCode, em.role AS role "
+            + "FROM exercise_muscles em "
+            + "JOIN muscles m ON m.code = em.muscle_code "
+            + "WHERE em.exercise_id = :exerciseId "
+            + "ORDER BY m.sort_order", nativeQuery = true)
+    List<ExerciseMuscleRow> findMuscleRowsByExerciseId(@Param("exerciseId") Long exerciseId);
+
     // Account-scoped idempotency lookup for exercise creation, so a replayed offline create returns
     // the already-committed exercise instead of inserting a duplicate.
     Optional<Exercise> findByClientKeyAndAccount_Id(String clientKey, Long accountId);

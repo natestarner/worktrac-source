@@ -76,6 +76,28 @@ a spreadsheet they kept by hand rather than only a file this app produced.
 | `Set #` | Advisory only; order comes from the timestamp |
 | `Rest (sec)` | `null`, as for any set not logged live |
 | `Session Note`, `Exercise Note`, `Favorite`, `Tags` | Nothing written |
+| `Main Muscles`, `Helping Muscles` | Nothing written (see below) |
+
+### Muscles travel with an exercise the import creates, and only then
+
+Export writes every exercise's muscles by display name ("Shoulders; Chest"), in the vocabulary's own
+order, as the last two columns, so a spreadsheet built against the older columns by position still
+lines up. Library exercises are included; the file then describes what it contains completely.
+
+Import writes them **only onto an exercise it creates**, from the first row of that exercise that
+names any. That is the rule an ordinary create follows (`ExerciseService.add` writes muscles on the
+insert branch only), and it is what the columns are for: a household's own exercise, described by
+whoever made it, arriving in a household that has never seen it. Without them the description was
+lost, and the round trip into a NEW account stopped being byte-identical
+(`CsvImportControllerTest#aCustomExercisesMusclesTravelToAnotherHousehold`).
+
+- **An existing exercise keeps what it has**, described or not. The library's muscles are the
+  app's; a household's are edited in Customize by whoever may (`PUT /{id}/muscles`), and an old file
+  is not that person. Same "never overwrite" stance as the personalization columns.
+- **Names or codes, any case** (`MuscleNames#toCodes`). A word that is no muscle is dropped and
+  never rejects the row: the set is what the row is for. `ExerciseMuscleWriter` then normalises as it
+  does for every create (a muscle named as both main and helping stays main).
+- Undo does not delete exercises an import created (above), so it leaves their muscles too.
 
 **Read but never imported:** `Custom Fields` (out of scope) and `Est. 1RM` (derived — recomputed on
 export). Both are reported in the preview rather than dropped in silence.

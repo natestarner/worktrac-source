@@ -482,6 +482,33 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
             assertThat(createTagAs(memberToken, "sam-pull")).isPositive();
         }
 
+        // PUT /{id}/muscles carries EDIT_OWN, which every member holds, so -- exactly like rename --
+        // ExerciseService.updateMuscles is the only thing refusing a member somebody else's
+        // exercise. This pins that service half (verified red by removing the check).
+        @Test
+        void aMemberMayChangeTheMusclesOfTheirOwnExerciseOnly() throws Exception {
+            long own = createExerciseAs(memberToken, "Sam's Curl");
+            long owners = createExerciseAs(ownerToken, "Nate's Curl");
+            String body = objectMapper.writeValueAsString(Map.of("primaryMuscles", List.of("biceps")));
+
+            mockMvc.perform(put("/api/exercises/" + own + "/muscles")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk());
+            mockMvc.perform(put("/api/exercises/" + owners + "/muscles")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isForbidden());
+            // The owner may describe anybody's, as they may rename anybody's.
+            mockMvc.perform(put("/api/exercises/" + own + "/muscles")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk());
+        }
+
         @Test
         void aMemberMayRenameTheExerciseTheyCreated() throws Exception {
             long id = createExerciseAs(memberToken, "Sam's Curl");

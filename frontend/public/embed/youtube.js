@@ -6,6 +6,10 @@
 //
 // ?host=youtube switches from youtube-nocookie.com (the default: no cookies until play) to
 // youtube.com, so the two can be compared on a device.
+//
+// ?start=<seconds> starts the video there (digits only, at most five). ?mute=1 starts it playing
+// with the sound off: the app opens a video from a tap (a gesture, so autoplay is allowed when
+// muted) in a gym, where sound is the wrong default; YouTube's own controls unmute it.
 (function () {
   var params = new URLSearchParams(window.location.search);
   var id = params.get('v') || '';
@@ -22,7 +26,11 @@
   var frame = document.createElement('iframe');
   // playsinline: iPhone otherwise forces fullscreen on play. rel=0: suggestions from the same
   // channel only.
-  frame.src = base + id + '?playsinline=1&rel=0';
+  var query = '?playsinline=1&rel=0';
+  var start = params.get('start') || '';
+  if (/^[0-9]{1,5}$/.test(start)) query += '&start=' + Number(start);
+  if (params.get('mute') === '1') query += '&mute=1&autoplay=1';
+  frame.src = base + id + query;
   frame.title = 'Exercise demo video';
   frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
   frame.referrerPolicy = 'strict-origin-when-cross-origin';

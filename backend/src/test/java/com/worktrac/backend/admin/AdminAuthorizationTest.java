@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -60,7 +61,7 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
             "/api/admin/overview", "/api/admin/accounts", "/api/admin/people",
             "/api/admin/pending-registrations", "/api/admin/health",
             "/api/admin/registration-events", "/api/admin/registration-alert-settings",
-            "/api/admin/contact-messages"
+            "/api/admin/contact-messages", "/api/admin/library-videos"
     };
 
     // Real EmailService constructor builds a live Azure EmailClient -- mocked out so
@@ -82,6 +83,9 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
 
     @Autowired
     private AdminBootstrap adminBootstrap;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -393,6 +397,44 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
                 .andExpect(status().isNoContent());
         assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId).stream()
                 .anyMatch(e -> e.getEventType() == BillingEventType.COMP_REVOKED));
+    }
+
+    // The how-to video curation queue: every library exercise without a video to show, and why.
+    // Read-only. A video the daily check hid is listed with its dead id, so it can be replaced.
+    @Test
+    @Order(12)
+    void theVideosTabListsLibraryExercisesWithNoVideoToShow() throws Exception {
+        jdbcTemplate.update("""
+                UPDATE v SET status = 'unavailable' FROM exercise_videos v
+                JOIN exercises e ON e.id = v.exercise_id
+                WHERE e.account_id IS NULL AND e.name = 'Barbell Bench Press'
+                """);
+        try {
+            var body = objectMapper.readTree(mockMvc.perform(get("/api/admin/library-videos")
+                            .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+
+            int library = body.get("libraryCount").asInt();
+            int withVideo = body.get("withVideoCount").asInt();
+            assertEquals(library - withVideo, body.get("missing").size(),
+                    "every library exercise is either counted as having a video or listed as missing one");
+
+            Map<String, com.fasterxml.jackson.databind.JsonNode> byName = new java.util.HashMap<>();
+            body.get("missing").forEach(row -> byName.put(row.get("name").asText(), row));
+            assertEquals("none", byName.get("Hammer Curl").get("reason").asText(),
+                    "an exercise no video was ever found for");
+            var hidden = byName.get("Barbell Bench Press");
+            assertEquals("unavailable", hidden.get("reason").asText(), "a video the check hid");
+            assertEquals(11, hidden.get("videoId").asText().length(), "with the dead id, to replace it");
+            assertFalse(byName.containsKey("Close-Grip Dumbbell Press"), "an exercise WITH a video is not listed");
+        } finally {
+            jdbcTemplate.update("""
+                    UPDATE v SET status = 'active' FROM exercise_videos v
+                    JOIN exercises e ON e.id = v.exercise_id
+                    WHERE e.account_id IS NULL AND e.name = 'Barbell Bench Press'
+                    """);
+        }
     }
 
     private long anyAccountId() throws Exception {

@@ -308,7 +308,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
 
         String[] lines = exportCsv(personId).split("\n");
         // Rest is restored verbatim, not recomputed: it records what actually happened.
-        assertTrue(lines[1].endsWith(",kg,8,,,76.0"), lines[1]);
+        assertTrue(lines[1].endsWith(",kg,8,,,76.0,Chest,Shoulders; Triceps"), lines[1]);
         assertTrue(lines[2].contains(",kg,8,,150,"), "rest_seconds is restored as recorded: " + lines[2]);
         // kg survives on an account whose default is lb.
         assertTrue(lines[1].contains(",kg,"), lines[1]);
@@ -608,5 +608,117 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
     @Test
     void anEmptyFileIsRefusedWithSomethingReadable() throws Exception {
         assertImportRejected("", "empty");
+    }
+
+    // ── Muscles worked ─────────────────────────────────────────────────────────────────────────
+
+    // The case the columns exist for: a household's own exercise, described by the person who made
+    // it, carried to a household that has never seen it. Without the columns the file loses the
+    // description, and the round trip into a new account stops being byte-identical.
+    @Test
+    void aCustomExercisesMusclesTravelToAnotherHousehold() throws Exception {
+        long landmine = createExerciseWithMuscles("Landmine Press", List.of("shoulders", "chest"), List.of("triceps"));
+        long bench = createExercise("Barbell Bench Press");
+        logLiveSet(landmine, 70, 10);
+        clock.advance(Duration.ofSeconds(90));
+        logLiveSet(bench, 135, 8);
+
+        String source = exportCsv(personId);
+        assertTrue(source.contains("Main Muscles,Helping Muscles"), "the two columns are in the header");
+        assertTrue(source.contains(",Shoulders; Chest,Triceps"),
+                "a custom exercise exports its muscles by name, in the vocabulary's order: " + source);
+        assertTrue(source.contains(",Chest,Shoulders; Triceps"), "so does a library one: " + source);
+
+        String email = "import-other-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        JsonNode other = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Nate");
+        String otherToken = other.get("token").asText();
+        long otherPerson = other.get("person").get("id").asLong();
+        BillingTestSupport.makePlus(subscriptionRepository, other.get("account").get("id").asLong());
+
+        String previousToken = token;
+        token = otherToken;
+        try {
+            JsonNode result = commitImport(otherPerson, source);
+            assertEquals(List.of("Landmine Press"), stringList(result.get("newExerciseNames")));
+
+            JsonNode created = catalogRow("Landmine Press");
+            assertEquals(false, created.get("isGlobal").asBoolean());
+            assertEquals(List.of("shoulders", "chest"), stringList(created.get("primaryMuscles")));
+            assertEquals(List.of("triceps"), stringList(created.get("secondaryMuscles")));
+
+            assertEquals(source, exportCsv(otherPerson),
+                    "the round trip still holds across households, muscles and all");
+        } finally {
+            token = previousToken;
+        }
+    }
+
+    // An import writes muscles onto an exercise it CREATES, never onto one that already exists --
+    // the rule an ordinary create follows. The library describes its own; a household's are edited
+    // in Customize by whoever may, and an old file is not that person.
+    @Test
+    void anExistingExerciseKeepsItsOwnMuscles() throws Exception {
+        createExercise("Landmine Press");
+        String csv = "Date,Exercise,Reps,Main Muscles,Helping Muscles\n"
+                + "2026-06-01,Landmine Press,10,Quads,Calves\n"
+                + "2026-06-01,Barbell Bench Press,8,Quads,Calves\n";
+
+        JsonNode result = commitImport(personId, csv);
+        assertEquals(2, result.get("setCount").asInt());
+        assertTrue(result.get("rowErrors").isEmpty());
+
+        assertEquals(List.of(), stringList(catalogRow("Landmine Press").get("primaryMuscles")),
+                "a household exercise nobody described stays undescribed");
+        assertEquals(List.of("chest"), stringList(catalogRow("Barbell Bench Press").get("primaryMuscles")),
+                "a library exercise keeps the app's description");
+    }
+
+    // A spreadsheet kept by hand: names or codes, any case. A word that is no muscle is dropped,
+    // never a reason to refuse the row -- the set is what the row is for.
+    @Test
+    void musclesAreReadByNameOrCodeAndUnknownWordsAreDropped() throws Exception {
+        String csv = "Date,Exercise,Reps,Main Muscles,Helping Muscles\n"
+                + "2026-06-01,Prowler Drive,12,quads; GLUTES; Wings,Calves; Quads\n"
+                + "2026-06-01,Prowler Drive,12,,\n";
+
+        JsonNode result = commitImport(personId, csv);
+        assertEquals(2, result.get("setCount").asInt(), result.toString());
+        assertTrue(result.get("rowErrors").isEmpty(), "an unknown muscle never costs a set");
+
+        JsonNode prowler = catalogRow("Prowler Drive");
+        assertEquals(java.util.Set.of("quads", "glutes"), new java.util.HashSet<>(stringList(prowler.get("primaryMuscles"))));
+        assertEquals(List.of("calves"), stringList(prowler.get("secondaryMuscles")),
+                "a muscle named as both stays a main one");
+    }
+
+    private long createExerciseWithMuscles(String name, List<String> primary, List<String> secondary) throws Exception {
+        String response = mockMvc.perform(post("/api/exercises")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("name", name, "primaryMuscles", primary, "secondaryMuscles", secondary))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asLong();
+    }
+
+    // The account's catalogue row by name, own exercises before library ones (the order the
+    // catalogue's own duplicate rule uses).
+    private JsonNode catalogRow(String name) throws Exception {
+        String response = mockMvc.perform(get("/api/exercises")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode match = null;
+        for (JsonNode row : objectMapper.readTree(response)) {
+            if (row.get("name").asText().equalsIgnoreCase(name)
+                    && (match == null || (match.get("isGlobal").asBoolean() && !row.get("isGlobal").asBoolean()))) {
+                match = row;
+            }
+        }
+        if (match == null) {
+            throw new AssertionError("no exercise named " + name + " in the catalogue");
+        }
+        return match;
     }
 }

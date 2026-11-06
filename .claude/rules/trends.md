@@ -4,6 +4,7 @@ paths:
   - "frontend/src/components/prs/**"
   - "backend/src/main/java/com/worktrac/backend/stats/**"
   - "frontend/src/utils/sessionVolume*"
+  - "frontend/src/utils/muscleSets*"
   - "frontend/src/utils/formulas*"
   - "frontend/src/utils/historyPrFlags*"
   - "frontend/src/utils/prDetection*"
@@ -240,6 +241,7 @@ an exact duplicate of it. Don't reintroduce a "1RM" row that ranks on raw weight
 | `weeks[]`, exercise trend points | the `weeks` param | what the toggle is for |
 | `workoutDays` (heatmap) | fixed trailing `HEATMAP_DAYS` (182) | 4 columns reads as broken, 260 is unusable on a phone |
 | `hasAnyHistory` | all time — **pre-clamp** | separates a new person from a lapsed one — see below |
+| Muscle map (`muscleSets`) | the `weeks` param, via `trendsRange` | "what have I trained lately" is a range question; it must count exactly the weeks the weekly chart draws |
 | `/exercises/{id}/records` | all time, **no `weeks` param** | a record isn't relative to the range; keeping it out of the URL *and* the query key is what stops the toggle refetching it |
 
 **Don't add `weeks` to the records endpoint or `queryKeys.exerciseRecords`.**
@@ -263,6 +265,21 @@ so it cannot reach what it is hiding. `TrendsTab` renders `HistoryWindowNotice` 
 grid ignores the range toggle and is therefore clipped on all of them — but the range-specific lead
 ("this range shows…") appears only when the selected range really does reach past the window,
 since at 4wk and 12wk the charts for that range are complete and the lead would be false.
+
+## The muscle map: one set per main muscle, half per helper
+
+`utils/muscleSets.js` + `components/trends/MuscleMapCard.jsx`; narrative in
+`docs/architecture/trends.md`, "Muscles worked".
+
+- **Read off `useStatsFromHistory`'s digests**, never a second History walk and never a fetch, so
+  the workout in progress (queued sets included) is on it in every mode. `parity-muscle-map.spec.ts`.
+- **Range from `trendsRange`**, shared with `trendsOverview`. Don't recompute the Monday maths.
+- **Half sets are integers (`halves`)** until display. Don't sum 0.5s as floats.
+- **`counted = 0` labels (Full body, Cardio) never land on a muscle**; they are `conditioning`.
+  An exercise with no muscles is `unlisted` and NAMED. A missing catalog is `null`, never zeros.
+- **Shading is relative to the top row** in `SHADE_STEPS`, and every shade is also a row with a
+  number. The rule's wording lives once, in `MUSCLE_MAP_HELP`; the handbook renders those lines.
+- **Client-only; no oracle row.** If a server endpoint is ever added, it joins the oracle.
 
 ## Empty state: the range being empty ≠ never having trained
 
@@ -379,7 +396,7 @@ session totals — the chart shows no difference between them, which is what thi
   pull-ups and planks on *every* metric, not just the rep ones. Name all three cases, or name
   none. The panel's PR line must also survive the metric switcher unchanged, because the measure
   does: what it owes the reader is why a green dot is not always the plotted line's high point.
-- **The `?` labels must stay mutually non-containing** — the three Trends ones are on screen at
+- **The `?` labels must stay mutually non-containing** — the four Trends ones are on screen at
   once (the PRs one is checked with them), and Playwright matches an accessible name as a
   substring. Also asserted, as an exact count.
 - **Don't delete `ChartHelp`'s measure-and-nudge effect, and don't replace it with a CSS clamp.**

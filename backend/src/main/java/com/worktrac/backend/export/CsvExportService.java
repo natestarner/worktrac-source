@@ -1,5 +1,8 @@
 package com.worktrac.backend.export;
 
+import com.worktrac.backend.exercise.ExerciseMuscleResolver;
+import com.worktrac.backend.exercise.ExerciseMuscles;
+import com.worktrac.backend.exercise.MuscleNames;
 import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
@@ -18,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -37,12 +41,17 @@ public class CsvExportService {
     private final PersonService personService;
     private final WorkoutRowProjection workoutRowProjection;
     private final EpleyCalculator epleyCalculator;
+    private final ExerciseMuscleResolver exerciseMuscleResolver;
+    private final MuscleNames muscleNames;
 
     public CsvExportService(PersonService personService, WorkoutRowProjection workoutRowProjection,
-                             EpleyCalculator epleyCalculator) {
+                             EpleyCalculator epleyCalculator, ExerciseMuscleResolver exerciseMuscleResolver,
+                             MuscleNames muscleNames) {
         this.personService = personService;
         this.workoutRowProjection = workoutRowProjection;
         this.epleyCalculator = epleyCalculator;
+        this.exerciseMuscleResolver = exerciseMuscleResolver;
+        this.muscleNames = muscleNames;
     }
 
     // UTF-8 with a byte-order mark. A CSV carries no declaration of its own encoding, and Excel
@@ -89,9 +98,18 @@ public class CsvExportService {
         // through the retroactive "past workout" editor.
         rows.add(List.of("Date", "Time", "Session Start", "Session Type", "Exercise", "Tags", "Favorite",
                 "Custom Fields", "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps",
-                "Duration (sec)", "Rest (sec)", "Est. 1RM"));
+                "Duration (sec)", "Rest (sec)", "Est. 1RM", "Main Muscles", "Helping Muscles"));
+
+        // The exercise's muscles, by name, on every row of it -- like Tags. Last, so a spreadsheet
+        // someone built against the older columns by position keeps lining up. Every exercise's,
+        // library ones included: it describes the file's contents completely, and import writes
+        // them only onto an exercise it creates (CsvImportService), so a library row is never
+        // touched. One lookup for the account and one for the names, never per row.
+        Map<Long, ExerciseMuscles> muscles = exerciseMuscleResolver.forAccount(person.getAccount().getId());
+        Map<String, String> muscleNamesByCode = muscleNames.namesByCode();
 
         for (ExportRow row : workoutRowProjection.project(person)) {
+            ExerciseMuscles worked = muscles.getOrDefault(row.exerciseId(), ExerciseMuscles.NONE);
             boolean hold = row.isHold();
             rows.add(List.of(
                     DATE_FMT.format(row.createdAt()),
@@ -110,7 +128,9 @@ public class CsvExportService {
                     hold ? "" : String.valueOf(row.reps()),
                     hold ? String.valueOf(row.durationSeconds()) : "",
                     row.restSeconds() != null ? String.valueOf(row.restSeconds()) : "",
-                    hold ? "" : epleyCalculator.estimate1RM(row.weight(), row.reps()).toPlainString()));
+                    hold ? "" : epleyCalculator.estimate1RM(row.weight(), row.reps()).toPlainString(),
+                    formatMuscles(worked.primary(), muscleNamesByCode),
+                    formatMuscles(worked.secondary(), muscleNamesByCode)));
         }
 
         String csv = join(rows);
@@ -185,6 +205,12 @@ public class CsvExportService {
 
     private String formatTags(ExportRow row) {
         return String.join("; ", row.tags());
+    }
+
+    // Display names joined like Tags. A code the names table lacks cannot happen (the foreign key),
+    // but would print as the code rather than vanish.
+    private static String formatMuscles(List<String> codes, Map<String, String> namesByCode) {
+        return codes.stream().map(code -> namesByCode.getOrDefault(code, code)).collect(Collectors.joining("; "));
     }
 
     // "Name: Value" pairs in the person's own sort order, matching how they appear in the

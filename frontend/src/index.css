@@ -136,6 +136,13 @@
   --color-record-border: #c2853c; /* 3.13 surface */
   --color-record-text: #8a4c0a; /* 5.09 own bg / 6.40 bg / 6.73 surface */
 
+  /* The body diagram's muscle tint (components/exercise/BodyMap.jsx). Painted with a multiply
+     blend over the body art at partial opacity, so it is never read as text and has no contrast
+     target; the red was chosen on the mockup (2026-11-05) because the app's orange accent
+     multiplied over skin tones reads as a tan, not as "this muscle". Same in both themes: the dark
+     body art is darker, which the multiply already accounts for. */
+  --color-muscle: #e3261b;
+
   --color-dark: #1c1b19;
 
   /* Toasts are neutral, not green. A saturated success green is the one hue in the palette
@@ -1646,6 +1653,368 @@ input[type='search']::-webkit-search-results-decoration {
 .pull-to-refresh[data-ready] {
   color: var(--color-accent-text);
   font-weight: var(--weight-semibold);
+}
+
+/* The exercise's action bar under its name (ExerciseAboutStrip.jsx): "About this exercise" (a
+   tiny body + the main muscles), the favorite / note / customize buttons, then the video slot.
+
+   ⚠️ FIXED HEIGHT. Nothing in it loads, so nothing in it may change the strip's height after
+   first paint -- the steppers sit below it (log-screen.md).
+
+   The layout follows the STRIP's own width (container query), never the device: an iPad in split
+   view is as narrow as a phone. Narrow: five equal slots and no muscle text. Wide: the about
+   button takes the spare width and shows the muscle names. */
+.exercise-strip-host {
+  container-type: inline-size;
+}
+
+.exercise-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
+  height: 44px;
+}
+
+.exercise-strip-about {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 44px;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.exercise-strip-thumb {
+  display: block;
+  flex-shrink: 0;
+  width: 20px;
+  height: 40px;
+  overflow: hidden;
+}
+
+.exercise-strip-thumb .body-map,
+.exercise-strip-thumb .body-map svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.exercise-strip-muscles {
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.exercise-strip-video {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+}
+
+@container (min-width: 520px) {
+  .exercise-strip {
+    grid-template-columns: minmax(0, 1fr) repeat(4, 44px);
+    column-gap: var(--space-1);
+  }
+
+  .exercise-strip-about {
+    justify-self: start;
+  }
+
+  .exercise-strip-muscles {
+    display: inline;
+  }
+}
+
+/* The "About this exercise" sheet (ExerciseAboutSheet.jsx). */
+.exercise-about-bodies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.exercise-about-figure {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-3);
+}
+
+.exercise-about-ask,
+.exercise-about-empty {
+  margin: 0;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.exercise-about-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+}
+
+.exercise-about-empty p {
+  margin: 0;
+}
+
+.exercise-about-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.exercise-about-list ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exercise-about-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+}
+
+.exercise-about-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-muscle);
+}
+
+.exercise-about-credit {
+  margin-top: var(--space-6);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.exercise-about-credit summary {
+  cursor: pointer;
+}
+
+/* The how-to video in the About sheet (ExerciseVideoCard.jsx). A 16:9 box that holds the play
+   button, the player, or the offline line -- always the same size, so loading the player never
+   moves the credit line or anything below it. */
+.exercise-video {
+  margin-top: var(--space-5);
+}
+
+.exercise-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-subtle-bg);
+}
+
+.exercise-video-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.exercise-video-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exercise-video-play-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
+}
+
+.exercise-video-offline {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.exercise-video-credit {
+  margin: var(--space-2) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+/* The Trends muscle map (MuscleMapCard.jsx): two bodies, then one row per worked muscle whose bar
+   carries the same shade as the muscle on the body, so the list and the bodies read as one chart. */
+.muscle-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.muscle-map-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.muscle-map-layout {
+  container-type: inline-size;
+}
+
+.muscle-map-bodies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.muscle-map-readout {
+  margin-top: var(--space-5);
+}
+
+.muscle-map-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.muscle-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 6.5rem) 1fr 2.5rem;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.muscle-map-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (min-width: 600px) {
+  .muscle-map-grid:has(.muscle-map-readout) {
+    display: grid;
+    grid-template-columns: minmax(0, 360px) 1fr;
+    gap: var(--space-6);
+    align-items: center;
+  }
+
+  .muscle-map-readout {
+    margin-top: 0;
+  }
+}
+
+.muscle-map-track {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-subtle-bg);
+  overflow: hidden;
+}
+
+.muscle-map-bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-muscle);
+}
+
+.muscle-map-sets {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.muscle-map-notes p {
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+/* MusclePicker: a chip per muscle cycling not worked -> main -> helping. Main is filled, helping is
+   outlined in the accent, so the state reads without relying on colour alone. */
+.muscle-picker-hint {
+  margin: 0 0 var(--space-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.muscle-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.muscle-chip {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.muscle-chip--primary {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
+  font-weight: var(--weight-semibold);
+}
+
+.muscle-chip--secondary {
+  border: 2px solid var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+
+.muscle-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Matches BodyMap's secondary intensity against its primary (35 vs 80). */
+.exercise-about-swatch--secondary {
+  opacity: 0.45;
 }
 
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,

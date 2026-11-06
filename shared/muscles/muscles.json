@@ -1,0 +1,27 @@
+{
+  "description": "The muscle vocabulary 'muscles worked' is described with, in display order. The server's `muscles` table (V90/V91 and any later migration that adds to it) and the client's MUSCLES (frontend/src/utils/muscles.js) must both equal this list: LibraryExerciseMusclesTest checks the database, muscles.test.js checks the client. drawn = has a shape on the body diagram; counted = counts toward muscle-volume statistics (full_body and cardio are labels for conditioning work, not muscles).",
+  "muscles": [
+    { "code": "neck", "name": "Neck", "drawn": false, "counted": true },
+    { "code": "traps", "name": "Traps", "drawn": true, "counted": true },
+    { "code": "shoulders", "name": "Shoulders", "drawn": true, "counted": true },
+    { "code": "rear_delts", "name": "Rear delts", "drawn": true, "counted": true },
+    { "code": "chest", "name": "Chest", "drawn": true, "counted": true },
+    { "code": "biceps", "name": "Biceps", "drawn": true, "counted": true },
+    { "code": "triceps", "name": "Triceps", "drawn": true, "counted": true },
+    { "code": "forearms", "name": "Forearms", "drawn": true, "counted": true },
+    { "code": "upper_back", "name": "Upper back", "drawn": true, "counted": true },
+    { "code": "lats", "name": "Lats", "drawn": true, "counted": true },
+    { "code": "lower_back", "name": "Lower back", "drawn": true, "counted": true },
+    { "code": "abs", "name": "Abs", "drawn": true, "counted": true },
+    { "code": "obliques", "name": "Obliques", "drawn": true, "counted": true },
+    { "code": "hip_flexors", "name": "Hip flexors", "drawn": false, "counted": true },
+    { "code": "glutes", "name": "Glutes", "drawn": true, "counted": true },
+    { "code": "abductors", "name": "Abductors", "drawn": false, "counted": true },
+    { "code": "adductors", "name": "Adductors", "drawn": false, "counted": true },
+    { "code": "quads", "name": "Quads", "drawn": true, "counted": true },
+    { "code": "hamstrings", "name": "Hamstrings", "drawn": true, "counted": true },
+    { "code": "calves", "name": "Calves", "drawn": true, "counted": true },
+    { "code": "full_body", "name": "Full body", "drawn": false, "counted": false },
+    { "code": "cardio", "name": "Cardio", "drawn": false, "counted": false }
+  ]
+}
