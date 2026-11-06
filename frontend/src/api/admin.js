@@ -8,6 +8,11 @@ export function listAccounts() {
   return apiClient.get('/api/admin/accounts');
 }
 
+// The how-to video curation queue: library exercises with no video to show (AdminVideos).
+export function getLibraryVideos() {
+  return apiClient.get('/api/admin/library-videos');
+}
+
 export function listPeople() {
   return apiClient.get('/api/admin/people');
 }
