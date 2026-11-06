@@ -44,7 +44,7 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
 
     private static final String HEADER = "Date,Time,Session Start,Session Type,Exercise,Tags,Favorite,"
             + "Custom Fields,Exercise Note,Session Note,Set #,Weight,Unit,Reps,"
-            + "Duration (sec),Rest (sec),Est. 1RM";
+            + "Duration (sec),Rest (sec),Est. 1RM,Main Muscles,Helping Muscles";
 
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
