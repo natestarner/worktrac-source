@@ -821,6 +821,11 @@ export default function HelpTab() {
           up or go full screen. The video needs a connection; the muscles beside it don&rsquo;t.
         </p>
         <p>
+          You can look before you choose. When you search for an exercise, on Log or while building a
+          routine, the <T>i</T> button at the end of each result shows its muscles and video without
+          picking it. On History and PRs, tap an exercise and choose <T>About this exercise</T>.
+        </p>
+        <p>
           When you add your own exercise you can pick its muscles too: tap a muscle once for a main
           one, twice for a helper. Huddle suggests a starting point from the closest exercise in its
           library. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
@@ -1231,6 +1236,12 @@ export default function HelpTab() {
           <strong>Time</strong> becomes midday, and without a <strong>Session Start</strong> column{' '}
           <strong>everything you did on one date is treated as one workout</strong>. Columns are
           matched by name, so their order in the file doesn&rsquo;t matter.
+        </p>
+        <p>
+          An export lists each exercise&rsquo;s muscles in <strong>Main Muscles</strong> and{' '}
+          <strong>Helping Muscles</strong>. Importing uses them only for an exercise the file adds, so
+          your own exercises keep their muscles when they move to another household. An exercise you
+          already have keeps the muscles it has.
         </p>
         <p>
           Every default that actually got used is listed in the preview before you commit. You

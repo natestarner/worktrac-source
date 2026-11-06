@@ -67,7 +67,9 @@ function MuscleList({ title, codes, tone }) {
 // `video` (utils/exerciseVideo.js) adds the how-to video below the muscles. `focusVideo` is set when
 // the strip's play button opened the sheet: it scrolls the video into view, so a tap on "play" lands
 // on the player rather than on a diagram above it.
-export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, onChooseFigure, onClose, onAddMuscles = null, video = null, focusVideo = false, children }) {
+// The sheet's contents, without the sheet. The routine editor shows them INSIDE its own dialog
+// (RoutineFormModal's preview), because a sheet over a dialog is two scrims and two focus traps.
+export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, onAddMuscles = null, video = null, focusVideo = false, children }) {
   const hasMuscles = muscles.primary.length > 0;
   const videoRef = useRef(null);
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <Modal align="bottom" width={560} title={exerciseName} onClose={onClose} initialFocus="dialog">
+    <>
       {!hasMuscles ? (
         <div className="exercise-about-empty">
           <p>No muscles are listed for this exercise yet.</p>
@@ -136,6 +138,14 @@ export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, 
           DEALINGS IN THE SOFTWARE.
         </p>
       </details>
+    </>
+  );
+}
+
+export default function ExerciseAboutSheet({ exerciseName, onClose, ...content }) {
+  return (
+    <Modal align="bottom" width={560} title={exerciseName} onClose={onClose} initialFocus="dialog">
+      <ExerciseAboutContent exerciseName={exerciseName} {...content} />
     </Modal>
   );
 }

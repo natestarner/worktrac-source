@@ -57,6 +57,11 @@ test.describe('Admin portal', () => {
     const revoked = await request.delete(`${apiUrl}/api/admin/accounts/1/comp`, { headers: auth });
     expect(revoked.status()).toBe(403);
 
+    // The read-only routes are refused the same way: the video curation list (the Videos tab)
+    // counts how many people use each library exercise across every household.
+    const videos = await request.get(`${apiUrl}/api/admin/library-videos`, { headers: auth });
+    expect(videos.status()).toBe(403);
+
     // And with no token at all it is a 401, never an accidental permitAll.
     const anonymous = await request.post(`${apiUrl}/api/admin/accounts/1/comp`, {
       data: { plan: 'PLUS' },

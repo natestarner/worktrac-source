@@ -139,9 +139,11 @@ in-app how-to videos, which share the same entry point and the same library-cura
 ## How-to videos (V94)
 
 A library exercise can carry one how-to video (`exercise_videos`): a pointer to a public YouTube
-video, played inside the app. Built 2026-11-06, with no video rows yet. The mapping (our exercise
-to a Muscle & Strength video) waits on Muscle & Strength's answer to the permission email of
-2026-11-05, and nothing about the design depends on which channel the videos come from.
+video, played inside the app. Built 2026-11-06; the first 57 videos (Muscle & Strength's own
+YouTube clips) arrived the same day in `V97`, from `docs/exercise-videos/library-videos-2026-11-06.csv`.
+That README records how they were found and checked, and why the other 106 have none (most of
+Muscle & Strength's newer clips are on Vimeo, locked to their own site). Nothing about the design
+depends on which channel a video comes from.
 
 - **Rows arrive by migration**, like the library itself. `scripts/video-migration.mjs` turns a
   reviewed CSV (`exercise,video_id,start_seconds,source_label`) into a migration that matches
@@ -167,6 +169,27 @@ to a Muscle & Strength video) waits on Muscle & Strength's answer to the permiss
   YouTube refuses to play inside `capacitor://localhost` (`native-apps.md`).
 - **Ads:** monetised channels can show YouTube's ads inside an embed, and we cannot turn them off.
   Accepted for now (2026-11-06); our own videos are the long-term answer.
+
+## The 2026-11-06 library expansion (V98-V101)
+
+Fifty exercises joined the library (163 to 213), approved by Nate from a hand-curated shortlist.
+
+- **Where they came from.** The free-exercise-db dataset (Unlicense; names and muscle facts only)
+  had 526 strength exercises with gym equipment that the library lacked. These were matched by name
+  against Muscle & Strength's exercise directory, and kept only where the movement matched closely.
+  Duplicates of exercises we already had under another name were dropped ("Dumbbell Flyes" is our
+  Dumbbell Chest Fly), along with false matches and obscure variants. 50 remained.
+- **Huddle's naming.** Equipment first, as V34 set out, and "Single-Arm" rather than "One-Arm".
+  The other names lifters type ("Crush Press", "SLDL", "Tricep Kickback") are aliases (V100).
+- **Each arrives complete.** Muscles (V99) are described the way V93 described the exercise's
+  closest relative. Videos (V101) cover the 22 whose Muscle & Strength clip is on YouTube; the other
+  28 are on site-locked Vimeo and have none (`docs/exercise-videos/README.md`).
+  `LibraryExerciseMusclesTest` (213) and `LibraryExerciseAliasesTest` (69) pin the counts, and
+  V99-V101 each throw on a name that matches nothing.
+- **A household that already made one of these keeps its own.** Their row holds their History.
+  The picker's search shows their row instead of both (`utils/exerciseSearch.js`), the same "own
+  account first" preference that creating an exercise applies. Nothing on the server changes, and
+  the library row stays reachable wherever it is already in someone's list.
 
 ## Search aliases (V95/V96)
 

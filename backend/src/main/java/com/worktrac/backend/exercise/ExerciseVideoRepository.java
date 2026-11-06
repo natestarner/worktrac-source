@@ -88,6 +88,51 @@ public class ExerciseVideoRepository {
                 rs.getString("status")));
     }
 
+    /**
+     * A library exercise with no video to show: none was ever found ({@code videoId} null), or the
+     * checker hid the one it had ({@code status} 'unavailable'). {@code peopleUsing} is how many
+     * people have ever logged it, across every account -- the admin's curation order.
+     */
+    public record MissingVideoRow(long exerciseId, String exerciseName, String videoId, String status,
+                                  Instant checkedAt, int peopleUsing) {
+    }
+
+    /**
+     * The admin portal's curation queue (AdminController, read-only): every library exercise
+     * without an ACTIVE video, most-used first. Deliberately reads across accounts for the
+     * people count, like every admin read; it returns a count, never who.
+     */
+    public List<MissingVideoRow> libraryWithoutActiveVideo() {
+        return jdbc.query("""
+                SELECT e.id, e.name, v.video_id, v.status, v.checked_at,
+                       (SELECT COUNT(DISTINCT ws.person_id) FROM workout_sets ws WHERE ws.exercise_id = e.id) AS people
+                FROM exercises e
+                LEFT JOIN exercise_videos v ON v.exercise_id = e.id
+                WHERE e.account_id IS NULL AND (v.id IS NULL OR v.status <> 'active')
+                ORDER BY people DESC, e.name, e.id
+                """, (rs, i) -> {
+            LocalDateTime checked = rs.getObject("checked_at", LocalDateTime.class);
+            return new MissingVideoRow(
+                    rs.getLong("id"),
+                    rs.getString("name"),
+                    rs.getString("video_id"),
+                    rs.getString("status"),
+                    checked == null ? null : checked.toInstant(ZoneOffset.UTC),
+                    rs.getInt("people"));
+        });
+    }
+
+    /** How many library exercises there are, and how many have an active video. */
+    public int[] libraryVideoCounts() {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) AS library,
+                       SUM(CASE WHEN v.status = 'active' THEN 1 ELSE 0 END) AS with_video
+                FROM exercises e
+                LEFT JOIN exercise_videos v ON v.exercise_id = e.id
+                WHERE e.account_id IS NULL
+                """, (rs, i) -> new int[] {rs.getInt("library"), rs.getInt("with_video")});
+    }
+
     /** Records a definite answer from the checker. Instants are written as UTC (backend-core.md). */
     public void markChecked(long id, String status, Instant checkedAt) {
         jdbc.update("UPDATE exercise_videos SET status = ?, checked_at = ? WHERE id = ?",

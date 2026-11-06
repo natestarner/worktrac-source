@@ -66,6 +66,27 @@ describe('highlightMatches', () => {
   });
 });
 
+describe('a household exercise with a library name', () => {
+  // The library gained "Zottman Curl" (V98) after this household had made its own.
+  const catalog = [
+    { id: 1, name: 'Zottman Curl', isGlobal: true, primaryMuscles: ['biceps'] },
+    { id: 900, name: 'zottman curl', isGlobal: false },
+    { id: 2, name: 'Spider Curl', isGlobal: true, primaryMuscles: ['biceps'] },
+  ];
+
+  it('shows the household’s own row, not both', () => {
+    expect(searchExercises(catalog, 'zottman').map((e) => e.id)).toEqual([900]);
+  });
+
+  it('leaves every other library exercise alone', () => {
+    expect(searchExercises(catalog, 'curl').map((e) => e.id)).toEqual([2, 900]);
+  });
+
+  it('shows the library row when the household has no twin', () => {
+    expect(searchExercises(catalog.filter((e) => e.id !== 900), 'zottman').map((e) => e.id)).toEqual([1]);
+  });
+});
+
 describe('searching by other names and by muscle', () => {
   const library = [
     { id: 1, name: 'Barbell Overhead Press', aliases: ['Military Press', 'OHP'], primaryMuscles: ['shoulders'] },
