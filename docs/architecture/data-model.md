@@ -168,6 +168,25 @@ to a Muscle & Strength video) waits on Muscle & Strength's answer to the permiss
 - **Ads:** monetised channels can show YouTube's ads inside an embed, and we cannot turn them off.
   Accepted for now (2026-11-06); our own videos are the long-term answer.
 
+## Search aliases (V95/V96)
+
+Lifters type "OHP", "RDL" and "military press"; the library says "Barbell Overhead Press" and
+"Romanian Deadlift". `exercise_aliases` holds the other names of 47 library exercises, sent on
+`ExerciseDto.aliases`, and the picker's search (`utils/exerciseSearch.js`) matches them after the
+name. It also matches the muscles an exercise mainly works, after aliases, so "hamstrings" lists
+what trains them. A result found either way says so under its name ("Also called OHP", "Works
+Hamstrings"), because nothing in the name is highlighted.
+
+- **Search only, never identity.** The duplicate-name check on create stays on the name, so an alias
+  can never silently turn somebody's "Military Press" into the library row. History, PRs, the CSV
+  round trip and the History filter never see an alias.
+- **Curated, not imported.** Only names people actually type: abbreviations, the name without its
+  equipment, and well-known synonyms. Loose synonyms that name a different movement are left out (a
+  stiff-leg deadlift is not a Romanian deadlift). An alias that is another library exercise's name,
+  or one shared by two exercises, fails `LibraryExerciseAliasesTest`.
+- **The library expansion will need more of these.** Each new library exercise should arrive with
+  its common other names in the same migration.
+
 ## Endurance (time-based) exercises
 
 Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based
