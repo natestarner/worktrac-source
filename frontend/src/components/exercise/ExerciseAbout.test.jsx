@@ -12,7 +12,6 @@ describe('ExerciseAboutStrip', () => {
     const utils = render(
       <ExerciseAboutStrip
         muscles={muscles}
-        bodyFigure={null}
         onOpen={onOpen}
         actions={<button type="button">Customize this exercise</button>}
         {...extra}
@@ -40,11 +39,21 @@ describe('ExerciseAboutStrip', () => {
     expect(screen.getByRole('button', { name: 'About this exercise' })).toBeTruthy();
   });
 
-  it('keeps the video slot last, and empty when there is no video', () => {
-    const { container } = renderStrip(BENCH);
+  it('keeps the video slot last', () => {
+    const { container } = renderStrip(BENCH, { video: <button type="button">No how-to video</button> });
     const strip = container.querySelector('.exercise-strip');
     expect(strip.lastElementChild.className).toBe('exercise-strip-video');
-    expect(strip.lastElementChild.childElementCount).toBe(0);
+    expect(strip.lastElementChild.textContent).toBe('No how-to video');
+  });
+
+  // The About button is an 18px glyph like the actions beside it (2026-11-08), not the shaded body
+  // thumbnail it replaced, which stood taller than its neighbours.
+  it('draws the About button as an 18px glyph, not a body diagram', () => {
+    const { container } = renderStrip(BENCH);
+    const icon = container.querySelector('.exercise-strip-about svg');
+    expect(icon.getAttribute('width')).toBe('18');
+    expect(icon.getAttribute('height')).toBe('18');
+    expect(container.querySelector('.body-map')).toBeNull();
   });
 });
 

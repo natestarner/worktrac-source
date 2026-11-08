@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getMuscles } from 'js-rich-body-highlighter';
-import { DRAWN, REGISTRY, viewFor } from './bodyMapArt';
+import { DRAWN, REGISTRY } from './bodyMapArt';
 import { MUSCLES } from '../../utils/muscles';
 
 describe('the drawn muscles', () => {
@@ -21,15 +21,5 @@ describe('the drawn muscles', () => {
         expect(groups.has(code), `${gender} body has no outline for ${code}`).toBe(true);
       }
     }
-  });
-});
-
-describe('viewFor (the strip thumbnail side)', () => {
-  it('shows the back for a back-first exercise and the front otherwise', () => {
-    expect(viewFor(['lats', 'upper_back'])).toBe('back');
-    expect(viewFor(['chest'])).toBe('front');
-    // Text-only muscles are skipped when choosing; nothing drawable falls back to the front.
-    expect(viewFor(['cardio', 'hamstrings'])).toBe('back');
-    expect(viewFor([])).toBe('front');
   });
 });

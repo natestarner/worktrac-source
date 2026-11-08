@@ -55,15 +55,6 @@ export const REGISTRY = LIB_MUSCLES.flatMap((m) => {
 
 const CLIP_OF = new Map(REGISTRY.filter((m) => m.clip).map((m) => [m.id, m.clip]));
 
-// Which view shows each drawn muscle best -- used to pick the thumbnail's side. Calves and
-// forearms show on both; front wins for them.
-const BACK_MUSCLES = new Set(['rear_delts', 'upper_back', 'lats', 'lower_back', 'glutes', 'hamstrings', 'triceps']);
-
-export function viewFor(primaryCodes) {
-  const first = primaryCodes.find((code) => DRAWN.has(code));
-  return first && BACK_MUSCLES.has(first) ? 'back' : 'front';
-}
-
 // The groups the art can shade. Must equal the `drawn` muscles in utils/muscles.js
 // (bodyMapArt.test.js checks it against the library's registry too).
 export const DRAWN = new Set([
