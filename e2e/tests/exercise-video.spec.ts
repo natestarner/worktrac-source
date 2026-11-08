@@ -4,8 +4,9 @@ import { pickExercise } from './support/exercises';
 import { goHardOffline } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
-// The how-to video on a library exercise: a play button in the strip's last slot, opening "About
-// this exercise" scrolled to the video, which loads only on a tap.
+// The how-to video on a library exercise: a play button in the strip's last slot, opening a sheet
+// that holds the video alone (the strip's body opens the muscles alone -- one icon, one sheet,
+// 2026-11-08). The video loads only on a tap.
 //
 // Library videos arrive by migration (V97 and later), and the app reads them from the catalog. These
 // pin Barbell Bench Press's video by rewriting the catalog response -- exactly the shape
@@ -44,7 +45,8 @@ async function warmCatalog(page: Page) {
 
 // PARITY: the button and the sheet come from the cached catalog, so they are the same in every
 // mode. What the video card shows INSIDE differs offline, by design (resilience.md's register), so
-// this asserts only what is the same: the section, scrolled into view, and who made the video.
+// this asserts only what is the same: the section, in view with no muscles beside it, and who made
+// the video.
 forEachConnectivityMode<void>('a library exercise’s how-to video opens from the strip in any mode', {
   setup: async (page, request) => {
     await giveBenchAVideo(page);
@@ -62,6 +64,8 @@ forEachConnectivityMode<void>('a library exercise’s how-to video opens from th
     await expect(sheet).toBeVisible();
     const video = sheet.getByRole('region', { name: 'How-to video' });
     await expect(video).toBeInViewport();
+    await expect(sheet.getByRole('group', { name: 'Body diagram' })).toHaveCount(0);
+    await expect(sheet.getByText('Main muscles')).toHaveCount(0);
     await expect(video.getByText('Video: Muscle & Strength on YouTube.')).toBeVisible();
     await expect(video.getByRole('link', { name: 'Open on YouTube' })).toHaveAttribute(
       'href',
@@ -111,11 +115,40 @@ test.describe('the how-to video', () => {
     await expect(sheet.getByRole('button', { name: 'Play the video' })).toHaveCount(0);
   });
 
-  test('an exercise with no video keeps an empty slot and no play button', async ({ page }) => {
+  test('the body opens the muscles without the video', async ({ page }) => {
+    await pickExercise(page, EXERCISE);
+    await page.getByRole('button', { name: /^About this exercise/ }).click();
+    const sheet = page.getByRole('dialog', { name: EXERCISE });
+    await expect(sheet.getByRole('group', { name: 'Body diagram' })).toBeVisible();
+    await expect(sheet.getByRole('region', { name: 'How-to video' })).toHaveCount(0);
+  });
+
+  // The X must be on screen the moment a sheet opens, on a phone held upright. On iOS Safari the
+  // combined sheet's scroll-to-video pushed the header above the screen with no way back to it.
+  test('each sheet opens with its Close button on screen at phone size', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 664 });
+    await pickExercise(page, EXERCISE);
+    for (const opener of [WATCH, /^About this exercise/]) {
+      await page.getByRole('button', { name: opener }).click();
+      const close = page.getByRole('dialog', { name: EXERCISE }).getByRole('button', { name: 'Close' });
+      await expect(close).toBeInViewport({ ratio: 1 });
+      await close.click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
+  });
+
+  // No video: play struck through, never an empty slot, and it says so rather than doing nothing.
+  test('an exercise with no video shows play struck through, which says there is none', async ({ page }) => {
     // Hammer Curl has no video: Muscle & Strength's clip for it is a site-locked Vimeo
     // (docs/exercise-videos/README.md).
     await pickExercise(page, 'Hammer Curl');
     await expect(page.getByRole('button', { name: /^About this exercise/ })).toBeVisible();
     await expect(page.getByRole('button', { name: WATCH })).toHaveCount(0);
+    await page.getByRole('button', { name: 'No how-to video' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Hammer Curl' });
+    await expect(sheet.getByText('There’s no how-to video for this exercise yet.')).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Play the video' })).toHaveCount(0);
+    await sheet.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

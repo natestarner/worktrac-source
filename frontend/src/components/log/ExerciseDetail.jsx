@@ -65,6 +65,7 @@ import {
   IconStar,
   IconStarFilled,
   IconPlay,
+  IconPlayOff,
   IconTrash,
   IconTrophy,
 } from '../shared/icons';
@@ -75,6 +76,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 import { exerciseMuscles } from '../../utils/muscles';
 import ExerciseAboutStrip from '../exercise/ExerciseAboutStrip';
 import ExerciseAboutSheet from '../exercise/ExerciseAboutSheet';
+import ExerciseVideoSheet from '../exercise/ExerciseVideoSheet';
 
 // How far from a record the nudge under the steppers is still worth showing. Past this it stops
 // being encouragement and becomes a reminder of how far off you are -- and it would be on screen
@@ -1221,7 +1223,6 @@ export default function ExerciseDetail({
           <div style={{ marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
           <ExerciseAboutStrip
             muscles={muscles}
-            bodyFigure={bodyFigure}
             onOpen={() => setShowAboutSheet('about')}
             actions={<>
             {/* These three were a text glyph and two emoji at three different font sizes,
@@ -1281,8 +1282,12 @@ export default function ExerciseDetail({
             // ⚠️ The label must not contain "Done" (or any other label on this screen): Playwright
             // matches names by substring, and "Watch how it's done" broke every spec that clicks
             // the past-workout frame's "Done" the day exercises got real videos.
-            video={video && (
+            // No video: the same slot shows play struck through, and it opens the same sheet, which
+            // says there isn't one. An empty slot read as missing or broken (2026-11-08).
+            video={video ? (
               <IconButton onClick={() => setShowAboutSheet('video')} label="Show how-to video" icon={IconPlay} />
+            ) : (
+              <IconButton onClick={() => setShowAboutSheet('video')} label="No how-to video" icon={IconPlayOff} />
             )}
           />
           </div>
@@ -1755,15 +1760,22 @@ export default function ExerciseDetail({
         />
       )}
 
-      {showAboutSheet && (
+      {/* One icon, one sheet: the strip's body opens the muscles, its play button the video. */}
+      {showAboutSheet === 'video' && (
+        <ExerciseVideoSheet
+          exerciseName={exercise.name}
+          video={video}
+          ownExercise={!exercise.isGlobal}
+          onClose={() => setShowAboutSheet(false)}
+        />
+      )}
+      {showAboutSheet === 'about' && (
         <ExerciseAboutSheet
           exerciseName={exercise.name}
           muscles={muscles}
           bodyFigure={bodyFigure}
           onChooseFigure={setBodyFigure}
           onClose={() => setShowAboutSheet(false)}
-          video={video}
-          focusVideo={showAboutSheet === 'video'}
           // An own exercise nobody has described yet: offer to describe it, through Customize (the
           // one place muscles are edited). Not for library exercises, which the app describes, and
           // not for a temp row, whose Customize is disabled until its create syncs.

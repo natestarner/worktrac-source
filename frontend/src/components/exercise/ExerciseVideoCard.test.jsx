@@ -1,8 +1,9 @@
 import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ExerciseVideoCard from './ExerciseVideoCard';
 import ExerciseAboutSheet from './ExerciseAboutSheet';
+import ExerciseVideoSheet from './ExerciseVideoSheet';
 import ExerciseAboutStrip from './ExerciseAboutStrip';
 
 const VIDEO = { videoId: 'j7ULT6dznNc', startSeconds: 12, sourceLabel: 'Muscle & Strength' };
@@ -51,12 +52,11 @@ describe('ExerciseVideoCard', () => {
 });
 
 describe('the video in the strip and the sheet', () => {
-  it('puts a play button in the strip’s last slot only when there is a video', () => {
+  it('puts the play button in the strip’s last slot', () => {
     const onPlay = vi.fn();
     const { container } = render(
       <ExerciseAboutStrip
         muscles={BENCH}
-        bodyFigure={null}
         onOpen={vi.fn()}
         actions={null}
         video={<button type="button" onClick={onPlay}>Show how-to video</button>}
@@ -68,9 +68,29 @@ describe('the video in the strip and the sheet', () => {
     expect(onPlay).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the video below the muscles in the sheet, and scrolls to it when opened from play', () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+  // One icon, one sheet (2026-11-08): play opens the video alone, titled with the exercise.
+  it('the video sheet holds the video and no muscle diagram', () => {
+    render(<ExerciseVideoSheet exerciseName="Barbell Bench Press" video={VIDEO} onClose={vi.fn()} />);
+    const sheet = screen.getByRole('dialog', { name: 'Barbell Bench Press' });
+    expect(within(sheet).getByRole('region', { name: 'How-to video' })).toBeTruthy();
+    expect(within(sheet).queryByText('Main muscles')).toBeNull();
+    expect(within(sheet).queryByRole('group', { name: 'Body diagram' })).toBeNull();
+  });
+
+  // The struck-through play button opens this: it says there is no video instead of showing nothing.
+  it('the video sheet says when a library exercise has no video yet', () => {
+    render(<ExerciseVideoSheet exerciseName="Hammer Curl" video={null} onClose={vi.fn()} />);
+    const sheet = screen.getByRole('dialog', { name: 'Hammer Curl' });
+    expect(within(sheet).getByText('There’s no how-to video for this exercise yet.')).toBeTruthy();
+    expect(within(sheet).queryByRole('region', { name: 'How-to video' })).toBeNull();
+  });
+
+  it('the video sheet says your own exercise has no video because videos come with the library', () => {
+    render(<ExerciseVideoSheet exerciseName="Qwerty Zorp" video={null} ownExercise onClose={vi.fn()} />);
+    expect(screen.getByText(/How-to videos come with exercises from Huddle’s library/)).toBeTruthy();
+  });
+
+  it('the muscles sheet, given no video, holds the muscles and no video', () => {
     render(
       <ExerciseAboutSheet
         exerciseName="Barbell Bench Press"
@@ -78,18 +98,19 @@ describe('the video in the strip and the sheet', () => {
         bodyFigure="male"
         onChooseFigure={vi.fn()}
         onClose={vi.fn()}
-        video={VIDEO}
-        focusVideo
       />,
     );
-    expect(screen.getByRole('region', { name: 'How-to video' })).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    delete Element.prototype.scrollIntoView;
+    const sheet = screen.getByRole('dialog', { name: 'Barbell Bench Press' });
+    expect(within(sheet).getByText('Main muscles')).toBeTruthy();
+    expect(within(sheet).queryByRole('region', { name: 'How-to video' })).toBeNull();
   });
 
-  it('does not scroll when the sheet was opened from the body', () => {
+  // The combined sheet's scroll-to-video pushed the header (and its X) above the screen on iOS
+  // Safari. Nothing that opens a sheet may scroll.
+  it('opening either sheet scrolls nothing', () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
+    render(<ExerciseVideoSheet exerciseName="Barbell Bench Press" video={VIDEO} onClose={vi.fn()} />);
     render(
       <ExerciseAboutSheet
         exerciseName="Barbell Bench Press"

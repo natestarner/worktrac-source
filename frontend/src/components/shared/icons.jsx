@@ -57,6 +57,34 @@ export const IconPlay = (props) => (
   </Icon>
 );
 
+// Our own, not Lucide's: "play" with Lucide's "-off" slash across it. The strip's video slot when
+// the exercise has no how-to video, so the slot reads as "none" rather than as something missing.
+export const IconPlayOff = (props) => (
+  <Icon {...props}>
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+    <path d="M2 2l20 20" />
+  </Icon>
+);
+
+// Our own, not Lucide's: the Vitruvian Man, redrawn from the stock pictogram Nate picked
+// (2026-11-08) -- a SOLID figure (filled head and torso, thick limbs; both arm positions, both leg
+// positions) inside a thin circle, and a square whose base sits on the circle's and whose top
+// corners poke out of it. "About this exercise" (the muscles) on the exercise strip.
+// ⚠️ It breaks the set's single 2px stroke on purpose: the frame is 0.8 (the original's is a
+// hairline, which vanishes at 18px) and the limbs 1.7-1.8, so the figure reads first, as it does
+// in the original. The circle spans the same 19 units as the star and play beside it, so the
+// strip's icons stand the same height.
+export const IconVitruvian = (props) => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="9.5" strokeWidth={0.8} />
+    <path d="M3.95 5.65h16.1V21.5H3.95z" strokeWidth={0.8} strokeLinejoin="miter" />
+    <circle cx="12" cy="7.3" r="1.7" fill="currentColor" stroke="none" />
+    <path d="M10.1 9.3h3.8l-.15 6.3h-3.5z" fill="currentColor" stroke="none" />
+    <path d="M11.2 9.9L5.2 6.4M12.8 9.9l6-3.5M4.6 10.1h3.6M15.8 10.1h3.6M11.2 15l-3.6 5.2M12.8 15l3.6 5.2" strokeWidth={1.8} />
+    <path d="M11.05 15.3v5.5M12.95 15.3v5.5" strokeWidth={1.7} strokeLinecap="butt" />
+  </Icon>
+);
+
 // Lucide "info" (an i in a circle). "Preview exercise" beside a search result: muscles and video
 // before choosing.
 export const IconInfo = (props) => (

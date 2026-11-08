@@ -1,14 +1,15 @@
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import SectionLabel from '../shared/SectionLabel';
-import { useEffect, useRef } from 'react';
 import BodyMap from './BodyMap';
 import ExerciseVideoCard from './ExerciseVideoCard';
 import { muscleName } from '../../utils/muscles';
 
 // "About this exercise": what it works, drawn on a body, front and back. Opened from the strip
 // under the exercise's name (ExerciseAboutStrip). A bottom sheet on a phone, capped in width on an
-// iPad; it scrolls when it has to, so the how-to video can sit below the diagram.
+// iPad. On the Log screen it holds the muscles ONLY: the strip's play button opens the how-to video
+// in its own sheet (ExerciseVideoSheet) -- one icon, one sheet (decided 2026-11-08). The previews
+// (ExercisePreview.jsx) still show both, since they have a single "About" entry and no play button.
 //
 // Nothing in here touches the network: the muscles come with the exercise catalog (cached for
 // offline use like the names), and the body art is a build asset. So it opens and draws the same
@@ -64,20 +65,17 @@ function MuscleList({ title, codes, tone }) {
   );
 }
 
-// `video` (utils/exerciseVideo.js) adds the how-to video below the muscles. `focusVideo` is set when
-// the strip's play button opened the sheet: it scrolls the video into view, so a tap on "play" lands
-// on the player rather than on a diagram above it.
+// `video` (utils/exerciseVideo.js) adds the how-to video below the muscles. The previews pass it;
+// the Log screen does not, because its play button opens the video in a sheet of its own.
+//
+// ⚠️ Nothing in here may scrollIntoView. The combined sheet used to scroll to the video when it was
+// opened from play, and on iOS Safari that also scrolls the page behind the fixed overlay: the
+// sheet's header, Close button included, ended up above the screen with no way to scroll back.
+//
 // The sheet's contents, without the sheet. The routine editor shows them INSIDE its own dialog
 // (RoutineFormModal's preview), because a sheet over a dialog is two scrims and two focus traps.
-export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, onAddMuscles = null, video = null, focusVideo = false, children }) {
+export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, onAddMuscles = null, video = null, children }) {
   const hasMuscles = muscles.primary.length > 0;
-  const videoRef = useRef(null);
-  useEffect(() => {
-    // jsdom defines no scrollIntoView; degrade to no scroll.
-    if (focusVideo) videoRef.current?.scrollIntoView?.({ block: 'start' });
-    // Once, on open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   return (
     <>
       {!hasMuscles ? (
@@ -108,9 +106,7 @@ export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChoo
           </div>
         </>
       )}
-      <div ref={videoRef}>
-        <ExerciseVideoCard video={video} exerciseName={exerciseName} />
-      </div>
+      <ExerciseVideoCard video={video} exerciseName={exerciseName} />
       {children}
       {/* The body art's licence travels with the art (MIT requires the notice in every copy).
           A <details> so it costs one line until someone opens it. */}
