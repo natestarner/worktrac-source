@@ -30,7 +30,7 @@ describe('MuscleMapCard', () => {
   });
 
   it('draws each bar solid, sized by sets -- the shade is the body\'s job, not the bar\'s', () => {
-    const { container } = render(<MuscleMapCard muscleSets={sets()} weeks={4} />);
+    const { container } = render(<MuscleMapCard muscleSets={sets()} weeks={4} muscleMap={ON} />);
     const bars = [...container.querySelectorAll('.muscle-map-bar')];
     expect(bars.map((b) => b.style.width)).toEqual(['100%', `${(3.5 / 6) * 100}%`, `${(0.5 / 6) * 100}%`]);
     expect(bars.every((b) => b.style.opacity === '')).toBe(true);
