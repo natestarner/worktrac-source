@@ -139,6 +139,11 @@ export default function Modal({
         aria-labelledby={labelledBy || (title ? titleId : undefined)}
         tabIndex={-1}
         ref={dialogRef}
+        // .modal-panel (index.css) carries the height cap: 80% of the VISIBLE viewport (dvh), with
+        // vh as the fallback. A bare 80vh is 80% of iOS Safari's LARGEST viewport (toolbars
+        // hidden), so with the toolbars showing a bottom sheet could reach past the top of the
+        // screen, taking its sticky header and the X with it.
+        className="modal-panel"
         style={{
           background: 'var(--color-surface)',
           // In light mode the dimmed scrim is far lighter than --color-surface, so the modal
@@ -157,7 +162,6 @@ export default function Modal({
           // stretching into a 1400px-wide band of controls on a desktop monitor.
           width: isSheet ? '100%' : width,
           maxWidth: isSheet ? width : '100%',
-          maxHeight: '80vh',
           overflowY: 'auto',
           outline: 'none',
           // A sheet slides; a dialog rises and settles. A scaling sheet reads as a dialog

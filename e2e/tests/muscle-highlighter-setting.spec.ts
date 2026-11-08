@@ -19,8 +19,11 @@ async function warmCatalog(page: Page) {
   await search.fill('');
 }
 
-async function expectAboutSheetOff(page: Page) {
+async function openAbout(page: Page) {
   await page.getByRole('button', { name: ABOUT }).click();
+}
+
+async function expectAboutSheetOff(page: Page) {
   const sheet = page.getByRole('dialog', { name: EXERCISE });
   await expect(sheet.getByTestId('muscle-map-off')).toHaveText(NOTE);
   await expect(sheet.getByRole('link', { name: 'Settings page' })).toBeVisible();
@@ -43,13 +46,13 @@ forEachConnectivityMode<void>('with the muscle highlighter off, the About sheet 
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    // The strip's thumbnail draws no body either -- same slot, an icon instead.
-    await expect(page.locator('.exercise-strip-thumb .body-map')).toHaveCount(0);
+    await openAbout(page);
   },
   assert: async (page) => {
     await expectAboutSheetOff(page);
   },
   afterReconnect: async (page) => {
+    await openAbout(page);
     await expectAboutSheetOff(page);
   },
 });
@@ -59,7 +62,6 @@ test('the owner turns the muscle highlighter on from the note, and the bodies ap
   await pickExercise(page, EXERCISE);
   await logSetAt(page, 135, 5);
   await waitForOutboxDrain(page);
-  await expect(page.locator('.exercise-strip-thumb .body-map')).toHaveCount(0);
 
   // Trends: the note stands where the bodies would be, and the list of sets stays.
   await page.getByRole('link', { name: 'Trends' }).click();
@@ -83,10 +85,9 @@ test('the owner turns the muscle highlighter on from the note, and the bodies ap
   await expect(card.getByRole('img', { name: 'Front of the body, shaded by sets per muscle' })).toBeVisible();
   await expect(card.getByTestId('muscle-map-off')).toHaveCount(0);
 
-  // And on Log: a body in the strip, and the sheet asks which body to draw.
+  // And on Log: the About sheet now asks which body to draw.
   await page.getByRole('link', { name: 'Log', exact: true }).click();
-  await expect(page.locator('.exercise-strip-thumb .body-map')).toHaveCount(1);
-  await page.getByRole('button', { name: ABOUT }).click();
+  await openAbout(page);
   await expect(page.getByText('Which body should the muscle diagram show?')).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
 

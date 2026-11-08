@@ -810,12 +810,12 @@ export default function HelpTab() {
           behind the <T>&hellip;</T> button beside them.
         </p>
         <p>
-          The button at the start of that row shows the muscles the exercise works, every one named:
-          the main muscles and the helping ones. With the muscle highlighter on, the button is a small
-          body, and tapping it draws them on a body, front and back: the main muscles in solid red,
-          the helping ones lighter. The first time, it asks whether to draw a male or female body, and
-          you can switch whenever you like. That choice is per person and is saved on this device. All
-          of this works offline.
+          The little figure in a circle at the start of that row is about the muscles the exercise
+          works. Tap it to see every one named: the main muscles and the helping ones. With the
+          muscle highlighter on, they are also drawn on a body, front and back: the main muscles in
+          solid red, the helping ones lighter. The first time, it asks whether to draw a male or
+          female body, and you can switch whenever you like. That choice is per person and is saved
+          on this device. All of this works offline.
         </p>
         <p>
           The muscle highlighter is off until the account owner turns it on in{' '}
@@ -824,7 +824,8 @@ export default function HelpTab() {
         </p>
         <p>
           Some exercises from Huddle&rsquo;s library also have a how-to video: a play button at the
-          end of that row. Tap it and the video sits under the muscles. Nothing downloads until you
+          end of that row. Tap it and the video opens on its own. When an exercise has no video, the
+          play button there is crossed out. Nothing downloads until you
           press play, and it starts with the sound off. Use the player&rsquo;s own controls to turn it
           up or go full screen. The video needs a connection; the muscles beside it don&rsquo;t.
         </p>

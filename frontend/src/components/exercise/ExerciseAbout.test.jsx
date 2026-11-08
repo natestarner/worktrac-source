@@ -15,8 +15,6 @@ describe('ExerciseAboutStrip', () => {
     const utils = render(
       <ExerciseAboutStrip
         muscles={muscles}
-        bodyFigure={null}
-        muscleMapOn
         onOpen={onOpen}
         actions={<button type="button">Customize this exercise</button>}
         {...extra}
@@ -44,33 +42,21 @@ describe('ExerciseAboutStrip', () => {
     expect(screen.getByRole('button', { name: 'About this exercise' })).toBeTruthy();
   });
 
-  // Off, the thumbnail slot holds an icon instead of the body -- and the strip keeps its slots.
-  it('draws no body in the thumbnail while the muscle highlighter is off', () => {
-    const on = renderStrip(BENCH);
-    expect(on.container.querySelector('.exercise-strip-thumb .body-map')).not.toBeNull();
-    const slots = on.container.querySelector('.exercise-strip').children.length;
-    on.unmount();
-
-    const off = renderStrip(BENCH, { muscleMapOn: false });
-    expect(off.container.querySelector('.exercise-strip-thumb .body-map')).toBeNull();
-    expect(off.container.querySelector('.exercise-strip-thumb svg')).not.toBeNull();
-    expect(off.container.querySelector('.exercise-strip').children.length).toBe(slots);
-    expect(screen.getByRole('button', { name: 'About this exercise: works Chest, helped by Shoulders and Triceps' })).toBeTruthy();
-  });
-
-  // A caller that forgets the prop must draw no body.
-  it('draws no body when no setting is passed', () => {
-    const { container } = render(
-      <ExerciseAboutStrip muscles={BENCH} bodyFigure="male" onOpen={vi.fn()} actions={null} />,
-    );
-    expect(container.querySelector('.body-map')).toBeNull();
-  });
-
-  it('keeps the video slot last, and empty when there is no video', () => {
-    const { container } = renderStrip(BENCH);
+  it('keeps the video slot last', () => {
+    const { container } = renderStrip(BENCH, { video: <button type="button">No how-to video</button> });
     const strip = container.querySelector('.exercise-strip');
     expect(strip.lastElementChild.className).toBe('exercise-strip-video');
-    expect(strip.lastElementChild.childElementCount).toBe(0);
+    expect(strip.lastElementChild.textContent).toBe('No how-to video');
+  });
+
+  // The About button is an 18px glyph like the actions beside it (2026-11-08), not the shaded body
+  // thumbnail it replaced, which stood taller than its neighbours.
+  it('draws the About button as an 18px glyph, not a body diagram', () => {
+    const { container } = renderStrip(BENCH);
+    const icon = container.querySelector('.exercise-strip-about svg');
+    expect(icon.getAttribute('width')).toBe('18');
+    expect(icon.getAttribute('height')).toBe('18');
+    expect(container.querySelector('.body-map')).toBeNull();
   });
 });
 
