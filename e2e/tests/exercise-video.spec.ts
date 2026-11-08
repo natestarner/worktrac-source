@@ -119,7 +119,8 @@ test.describe('the how-to video', () => {
     await pickExercise(page, EXERCISE);
     await page.getByRole('button', { name: /^About this exercise/ }).click();
     const sheet = page.getByRole('dialog', { name: EXERCISE });
-    await expect(sheet.getByRole('group', { name: 'Body diagram' })).toBeVisible();
+    // The muscle list, not the body switch: the drawings are off by default (V102), the names never.
+    await expect(sheet.getByText('Main muscles')).toBeVisible();
     await expect(sheet.getByRole('region', { name: 'How-to video' })).toHaveCount(0);
   });
 
