@@ -196,9 +196,11 @@ left the login form's fields under the keyboard with no way to see them. Don't g
   `SessionBar` rides on top of the keyboard instead of hiding behind it, as in most native apps.
 - **`keepFocusedFieldVisible`** (`lib/native/keyboard.js`, mounted by `FocusedFieldKeeper` in
   `App.jsx`) covers longer pages: on `keyboardDidShow`, and on `focusin` (moving between fields
-  with the keyboard up fires no keyboard event), a field that is off screen or under the
-  `SessionBar` (`--bottom-bar-height`) is scrolled to the centre. A field already in view never
-  moves.
+  with the keyboard up fires no keyboard event), a field that is off screen, under the sticky tab
+  bar, or under the `SessionBar` (`--bottom-bar-height`) is scrolled to the centre. A field already
+  in view never moves. It only decides WHEN: the reveal itself is `lib/visibleViewport.js`'s, shared
+  with the web, which also handles a field inside a dialog (`frontend-core.md`, "The keyboard and
+  scrolling").
 - **Still to confirm on a device:** the Log screen's weight and reps fields with a workout running
   (the `SessionBar` case), and a long modal such as Contact Us.
 

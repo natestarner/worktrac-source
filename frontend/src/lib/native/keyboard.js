@@ -8,25 +8,14 @@
 // when the keyboard opens, or focus moves while it is open, a field that is out of view is scrolled
 // to the middle of the space that is left. A field already in view is never moved.
 //
+// A field inside a dialog is revealed inside the dialog's own panel, and a field on the page is kept
+// clear of the sticky tab bar as well as the keyboard and the SessionBar. That logic is shared with
+// the web (lib/visibleViewport.js) so the two cannot drift; this file only decides WHEN, since the
+// keyboard events it listens for exist only in the app.
+//
 // Web: no-op. Safari does this itself.
 import { isNativeApp } from './platform';
-
-const EDGE_PX = 8;
-
-function coveredAtBottom() {
-  // SessionBar publishes its own height here (frontend-core.md, "The bottom chrome").
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar-height');
-  return parseFloat(value) || 0;
-}
-
-function revealFocusedField() {
-  const el = document.activeElement;
-  if (!el?.matches?.('input, textarea, select, [contenteditable="true"]')) return;
-  const rect = el.getBoundingClientRect();
-  const visibleBottom = window.innerHeight - coveredAtBottom() - EDGE_PX;
-  if (rect.top >= 0 && rect.bottom <= visibleBottom) return;
-  el.scrollIntoView({ block: 'center' });
-}
+import { revealFocusedField } from '../visibleViewport';
 
 // Starts watching. Returns a function that stops.
 export function keepFocusedFieldVisible() {

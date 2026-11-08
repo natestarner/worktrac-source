@@ -287,12 +287,16 @@
      chrome rather than merely near it. One shared value rather than two
      independent guesses that could drift apart -- .help-section's anchored
      headings and the Log picker's search field both need it.
-     Deliberately generous rather than exact: the chrome's height varies with
-     whether the person bar is showing (one person vs. several), and
-     overshooting costs a little whitespace where undershooting hides the
-     target behind the chrome. Plus --safe-top, because in the App Store app the chrome sticks
-     below the status bar rather than at the very top. */
-  --sticky-chrome-clearance: calc(132px + var(--safe-top));
+     Exact, not a guess: --app-chrome-height is the chrome's MEASURED height,
+     published by AppShell (publishChromeHeight). It varies with whether the
+     person bar is in the chrome (one person vs. several), and the old fixed
+     132px undershot the several-people chrome (~141px), leaving the search
+     field's focus border under the tab bar. --space-3 on top keeps the focus
+     ring clear of the chrome's edge. 132px is only the fallback before the
+     first measurement (and in jsdom). Plus --safe-top, because in the App
+     Store app the chrome sticks below the status bar rather than at the very top. */
+  --app-chrome-height: 132px;
+  --sticky-chrome-clearance: calc(var(--app-chrome-height) + var(--space-3) + var(--safe-top));
 
   /* --- Log picker chips -------------------------------------------------
      The picker's exercise chips are bounded by ROWS, not by a count of
@@ -746,6 +750,15 @@ button:not(.pressable):active:not(:disabled) {
    log banner" on a desktop click. See --sticky-chrome-clearance. */
 .exercise-search-input {
   scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
+/* Everything below the Log picker's search field while a search is running (results + "Add your
+   own exercise"). At least a screen tall, so a short result list -- one match, or none -- cannot
+   shorten the page under the field: the browser would clamp the scroll to the new end of the page
+   and the field would drop down the screen mid-typing. Whitespace at the end of the page costs
+   nothing; content stays at the top of this box. See ExercisePicker.jsx. */
+.picker-search-body {
+  min-height: calc(var(--viewport-min-height) - var(--sticky-chrome-clearance));
 }
 
 /* The Log picker's exercise chips -- the big tappable ones, not `.chip` (which is the small
@@ -2781,10 +2794,14 @@ input[type='search']::-webkit-search-results-decoration {
 /* Modal.jsx's panel: its height cap. dvh is the VISIBLE viewport; a bare vh is iOS Safari's
    LARGEST one (toolbars hidden), so with the toolbars showing an 80vh bottom sheet could reach
    above the top of the screen, sticky header and X included (2026-11-08, iPhone portrait). The vh
-   line is the fallback for a browser without dvh. */
+   line is the fallback for a browser without dvh.
+   dvh tracks Safari's toolbars, NOT the keyboard, so the `100%` term is still needed: it is the
+   scrim's height, and the scrim follows the part of the screen the keyboard leaves visible
+   (Modal.jsx, lib/visibleViewport.js). Without it a dialog with the keyboard up reaches under it
+   and Safari's pan pushes its header off the top (2026-11-08, Add exercise / New routine). */
 .modal-panel {
-  max-height: 80vh;
-  max-height: 80dvh;
+  max-height: min(80vh, 100%);
+  max-height: min(80dvh, 100%);
 }
 
 /* Modal entry: the scrim fades while the dialog rises and settles. Previously both
@@ -2946,7 +2963,9 @@ input[type='search']::-webkit-search-results-decoration {
   background: var(--color-subtle-bg);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-8);
-  scroll-margin-top: 132px;
+  /* The shared, measured clearance -- this was a hand-copied 132px, the same guess that left the
+     Log search field under the two-person chrome. */
+  scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
 .help-contents-summary {
