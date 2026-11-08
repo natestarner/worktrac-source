@@ -5,11 +5,17 @@ import SectionLabel from '../shared/SectionLabel';
 import { MUSCLE_MAP_HELP } from './chartHelp';
 import { rangeEmptyLabel } from './RangeToggle';
 import { setsLabel, shadeFor } from '../../utils/muscleSets';
+import MuscleMapOffNote from '../exercise/MuscleMapOffNote';
+import { MUSCLE_MAP_OFF } from '../../hooks/useMuscleMap';
 
 // Sets per muscle over the selected range, on a front and a back body, with the numbers beside them
 // (utils/muscleSets.js has the rule). The list is the readout; the bodies are the at-a-glance
 // version of the same numbers, so every shade on a body is also a row with a number and a name --
 // nothing is said by colour alone.
+//
+// The two bodies sit behind the account-wide muscle highlighter setting (`muscleMap`,
+// hooks/useMuscleMap.js), off by default. Off, MuscleMapOffNote takes their place and the
+// sets-per-muscle list stays: it is numbers and names, and the setting is about the drawings.
 //
 // Follows the range toggle, like the weekly chart: "what have I been training lately" is a range
 // question, unlike the consistency grid's fixed six months.
@@ -20,7 +26,7 @@ function bodyLabel(view, worked) {
   return `${side} of the body, shaded by sets per muscle`;
 }
 
-export default function MuscleMapCard({ muscleSets, weeks, gender = 'male' }) {
+export default function MuscleMapCard({ muscleSets, weeks, gender = 'male', muscleMap = MUSCLE_MAP_OFF }) {
   if (!muscleSets) return null;
   const { worked, notWorked, conditioning, unlisted } = muscleSets;
   const maxSets = worked[0]?.sets ?? 0;
@@ -37,10 +43,14 @@ export default function MuscleMapCard({ muscleSets, weeks, gender = 'male' }) {
           .muscle-map-layout, so iPad split view gets the phone layout too). */}
       <div className="muscle-map-layout">
         <div className="muscle-map-grid">
-          <div className="muscle-map-bodies">
-            <BodyMap levels={levels} gender={gender} view="front" label={bodyLabel('front', worked)} />
-            <BodyMap levels={levels} gender={gender} view="back" label={bodyLabel('back', worked)} />
-          </div>
+          {muscleMap.on ? (
+            <div className="muscle-map-bodies">
+              <BodyMap levels={levels} gender={gender} view="front" label={bodyLabel('front', worked)} />
+              <BodyMap levels={levels} gender={gender} view="back" label={bodyLabel('back', worked)} />
+            </div>
+          ) : (
+            <MuscleMapOffNote muscleMap={muscleMap} />
+          )}
 
           {worked.length > 0 && (
             <div className="muscle-map-readout">

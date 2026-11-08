@@ -32,6 +32,15 @@ public class AccountService {
         return AccountDto.from(account, subscriptionService.entitledPlan(accountId));
     }
 
+    // The muscle highlighter, on or off for the whole account. No plan gate: every tier has it.
+    @Transactional
+    public AccountDto setMuscleMap(Long accountId, boolean enabled) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new NotFoundException("We couldn't find that account."));
+        account.setMuscleMapEnabled(enabled);
+        return AccountDto.from(account, subscriptionService.entitledPlan(accountId));
+    }
+
     /**
      * Whether members of this account see everyone in it, or only themselves.
      *

@@ -75,6 +75,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 import { exerciseMuscles } from '../../utils/muscles';
 import ExerciseAboutStrip from '../exercise/ExerciseAboutStrip';
 import ExerciseAboutSheet from '../exercise/ExerciseAboutSheet';
+import { useMuscleMap } from '../../hooks/useMuscleMap';
 
 // How far from a record the nudge under the steppers is still worth showing. Past this it stops
 // being encouragement and becomes a reminder of how far off you are -- and it would be on screen
@@ -106,6 +107,8 @@ export default function ExerciseDetail({
   video = null,
 }) {
   const { account, people } = useAuth();
+  // The account-wide muscle highlighter switch: the strip's thumbnail and the About sheet's diagram.
+  const muscleMap = useMuscleMap();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
   // Null whenever no routine is running, or the routine prescribes nothing at this position.
@@ -1222,6 +1225,7 @@ export default function ExerciseDetail({
           <ExerciseAboutStrip
             muscles={muscles}
             bodyFigure={bodyFigure}
+            muscleMapOn={muscleMap.on}
             onOpen={() => setShowAboutSheet('about')}
             actions={<>
             {/* These three were a text glyph and two emoji at three different font sizes,
@@ -1761,6 +1765,7 @@ export default function ExerciseDetail({
           muscles={muscles}
           bodyFigure={bodyFigure}
           onChooseFigure={setBodyFigure}
+          muscleMap={muscleMap}
           onClose={() => setShowAboutSheet(false)}
           video={video}
           focusVideo={showAboutSheet === 'video'}

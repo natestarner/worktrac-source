@@ -3,6 +3,7 @@ import { registerHousehold } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
+import { turnOnMuscleHighlighter } from './support/muscleMap';
 
 // The Trends muscle map counts sets per muscle from the History this device holds, with the workout
 // in progress folded in -- queued sets included -- and each exercise's muscles from the cached
@@ -43,6 +44,8 @@ async function expectThreeSetsOfBench(page: Page) {
 forEachConnectivityMode<void>('sets logged in any mode are on the Trends muscle map at once', {
   async setup(page, request) {
     await registerHousehold(page, request, 'Mallow');
+    // Off by default (V102); this spec asserts the bodies' shading.
+    await turnOnMuscleHighlighter(page);
     await pickExercise(page, EXERCISE);
     await logSetAt(page, 135, 5);
     await waitForOutboxDrain(page);

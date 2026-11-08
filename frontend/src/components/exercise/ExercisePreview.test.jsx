@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExercisePreviewContent, ExercisePreviewSheet } from './ExercisePreview';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import { useAppState } from '../../context/AppStateContext';
 import { useExercises } from '../../hooks/useExercises';
+import { useMuscleMap } from '../../hooks/useMuscleMap';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
+vi.mock('../../hooks/useMuscleMap', () => ({
+  useMuscleMap: vi.fn(),
+  MUSCLE_MAP_OFF: { on: false, canChange: true, owner: 'household owner' },
+}));
 
 const BENCH = {
   id: 7,
@@ -23,6 +29,7 @@ describe('previewing an exercise', () => {
     vi.clearAllMocks();
     useAppState.mockReturnValue({ bodyFigure: 'male', setBodyFigure });
     useExercises.mockReturnValue({ exercises: [BENCH] });
+    useMuscleMap.mockReturnValue({ on: true, canChange: true, owner: 'household owner' });
   });
 
   it('shows the muscles and the video the Log screen would, from the catalog row', () => {
@@ -47,6 +54,26 @@ describe('previewing an exercise', () => {
     expect(screen.getByRole('dialog', { name: 'Zottman Curl' })).toBeTruthy();
     expect(screen.getByText('No muscles are listed for this exercise yet.')).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'How-to video' })).toBeNull();
+  });
+
+  // The account's setting reaches every preview: off, the sheet draws no body.
+  it('follows the account’s muscle highlighter setting', () => {
+    useMuscleMap.mockReturnValue({ on: false, canChange: true, owner: 'household owner' });
+    render(
+      <MemoryRouter>
+        <ExercisePreviewSheet exerciseId={7} exerciseName="Barbell Bench Press" onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Settings page' })).toBeTruthy();
+  });
+
+  // The routine editor shows this inside its own dialog, holding an unsaved routine.
+  it('does not link away from the routine editor', () => {
+    useMuscleMap.mockReturnValue({ on: false, canChange: true, owner: 'household owner' });
+    render(<ExercisePreviewContent exerciseId={7} exerciseName="Barbell Bench Press" />);
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('visit the Settings page.');
+    expect(screen.queryByRole('link', { name: 'Settings page' })).toBeNull();
   });
 
   it('changes the person’s body figure, the same preference as the Log screen', () => {

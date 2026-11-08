@@ -1706,6 +1706,15 @@ input[type='search']::-webkit-search-results-decoration {
   height: 100%;
 }
 
+/* The muscle highlighter is off (account setting): an info icon in the same 20x40 slot, centred, so
+   the strip keeps its size either way. */
+.exercise-strip-thumb--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+}
+
 .exercise-strip-muscles {
   display: none;
   min-width: 0;
@@ -1967,6 +1976,27 @@ input[type='search']::-webkit-search-results-decoration {
   margin: var(--space-3) 0 0;
   color: var(--color-muted);
   font-size: var(--text-xs);
+}
+
+/* MuscleMapOffNote: what stands where a body diagram would be while the muscle highlighter is off
+   (the About sheet, every exercise preview, the Trends card). A quiet note, PlusUpsell's ground. */
+.muscle-map-off {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-subtle-bg);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+
+.muscle-map-off-link {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* MusclePicker: a chip per muscle cycling not worked -> main -> helping. Main is filled, helping is

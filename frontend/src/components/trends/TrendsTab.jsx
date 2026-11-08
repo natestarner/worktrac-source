@@ -10,6 +10,7 @@ import WeeklyMetricChart from './WeeklyMetricChart';
 import ConsistencyHeatmap from './ConsistencyHeatmap';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import MuscleMapCard from './MuscleMapCard';
+import { useMuscleMap } from '../../hooks/useMuscleMap';
 import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
@@ -46,17 +47,18 @@ function HeatmapSkeleton() {
   );
 }
 
-// MuscleMapCard: its title row, then the two bodies (about 0.9x as tall as the card is wide).
-function MuscleMapSkeleton() {
+// MuscleMapCard: its title row, then the two bodies (about 0.9x as tall as the card is wide) -- or,
+// with the muscle highlighter off, the two-line note that stands in for them.
+function MuscleMapSkeleton({ on }) {
   return (
     <Card size="dense">
       <Skeleton width={190} height={13} style={{ marginBottom: 12 }} />
-      <Skeleton width="100%" height={300} radius={8} />
+      <Skeleton width="100%" height={on ? 300 : 64} radius={8} />
     </Card>
   );
 }
 
-function TrendsSkeleton() {
+function TrendsSkeleton({ muscleMapOn }) {
   return (
     <div data-testid="trends-skeleton">
       <div style={rangeRowStyle}>
@@ -80,7 +82,7 @@ function TrendsSkeleton() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         <HeatmapSkeleton />
         <BarChartSkeleton />
-        <MuscleMapSkeleton />
+        <MuscleMapSkeleton on={muscleMapOn} />
       </div>
       <Card size="dense">
         <Skeleton width={140} height={13} style={{ marginBottom: 12 }} />
@@ -106,6 +108,7 @@ export default function TrendsTab() {
     bodyFigure,
   } = useAppState();
   const { account } = useAuth();
+  const muscleMap = useMuscleMap();
   const location = useLocation();
   const navigate = useNavigate();
   const defaultUnit = account?.defaultUnit || 'lb';
@@ -196,7 +199,7 @@ export default function TrendsTab() {
   }
 
   if (loading || !overview) {
-    return <TrendsSkeleton />;
+    return <TrendsSkeleton muscleMapOn={muscleMap.on} />;
   }
 
   // Two genuinely different empty states. `weeks` only describes the SELECTED range, so keying the
@@ -257,7 +260,7 @@ export default function TrendsTab() {
           defaultUnit={defaultUnit}
         />
         {/* The body the person chose in an exercise's About sheet; male until they choose. */}
-        <MuscleMapCard muscleSets={muscleSets} weeks={trendsRangeWeeks} gender={bodyFigure ?? 'male'} />
+        <MuscleMapCard muscleSets={muscleSets} weeks={trendsRangeWeeks} gender={bodyFigure ?? 'male'} muscleMap={muscleMap} />
       </div>
 
       <div ref={exerciseSectionRef} className="trends-exercise-anchor">

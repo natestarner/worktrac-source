@@ -5,6 +5,8 @@ import { useEffect, useRef } from 'react';
 import BodyMap from './BodyMap';
 import ExerciseVideoCard from './ExerciseVideoCard';
 import { muscleName } from '../../utils/muscles';
+import MuscleMapOffNote from './MuscleMapOffNote';
+import { MUSCLE_MAP_OFF } from '../../hooks/useMuscleMap';
 
 // "About this exercise": what it works, drawn on a body, front and back. Opened from the strip
 // under the exercise's name (ExerciseAboutStrip). A bottom sheet on a phone, capped in width on an
@@ -16,6 +18,10 @@ import { muscleName } from '../../utils/muscles';
 //
 // The body figure is a per-person display preference (PERSON_DEFAULTS.bodyFigure). Until it is
 // set, the sheet asks instead of guessing; the same two-button switch then stays under the diagram.
+//
+// The diagram, the question and the switch all sit behind the account-wide muscle highlighter
+// setting (`muscleMap`, hooks/useMuscleMap.js), off by default. Off, MuscleMapOffNote takes their
+// place and the muscle lists stay: they are text, and the setting is about the drawings.
 //
 // ⚠️ The switch's accessible names are "Show a male body" / "Show a female body", not the visible
 // "Male" / "Female": "Male" is a substring of "Female", and Playwright matches names by substring.
@@ -69,7 +75,8 @@ function MuscleList({ title, codes, tone }) {
 // on the player rather than on a diagram above it.
 // The sheet's contents, without the sheet. The routine editor shows them INSIDE its own dialog
 // (RoutineFormModal's preview), because a sheet over a dialog is two scrims and two focus traps.
-export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, onAddMuscles = null, video = null, focusVideo = false, children }) {
+// `settingsLink={false}` names Settings without linking to it (MuscleMapOffNote says when).
+export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, muscleMap = MUSCLE_MAP_OFF, settingsLink = true, onAddMuscles = null, video = null, focusVideo = false, children }) {
   const hasMuscles = muscles.primary.length > 0;
   const videoRef = useRef(null);
   useEffect(() => {
@@ -91,17 +98,23 @@ export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChoo
         </div>
       ) : (
         <>
-          {bodyFigure ? (
-            <div className="exercise-about-bodies">
-              <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="front" label="Front of the body" />
-              <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="back" label="Back of the body" />
-            </div>
+          {!muscleMap.on ? (
+            <MuscleMapOffNote muscleMap={muscleMap} link={settingsLink} />
           ) : (
-            <p className="exercise-about-ask">Which body should the muscle diagram show?</p>
+            <>
+              {bodyFigure ? (
+                <div className="exercise-about-bodies">
+                  <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="front" label="Front of the body" />
+                  <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="back" label="Back of the body" />
+                </div>
+              ) : (
+                <p className="exercise-about-ask">Which body should the muscle diagram show?</p>
+              )}
+              <div className="exercise-about-figure">
+                <FigureSwitch value={bodyFigure} onChange={onChooseFigure} />
+              </div>
+            </>
           )}
-          <div className="exercise-about-figure">
-            <FigureSwitch value={bodyFigure} onChange={onChooseFigure} />
-          </div>
           <div className="exercise-about-lists">
             <MuscleList title="Main muscles" codes={muscles.primary} tone="primary" />
             <MuscleList title="Helping muscles" codes={muscles.secondary} tone="secondary" />

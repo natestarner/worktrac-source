@@ -753,6 +753,15 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
   "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
 - **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **Every body drawing sits behind the muscle highlighter setting** (`AccountDto.muscleMapEnabled`,
+  V102, account-wide, owner-set, **off by default** -- decided with Nate 2026-11-08). Read it through
+  `hooks/useMuscleMap.js` and pass it down; never read `account` for it at a call site. Off, the
+  strip's thumbnail is an info icon in the same 20x40 slot (the height rule above still holds), and
+  the sheet shows `MuscleMapOffNote` (linking to Settings) where the diagram, the question and the
+  body switch would be. The muscle NAMES stay. The components default to OFF, so a caller that
+  forgets the prop draws no body. Not a connectivity branch: it comes from the auth snapshot.
+  The routine editor's preview passes `settingsLink={false}`: following a link there would leave
+  the dialog and lose the unsaved routine.
 - **An undescribed own exercise offers "Add muscles worked"** in the sheet, which opens Customize
   (the one place muscles are edited). Not for library exercises, and not for a temp row: Customize
   is disabled until its create syncs. Customize hands the server's row back through

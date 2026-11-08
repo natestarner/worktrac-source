@@ -77,6 +77,7 @@ describe('the video in the strip and the sheet', () => {
         muscles={BENCH}
         bodyFigure="male"
         onChooseFigure={vi.fn()}
+        muscleMap={{ on: true, canChange: true, owner: 'household owner' }}
         onClose={vi.fn()}
         video={VIDEO}
         focusVideo
@@ -96,6 +97,7 @@ describe('the video in the strip and the sheet', () => {
         muscles={BENCH}
         bodyFigure="male"
         onChooseFigure={vi.fn()}
+        muscleMap={{ on: true, canChange: true, owner: 'household owner' }}
         onClose={vi.fn()}
         video={VIDEO}
       />,
