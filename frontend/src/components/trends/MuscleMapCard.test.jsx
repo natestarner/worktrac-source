@@ -26,6 +26,13 @@ describe('MuscleMapCard', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['Chest6 sets', 'Triceps3.5 sets', 'Shoulders0.5 sets']);
   });
 
+  it('draws each bar solid, sized by sets -- the shade is the body\'s job, not the bar\'s', () => {
+    const { container } = render(<MuscleMapCard muscleSets={sets()} weeks={4} />);
+    const bars = [...container.querySelectorAll('.muscle-map-bar')];
+    expect(bars.map((b) => b.style.width)).toEqual(['100%', `${(3.5 / 6) * 100}%`, `${(0.5 / 6) * 100}%`]);
+    expect(bars.every((b) => b.style.opacity === '')).toBe(true);
+  });
+
   it('draws a front and a back body, each named for a screen reader', () => {
     render(<MuscleMapCard muscleSets={sets()} weeks={4} />);
     expect(screen.getByRole('img', { name: 'Front of the body, shaded by sets per muscle' })).toBeInTheDocument();
