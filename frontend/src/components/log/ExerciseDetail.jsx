@@ -58,10 +58,10 @@ import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import {
   IconChevronLeft,
   IconChevronRight,
-  IconMore,
   IconNote,
   IconPencil,
   IconPin,
+  IconSliders,
   IconStar,
   IconStarFilled,
   IconPlay,
@@ -1275,7 +1275,7 @@ export default function ExerciseDetail({
               <IconButton
                 onClick={() => setShowConfigureModal(true)}
                 label="Customize this exercise"
-                icon={IconMore}
+                icon={IconSliders}
                 disabled={isTempExerciseId(exercise.id)}
                 data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
               />
