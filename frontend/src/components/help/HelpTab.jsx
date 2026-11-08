@@ -839,7 +839,8 @@ export default function HelpTab() {
           open one and tap a muscle once for a main one (dark red), twice for a helper (lighter red),
           and a third time to clear it. Huddle suggests a starting point from the closest exercise in
           its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
-          connection, and only whoever added the exercise or the account owner can.
+          connection, and only whoever added the exercise or the account owner can. Closing that
+          window saves a change you made there.
         </p>
         <HelpTable
           head={['What', 'Does', 'Offline?']}

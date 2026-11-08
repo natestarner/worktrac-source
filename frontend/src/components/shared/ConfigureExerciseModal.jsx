@@ -100,9 +100,10 @@ export default function ConfigureExerciseModal({
   // Muscles worked, for the household's own exercises (library ones are described by the app).
   // A gated write: it replaces the set on the server, then hands the server's row to
   // onMusclesSaved, which writes it into the cached catalog so the strip and the About sheet update
-  // without a round trip.
+  // without a round trip. No `busy` check: the Update button is already disabled while locked, and
+  // closing must not skip the save just because Done blurred a just-typed note into its own save.
   async function saveMuscles() {
-    if (!musclesDraft || busy) return;
+    if (!musclesDraft) return;
     setBusy(true);
     try {
       const updated = await updateExerciseMuscles(exercise.id, musclesDraft);
@@ -111,6 +112,16 @@ export default function ConfigureExerciseModal({
     } finally {
       setBusy(false);
     }
+  }
+
+  // Closing (the X, Done, or Escape -- Modal routes all three through onClose) also saves a muscle
+  // edit nobody pressed "Update muscles" for: picking muscles and then leaving reads as done, and
+  // the other fields here already save themselves on blur. The modal closes at once; if the save
+  // fails, the gated write's toast still says so after it has gone. Offline there is no draft to
+  // save -- the picker is disabled -- so this only matters when signal drops after the edit.
+  function handleClose() {
+    if (musclesDraft) guardedSaveMuscles();
+    onClose();
   }
 
   // A standing reminder for this exercise (e.g. "keep elbows tucked", "go light -- bad
@@ -191,8 +202,11 @@ export default function ConfigureExerciseModal({
   });
   const guardedSaveNote = run(saveNote, { offlineMessage: 'Editing needs a connection.' });
   // showServerMessage for the same reason as rename: a 403 here says whose exercise it is.
+  // Its own errorMessage because closing can fire it: "That didn't save" alone wouldn't say what,
+  // once the modal has gone.
   const guardedSaveMuscles = run(saveMuscles, {
     offlineMessage: 'Editing needs a connection.',
+    errorMessage: "Your muscle changes didn't save. Try again.",
     showServerMessage: true,
   });
   const guardedToggleTag = run(toggleTag, { offlineMessage: 'Editing needs a connection.' });
@@ -208,7 +222,7 @@ export default function ConfigureExerciseModal({
     // instant this opens -- covering half the modal before anyone's had a chance to see what's in
     // it, let alone decide they meant to edit that field. See Modal.jsx's own comment for why
     // landing on the dialog is an accepted landing spot, not a downgrade.
-    <Modal width={360} onClose={onClose} title="Customize this exercise" initialFocus="dialog">
+    <Modal width={360} onClose={handleClose} title="Customize this exercise" initialFocus="dialog">
       <div style={{ marginBottom: 18 }}>
         <span style={mine ? ownBadgeStyle : neutralBadgeStyle}>{badgeText}</span>
       </div>
@@ -405,7 +419,7 @@ export default function ConfigureExerciseModal({
         </button>
       )}
 
-      <button onClick={onClose} style={{ ...cancelButtonStyle, width: '100%' }}>
+      <button onClick={handleClose} style={{ ...cancelButtonStyle, width: '100%' }}>
         Done
       </button>
     </Modal>

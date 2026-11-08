@@ -1,5 +1,5 @@
 import { onlineManager } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigureExerciseModal from './ConfigureExerciseModal';
 import { setPersistentNote } from '../../api/notes';
@@ -15,7 +15,7 @@ describe('ConfigureExerciseModal muscles', () => {
   });
   afterEach(() => onlineManager.setOnline(true));
 
-  function renderWithMuscles(exercise, accountAccess, onMusclesSaved = vi.fn()) {
+  function renderWithMuscles(exercise, accountAccess, onMusclesSaved = vi.fn(), onClose = vi.fn()) {
     access.current = accountAccess;
     render(
       <ConfigureExerciseModal
@@ -25,7 +25,7 @@ describe('ConfigureExerciseModal muscles', () => {
         allTags={[]}
         appliedTagNames={[]}
         customFields={[]}
-        onClose={vi.fn()}
+        onClose={onClose}
         onFieldsChanged={vi.fn()}
         onTagsChanged={vi.fn()}
         onExerciseChanged={vi.fn()}
@@ -53,6 +53,92 @@ describe('ConfigureExerciseModal muscles', () => {
 
     await waitFor(() => expect(updateExerciseMuscles).toHaveBeenCalledWith(9, { primary: ['biceps'], secondary: ['forearms'] }));
     await waitFor(() => expect(onMusclesSaved).toHaveBeenCalledWith(updated));
+  });
+
+  // Picking muscles and then closing reads as done -- nobody should have to find "Update muscles"
+  // first. Both exits, and Escape, which Modal routes through the same onClose as the X.
+  const MY_CURL = { id: 9, name: 'My Curl', isGlobal: false, createdByYou: true, renamable: true };
+  const CREATOR = { isMember: true, ownerName: 'Nate' };
+
+  function addForearms() {
+    fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forearms: not worked' }));
+  }
+
+  it.each([
+    ['Done', () => fireEvent.click(screen.getByRole('button', { name: 'Done' }))],
+    ['the X', () => fireEvent.click(screen.getByRole('button', { name: 'Close' }))],
+    ['Escape', () => fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' })],
+  ])('saves an un-updated muscle edit when closed with %s', async (_label, close) => {
+    const updated = { id: 9, primaryMuscles: ['biceps', 'forearms'], secondaryMuscles: [] };
+    updateExerciseMuscles.mockResolvedValue(updated);
+    const onClose = vi.fn();
+    const onMusclesSaved = renderWithMuscles(MY_CURL, CREATOR, vi.fn(), onClose);
+
+    addForearms();
+    close();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(updateExerciseMuscles).toHaveBeenCalledWith(9, { primary: ['biceps', 'forearms'], secondary: [] });
+    await waitFor(() => expect(onMusclesSaved).toHaveBeenCalledWith(updated));
+  });
+
+  it('closes without a write when nothing changed', () => {
+    const onClose = vi.fn();
+    renderWithMuscles(MY_CURL, CREATOR, vi.fn(), onClose);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(updateExerciseMuscles).not.toHaveBeenCalled();
+  });
+
+  it('does not save twice after "Update muscles" already did', async () => {
+    updateExerciseMuscles.mockResolvedValue({ id: 9, primaryMuscles: ['biceps', 'forearms'], secondaryMuscles: [] });
+    const onClose = vi.fn();
+    renderWithMuscles(MY_CURL, CREATOR, vi.fn(), onClose);
+
+    addForearms();
+    fireEvent.click(screen.getByRole('button', { name: 'Update muscles' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Update muscles' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(updateExerciseMuscles).toHaveBeenCalledTimes(1);
+  });
+
+  // Closing never waits on the server, so a failed save must still be said out loud -- the modal
+  // closing as if it saved would be the silently-lost outcome.
+  it('closes anyway and says so when the save fails', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ showToast });
+    updateExerciseMuscles.mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+    const onClose = vi.fn();
+    renderWithMuscles(MY_CURL, CREATOR, vi.fn(), onClose);
+
+    addForearms();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("Your muscle changes didn't save. Try again.", { tone: 'error' }),
+    );
+  });
+
+  // Signal dropped between picking and closing: the gate's own connection message, then it closes.
+  it('closes and says it needs a connection when signal dropped after the edit', () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ showToast });
+    const onClose = vi.fn();
+    renderWithMuscles(MY_CURL, CREATOR, vi.fn(), onClose);
+
+    addForearms();
+    act(() => onlineManager.setOnline(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(updateExerciseMuscles).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('Editing needs a connection.', { tone: 'info' });
   });
 
   it('is not offered on a library exercise', () => {
