@@ -154,8 +154,37 @@ no undo.
 - **Escape stays.** `Modal` installs a focus trap, so it is the only keyboard exit.
 - **Every modal must be closable** — an `onClose` or a footer button. Nothing enforces this
   mechanically.
-- The header is `position: sticky` (with a `z-index`) because the panel is `maxHeight: 80vh` with
-  its own scrollbar; a static X scrolls out of reach on the taller modals.
+- The header is `position: sticky` (with a `z-index`) because the panel is
+  `maxHeight: min(80vh, 100%)` with its own scrollbar; a static X scrolls out of reach on the
+  taller modals.
+- **The scrim is sized to the VISIBLE viewport, not `inset: 0`** (`--visible-viewport-top` /
+  `-height`, below). On an iPhone the keyboard covers the layout viewport without shrinking it and
+  Safari pans to the focused field, so an `inset: 0` dialog went partly off the top of the screen
+  with the page behind locked — Add exercise and New routine could not be scrolled back
+  (2026-11-08). Don't put `inset: 0` back, and don't size a new overlay that holds a text field any
+  other way.
+
+### The keyboard and scrolling: one mechanism (`lib/visibleViewport.js`)
+
+Every "where is the keyboard?" and "scroll the focused field into view" goes through it, on every
+platform. A second way is the bug — this area had three before (a fixed 132px guess, a native-only
+reveal that ignored the sticky chrome, and none at all for dialogs on the web).
+
+- **`trackVisibleViewport`** (mounted once by `FocusedFieldKeeper`) publishes `visualViewport` as
+  `--visible-viewport-top` / `--visible-viewport-height` on the root element, and reveals a focused
+  field inside a dialog when the keyboard opens or focus moves. Without `visualViewport` (jsdom)
+  nothing is published and readers fall back to the full viewport.
+- **`revealFocusedField`** is the one reveal: inside a Modal it scrolls the panel
+  (`[data-modal-panel]`) clear of its sticky header (`[data-modal-header]`); on the page it keeps
+  clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On
+  the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
+- **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
+  publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
+  `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
+  and left the Log search field's focus border under the tab bar.
+- `e2e/tests/keyboard-scroll.spec.ts` stands in for the keyboard (a short window for the app, the
+  two published values for Safari); its three Safari/picker cases were verified red against the
+  old code.
 - **The panel itself carries no padding.** The sticky header and the content wrapper around
   `{children}` each own their own padding instead. Don't put padding back on the panel or bleed
   the header to the edges with a negative margin to "simplify" this — a negative top margin

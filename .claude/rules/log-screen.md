@@ -565,6 +565,15 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
+## Nothing ABOVE the picker's search field changes when a search starts
+
+The routine quick-start block and "Or pick an exercise" stay on screen while searching. Hiding them
+(as it once did) moved the field up on the first letter typed: the page clamped to its new end and a
+re-scroll pulled it back, a visible jump down and back (2026-11-08). Everything a search changes is
+BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or empty result list
+from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
+`keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
+
 ## The picker is BOUNDED but never REORDERED
 
 `ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to

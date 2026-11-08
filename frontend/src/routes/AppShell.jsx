@@ -270,7 +270,7 @@ export default function AppShell() {
           onClose() itself (AddPersonModal.jsx). */}
       <Header />
       {!personBarSticks && <PersonPillBar />}
-      <div className="app-chrome">
+      <div className="app-chrome" ref={publishChromeHeight}>
         {personBarSticks && <PersonPillBar />}
         <TabsNav />
         {/* The background-refresh bar's home. Empty until a tab's RefreshIndicator portals into
@@ -325,4 +325,25 @@ export default function AppShell() {
       {tour && <ProductTour />}
     </div>
   );
+}
+
+// Publishes the sticky chrome's real height on the root element as --app-chrome-height, which
+// --sticky-chrome-clearance (index.css) is built from: everything scrolled to under the chrome --
+// the Log picker's search field, History's jump, the Handbook's anchors -- lands just below it.
+// That value used to be a fixed 132px guess, and with two or more people the chrome is ~141px, so
+// the search field's top edge (its orange focus border) was left under the tab bar. The height
+// depends on the household size and the safe-area insets, so it is measured, never guessed.
+// Module scope keeps the callback ref's identity stable (React 19 runs the returned cleanup when
+// the node goes); without ResizeObserver (jsdom) the CSS fallback stands.
+function publishChromeHeight(el) {
+  if (!el || typeof ResizeObserver === 'undefined') return undefined;
+  const root = document.documentElement;
+  const publish = () => root.style.setProperty('--app-chrome-height', `${el.offsetHeight}px`);
+  publish();
+  const observer = new ResizeObserver(publish);
+  observer.observe(el);
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty('--app-chrome-height');
+  };
 }
