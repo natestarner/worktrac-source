@@ -298,7 +298,8 @@ user has no exit at all — and unlike a mis-tap on a scrim, pressing Escape is 
 It is also moot on the iPad, which is where the mis-taps happened.
 
 The header is `position: sticky` with negative margins cancelling the panel's own padding. The
-panel is `maxHeight: 80vh` with its own scrollbar and the routine builder is genuinely taller than
+panel is capped at `min(80dvh, 100%)` (`.modal-panel`) -- never taller than the part of the screen the keyboard
+leaves visible (`lib/visibleViewport.js`) -- with its own scrollbar, and the routine builder is genuinely taller than
 that, so a static X would scroll out of reach — which is precisely what would make "the backdrop
 no longer closes this" feel like a trap rather than a safeguard.
 

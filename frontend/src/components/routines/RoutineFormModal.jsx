@@ -190,7 +190,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       if (!trimmed || !hasExercises) {
         setNameError(!trimmed);
         setExercisesError(!hasExercises);
-        // The panel scrolls independently (Modal's maxHeight: 80vh), and browsing the exercise
+        // The panel scrolls independently (Modal's maxHeight), and browsing the exercise
         // list can scroll the name field -- and with it whichever error just appeared -- off the
         // top, which otherwise reads as the save silently doing nothing.
         nameInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });

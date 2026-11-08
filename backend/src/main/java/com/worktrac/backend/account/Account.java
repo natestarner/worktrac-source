@@ -40,6 +40,11 @@ public class Account {
     @Column(name = "members_see_everyone", nullable = false)
     private boolean membersSeeEveryone = true;
 
+    // Whether the app draws the muscle highlighter (the shaded body diagrams) for this account (V102).
+    // Off by default; the owner turns it on in Settings. Chrome only: nothing on the server reads it.
+    @Column(name = "muscle_map_enabled", nullable = false)
+    private boolean muscleMapEnabled = false;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -84,6 +89,14 @@ public class Account {
 
     public void setMembersSeeEveryone(boolean membersSeeEveryone) {
         this.membersSeeEveryone = membersSeeEveryone;
+    }
+
+    public boolean isMuscleMapEnabled() {
+        return muscleMapEnabled;
+    }
+
+    public void setMuscleMapEnabled(boolean muscleMapEnabled) {
+        this.muscleMapEnabled = muscleMapEnabled;
     }
 
     public Instant getCreatedAt() {

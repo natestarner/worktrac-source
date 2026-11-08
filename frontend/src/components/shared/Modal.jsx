@@ -123,7 +123,16 @@ export default function Modal({
       // No onClick: the backdrop is inert on purpose. See the header comment.
       style={{
         position: 'fixed',
-        inset: 0,
+        // The VISIBLE part of the screen, not the whole layout viewport: on an iPhone the keyboard
+        // covers the bottom of the layout viewport without shrinking it, and Safari then pans the
+        // view to the focused field. Sized to `inset: 0`, the panel sat partly under the keyboard
+        // and the pan pushed its header and first fields off the top of the screen, where nothing
+        // could scroll them back (the page behind is locked). lib/visibleViewport.js publishes these
+        // two values; without them (jsdom, no visualViewport) this is exactly `inset: 0`.
+        left: 0,
+        right: 0,
+        top: 'var(--visible-viewport-top, 0px)',
+        height: 'var(--visible-viewport-height, 100%)',
         background: 'rgba(28,27,25,0.45)',
         display: 'flex',
         alignItems: isSheet ? 'flex-end' : 'center',
@@ -139,10 +148,14 @@ export default function Modal({
         aria-labelledby={labelledBy || (title ? titleId : undefined)}
         tabIndex={-1}
         ref={dialogRef}
+        // lib/visibleViewport.js reveals a focused field by scrolling THIS element, clear of the
+        // header marked below.
+        data-modal-panel=""
         // .modal-panel (index.css) carries the height cap: 80% of the VISIBLE viewport (dvh), with
-        // vh as the fallback. A bare 80vh is 80% of iOS Safari's LARGEST viewport (toolbars
-        // hidden), so with the toolbars showing a bottom sheet could reach past the top of the
-        // screen, taking its sticky header and the X with it.
+        // vh as the fallback, and never taller than the scrim (which follows the keyboard). A bare
+        // 80vh is 80% of iOS Safari's LARGEST viewport (toolbars hidden), so with the toolbars
+        // showing a bottom sheet could reach past the top of the screen, taking its sticky header
+        // and the X with it.
         className="modal-panel"
         style={{
           background: 'var(--color-surface)',
@@ -162,7 +175,12 @@ export default function Modal({
           // stretching into a 1400px-wide band of controls on a desktop monitor.
           width: isSheet ? '100%' : width,
           maxWidth: isSheet ? width : '100%',
+          // No maxHeight here: .modal-panel owns the cap (see the className above). An inline one
+          // would override the class.
           overflowY: 'auto',
+          // A scroll that reaches the panel's end stops there, instead of carrying on into the
+          // locked page behind it (which iOS would otherwise rubber-band).
+          overscrollBehavior: 'contain',
           outline: 'none',
           // A sheet slides; a dialog rises and settles. A scaling sheet reads as a dialog
           // that missed its anchor.
@@ -170,7 +188,7 @@ export default function Modal({
         }}
       >
         {hasHeader && (
-          // Sticky, not static: the panel is maxHeight 80vh with its own scrollbar, and the
+          // Sticky, not static: the panel has a maxHeight and its own scrollbar, and the
           // routine form is genuinely taller than that. A close button that scrolls out of
           // reach is what would make "the backdrop no longer closes this" feel like a trap.
           //
@@ -194,6 +212,7 @@ export default function Modal({
           // the gap lives on the plain, non-positioned wrapper below instead, which the header
           // can never paint over no matter how that rounds.
           <div
+            data-modal-header=""
             style={{
               position: 'sticky',
               top: 0,

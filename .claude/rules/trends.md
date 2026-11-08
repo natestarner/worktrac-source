@@ -280,6 +280,9 @@ since at 4wk and 12wk the charts for that range are complete and the lead would 
 - **Shading is relative to the top row** in `SHADE_STEPS`, and every shade is also a row with a
   number. The rule's wording lives once, in `MUSCLE_MAP_HELP`; the handbook renders those lines.
 - **Client-only; no oracle row.** If a server endpoint is ever added, it joins the oracle.
+- **The two bodies are behind the muscle highlighter setting** (account-wide, off by default;
+  `hooks/useMuscleMap.js`). Off, `MuscleMapOffNote` replaces them and the sets-per-muscle list
+  stays; `MuscleMapSkeleton` is sized for whichever the card will draw, so loading doesn't jump.
 
 ## Empty state: the range being empty ≠ never having trained
 

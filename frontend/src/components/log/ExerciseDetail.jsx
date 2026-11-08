@@ -76,6 +76,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 import { exerciseMuscles } from '../../utils/muscles';
 import ExerciseAboutStrip from '../exercise/ExerciseAboutStrip';
 import ExerciseAboutSheet from '../exercise/ExerciseAboutSheet';
+import { useMuscleMap } from '../../hooks/useMuscleMap';
 import ExerciseVideoSheet from '../exercise/ExerciseVideoSheet';
 
 // How far from a record the nudge under the steppers is still worth showing. Past this it stops
@@ -108,6 +109,8 @@ export default function ExerciseDetail({
   video = null,
 }) {
   const { account, people } = useAuth();
+  // The account-wide muscle highlighter switch: the strip's thumbnail and the About sheet's diagram.
+  const muscleMap = useMuscleMap();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
   // Null whenever no routine is running, or the routine prescribes nothing at this position.
@@ -1775,6 +1778,7 @@ export default function ExerciseDetail({
           muscles={muscles}
           bodyFigure={bodyFigure}
           onChooseFigure={setBodyFigure}
+          muscleMap={muscleMap}
           onClose={() => setShowAboutSheet(false)}
           // An own exercise nobody has described yet: offer to describe it, through Customize (the
           // one place muscles are edited). Not for library exercises, which the app describes, and

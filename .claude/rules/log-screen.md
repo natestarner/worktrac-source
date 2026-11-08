@@ -565,6 +565,15 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
+## Nothing ABOVE the picker's search field changes when a search starts
+
+The routine quick-start block and "Or pick an exercise" stay on screen while searching. Hiding them
+(as it once did) moved the field up on the first letter typed: the page clamped to its new end and a
+re-scroll pulled it back, a visible jump down and back (2026-11-08). Everything a search changes is
+BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or empty result list
+from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
+`keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
+
 ## The picker is BOUNDED but never REORDERED
 
 `ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to
@@ -741,8 +750,8 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   body opens only the muscles, play only the video. It used to be one sheet, scrolled to the video
   when opened from play -- and on iOS Safari that `scrollIntoView` also scrolled the page behind
   the fixed overlay, leaving the header and its X above the screen with no way back. **Never
-  scroll from inside a sheet.** (Modal's cap is also `80dvh` now, via `.modal-panel`, not a bare
-  `80vh`.) The previews below keep both, since they have one entry. Not wrapped in `ReadOnlyWrap`: watching is
+  scroll from inside a sheet.** (Modal's cap is also `min(80dvh, 100%)` now, via `.modal-panel`, not a bare
+  `80vh`; the `100%` is the scrim, which follows the keyboard -- `frontend-core.md`.) The previews below keep both, since they have one entry. Not wrapped in `ReadOnlyWrap`: watching is
   not a write. It was "Watch how it's done" until real videos arrived: that contains "Done", and 20
   e2e tests clicking the past-workout frame's Done hit two buttons.
 - **The video loads nothing until "Play the video" is tapped** -- no poster, no YouTube request --
@@ -761,6 +770,15 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
   "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
 - **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **Every body drawing sits behind the muscle highlighter setting** (`AccountDto.muscleMapEnabled`,
+  V102, account-wide, owner-set, **off by default** -- decided with Nate 2026-11-08). Read it through
+  `hooks/useMuscleMap.js` and pass it down; never read `account` for it at a call site. Off, the
+  sheet shows `MuscleMapOffNote` (linking to Settings) where the diagram, the question and the
+  body switch would be. (The strip draws no body since #508 -- its About icon is a glyph -- so it
+  needs no gating.) The muscle NAMES stay. The components default to OFF, so a caller that
+  forgets the prop draws no body. Not a connectivity branch: it comes from the auth snapshot.
+  The routine editor's preview passes `settingsLink={false}`: following a link there would leave
+  the dialog and lose the unsaved routine.
 - **An undescribed own exercise offers "Add muscles worked"** in the sheet, which opens Customize
   (the one place muscles are edited). Not for library exercises, and not for a temp row: Customize
   is disabled until its create syncs. Customize hands the server's row back through

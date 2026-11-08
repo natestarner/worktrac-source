@@ -2,6 +2,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useExercises } from '../../hooks/useExercises';
 import { exerciseMuscles } from '../../utils/muscles';
 import { exerciseVideo } from '../../utils/exerciseVideo';
+import { useMuscleMap } from '../../hooks/useMuscleMap';
 import ExerciseAboutSheet, { ExerciseAboutContent } from './ExerciseAboutSheet';
 
 // "About this exercise" from anywhere but the Log screen: the exercise picker's search, History's
@@ -21,6 +22,7 @@ import ExerciseAboutSheet, { ExerciseAboutContent } from './ExerciseAboutSheet';
 function usePreview(exerciseId, fallbackName) {
   const { exercises } = useExercises();
   const { bodyFigure, setBodyFigure } = useAppState();
+  const muscleMap = useMuscleMap();
   const row = exercises.find((e) => e.id === exerciseId) ?? null;
   return {
     exerciseName: row?.name ?? fallbackName ?? '',
@@ -28,6 +30,7 @@ function usePreview(exerciseId, fallbackName) {
     video: exerciseVideo(row),
     bodyFigure,
     onChooseFigure: setBodyFigure,
+    muscleMap,
   };
 }
 
@@ -36,7 +39,10 @@ export function ExercisePreviewSheet({ exerciseId, exerciseName, onClose }) {
   return <ExerciseAboutSheet {...props} onClose={onClose} />;
 }
 
+// Shown INSIDE the routine editor's dialog, whose unsaved routine lives in that dialog's state, so
+// the muscle highlighter note names Settings without linking there: following the link would leave
+// the screen and throw the half-built routine away.
 export function ExercisePreviewContent({ exerciseId, exerciseName }) {
   const props = usePreview(exerciseId, exerciseName);
-  return <ExerciseAboutContent {...props} />;
+  return <ExerciseAboutContent {...props} settingsLink={false} />;
 }

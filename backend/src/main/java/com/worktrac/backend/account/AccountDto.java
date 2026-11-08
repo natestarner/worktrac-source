@@ -18,11 +18,13 @@ import com.worktrac.backend.billing.BillingPlan;
 // a second request, and render it correctly on a cold offline boot. It is chrome like the rest of
 // this record: AccountAccess carries the copy that actually filters reads, resolved per request
 // from the row rather than from anything the client holds.
+// `muscleMapEnabled` is the account-wide switch for the shaded body diagrams. It rides here, in the
+// auth snapshot, so the Log screen and Trends draw the right thing on a cold offline boot.
 public record AccountDto(Long id, String name, String defaultUnit, BillingPlan plan, AccountVocab vocab,
-                         boolean membersSeeEveryone) {
+                         boolean membersSeeEveryone, boolean muscleMapEnabled) {
 
     public static AccountDto from(Account account, BillingPlan plan) {
         return new AccountDto(account.getId(), account.getName(), account.getDefaultUnit(), plan,
-                AccountVocab.forPlan(plan), account.isMembersSeeEveryone());
+                AccountVocab.forPlan(plan), account.isMembersSeeEveryone(), account.isMuscleMapEnabled());
     }
 }

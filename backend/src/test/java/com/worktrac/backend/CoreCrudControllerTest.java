@@ -292,6 +292,36 @@ class CoreCrudControllerTest extends AbstractIntegrationTest {
         assertEquals("kg", objectMapper.readTree(response).get("defaultUnit").asText());
     }
 
+    // Off for a new account (V102's default), the owner turns it on, and /me -- what the auth
+    // snapshot is written from -- says so afterwards.
+    @Test
+    void muscleMapStartsOffAndTheOwnerCanTurnItOn() throws Exception {
+        String before = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(false, objectMapper.readTree(before).get("account").get("muscleMapEnabled").asBoolean(true));
+
+        String response = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/account/muscle-map")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(true, objectMapper.readTree(response).get("muscleMapEnabled").asBoolean());
+
+        String after = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(true, objectMapper.readTree(after).get("account").get("muscleMapEnabled").asBoolean());
+
+        // And back off, so this class's other tests see the default.
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/account/muscle-map")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("enabled", false))))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void setupValueRoundTripsPerPerson() throws Exception {
         String meResponse = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
