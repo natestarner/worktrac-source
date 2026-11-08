@@ -6,7 +6,12 @@
 // Art: js-rich-body-highlighter 0.1.1 (MIT, (c) 2026 js-rich-body-highlighter contributors) for the
 // bodies and outlines; the heads are Nate's own drawings, fitted onto copies of the bodies by the
 // mockup's build-tools/faces.js. The MIT notice ships with the app (Acknowledgements in Help).
+// faces.js v3 (2026-11-08) joins each head along one smoothed neck outline with a long cross-fade
+// (no erase line), tones the head to the body's own skin in each theme, takes the drawings' grain
+// down to the body's, and reshapes the female bodies through bodyShape.js -- which is also what
+// moves her outlines below, so rebuild the images whenever bodyShape.js changes.
 import { MUSCLES as LIB_MUSCLES } from 'js-rich-body-highlighter';
+import { reshapePath, reshapePoint } from './bodyShape';
 import maleFrontLight from '../../assets/body/body-male-front-light.webp';
 import maleFrontDark from '../../assets/body/body-male-front-dark.webp';
 import maleBackLight from '../../assets/body/body-male-back-light.webp';
@@ -38,10 +43,14 @@ export function bodySrc(gender, view, theme) {
 // The cut is in the library's viewBox units and differs by body.
 const TRAP_CUT = {
   male: [[60, 104], [125, 108], [181, 118], [237, 108], [300, 104]],
-  female: [[60, 116], [130, 121], [181, 130], [232, 121], [300, 116]],
+  // The female cut moves with the reshaped body (bodyShape.js), like her outlines.
+  female: [[60, 116], [130, 121], [181, 130], [232, 121], [300, 116]].map((p) => reshapePoint(p, 'back')),
 };
 
-export const REGISTRY = LIB_MUSCLES.flatMap((m) => {
+// The female images are reshaped (bodyShape.js), so her outlines are moved the same way.
+const fitted = (m) => (m.gender === 'female' ? { ...m, d: reshapePath(m.d, m.offset, m.view) } : m);
+
+export const REGISTRY = LIB_MUSCLES.map(fitted).flatMap((m) => {
   if (m.id.startsWith('deltoids_back')) return [{ ...m, group: 'rear_delts', name: 'Rear deltoids' }];
   if (m.id.startsWith('trapezius')) return [{ ...m, group: 'traps' }];
   if (m.view === 'back' && m.group === 'upper_back') {
