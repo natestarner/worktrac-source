@@ -145,6 +145,10 @@
      Same in both themes: the dark body art is darker, which the multiply already accounts for.
      Only the bodies use it; the Trends "Sets per muscle" bars are neutral (.muscle-map-bar). */
   --color-muscle: #b83a22;
+  /* Text on a solid muscle fill (MusclePicker's main chip): 5.7:1, in both themes like the fill. */
+  --color-muscle-contrast: #ffffff;
+  /* How strongly a HELPING muscle is drawn in a key or a chip, against main's full strength. */
+  --muscle-helping-opacity: 0.45;
 
   --color-dark: #1c1b19;
 
@@ -1998,22 +2002,90 @@ input[type='search']::-webkit-search-results-decoration {
   text-underline-offset: 2px;
 }
 
-/* MusclePicker: a chip per muscle cycling not worked -> main -> helping. Main is filled, helping is
-   outlined in the accent, so the state reads without relying on colour alone. */
+/* MusclePicker: body-area rows, each opening onto a chip per muscle that cycles not worked -> main ->
+   helping. The chips wear the body diagram's colour, so what is tapped here is what the About sheet
+   draws: main solid, helping at the key's strength. Main is also bold on a dark fill, so the state
+   reads without relying on hue alone. */
+.muscle-picker-key {
+  display: flex;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-1);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.muscle-picker-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .muscle-picker-hint {
   margin: 0 0 var(--space-2);
   color: var(--color-muted);
   font-size: var(--text-xs);
 }
 
+.muscle-group + .muscle-group {
+  border-top: 1px solid var(--color-border);
+}
+
+.muscle-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.muscle-group-name {
+  flex-shrink: 0;
+}
+
+/* What is picked in the row, main first and bold. Truncates rather than wrapping the row. */
+.muscle-group-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muscle-group-summary strong {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.muscle-group-chevron {
+  color: var(--color-muted);
+  transition: transform var(--dur-base) ease;
+}
+
+.muscle-group-chevron--open {
+  transform: rotate(180deg);
+}
+
 .muscle-picker-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  padding: 0 0 var(--space-3);
 }
 
 .muscle-chip {
-  min-height: 36px;
+  position: relative;
+  isolation: isolate;
+  min-height: 40px;
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
@@ -2024,16 +2096,26 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .muscle-chip--primary {
-  border-color: var(--color-accent-strong);
-  background: var(--color-accent-strong);
-  color: var(--color-accent-contrast);
+  border-color: var(--color-muscle);
+  background: var(--color-muscle);
+  color: var(--color-muscle-contrast);
   font-weight: var(--weight-semibold);
 }
 
+/* The muscle colour at the key swatch's opacity, laid under the label so the text stays opaque.
+   A pseudo-element rather than color-mix() so it composites exactly as the swatch does. */
 .muscle-chip--secondary {
-  border: 2px solid var(--color-accent);
-  color: var(--color-accent-text);
-  font-weight: var(--weight-semibold);
+  border-color: transparent;
+}
+
+.muscle-chip--secondary::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--color-muscle);
+  opacity: var(--muscle-helping-opacity);
 }
 
 .muscle-chip:disabled {
@@ -2043,7 +2125,7 @@ input[type='search']::-webkit-search-results-decoration {
 
 /* Matches BodyMap's secondary intensity against its primary (35 vs 80). */
 .exercise-about-swatch--secondary {
-  opacity: 0.45;
+  opacity: var(--muscle-helping-opacity);
 }
 
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,

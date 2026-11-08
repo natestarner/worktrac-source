@@ -34,6 +34,17 @@ export const MUSCLES = [
   { code: 'cardio', name: 'Cardio', drawn: false, counted: false },
 ];
 
+// How MusclePicker groups the vocabulary, so it shows a handful of rows instead of 22 chips. Every
+// muscle is in exactly one group (muscles.test.js), so one added above without a group fails the
+// build rather than silently going missing from the picker. Client-only: the server has no groups.
+export const MUSCLE_GROUPS = [
+  { name: 'Shoulders and back', codes: ['neck', 'traps', 'shoulders', 'rear_delts', 'upper_back', 'lats', 'lower_back'] },
+  { name: 'Chest and arms', codes: ['chest', 'biceps', 'triceps', 'forearms'] },
+  { name: 'Core', codes: ['abs', 'obliques', 'hip_flexors'] },
+  { name: 'Legs', codes: ['glutes', 'quads', 'hamstrings', 'abductors', 'adductors', 'calves'] },
+  { name: 'Conditioning', codes: ['full_body', 'cardio'] },
+];
+
 const BY_CODE = new Map(MUSCLES.map((m) => [m.code, m]));
 
 export function muscleByCode(code) {

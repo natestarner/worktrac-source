@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import shared from '../../../shared/muscles/muscles.json';
-import { MUSCLES, muscleName, exerciseMuscles, suggestMuscles } from './muscles';
+import { MUSCLES, MUSCLE_GROUPS, muscleName, exerciseMuscles, suggestMuscles } from './muscles';
 
 describe('suggestMuscles', () => {
   const catalog = [
@@ -52,5 +52,13 @@ describe('exerciseMuscles', () => {
     expect(exerciseMuscles({ primaryMuscles: ['chest', 'serratus'], secondaryMuscles: [] }).primary).toEqual(['chest']);
     expect(muscleName('serratus')).toBeUndefined();
     expect(muscleName('rear_delts')).toBe('Rear delts');
+  });
+});
+
+describe('MUSCLE_GROUPS', () => {
+  // The picker draws only what the groups name, so a muscle missing here could never be picked.
+  it('holds every muscle exactly once, and nothing else', () => {
+    const grouped = MUSCLE_GROUPS.flatMap((g) => g.codes);
+    expect([...grouped].sort()).toEqual(MUSCLES.map((m) => m.code).sort());
   });
 });

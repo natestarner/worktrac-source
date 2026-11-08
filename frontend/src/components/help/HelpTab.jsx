@@ -835,9 +835,10 @@ export default function HelpTab() {
           picking it. On History and PRs, tap an exercise and choose <T>About this exercise</T>.
         </p>
         <p>
-          When you add your own exercise you can pick its muscles too: tap a muscle once for a main
-          one, twice for a helper. Huddle suggests a starting point from the closest exercise in its
-          library. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
+          When you add your own exercise you can pick its muscles too. They are grouped by body area;
+          open one and tap a muscle once for a main one (dark red), twice for a helper (lighter red),
+          and a third time to clear it. Huddle suggests a starting point from the closest exercise in
+          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
           connection, and only whoever added the exercise or the account owner can.
         </p>
         <HelpTable

@@ -31,6 +31,7 @@ forEachConnectivityMode<void>('your own exercise keeps the muscles you picked', 
     await page.getByRole('button', { name: '+ Add your own exercise' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByPlaceholder('Exercise name').fill(EXERCISE);
+    await dialog.getByRole('button', { name: 'Core', exact: true }).click(); // the body areas start closed
     await dialog.getByRole('button', { name: 'Obliques: not worked' }).click();
     await dialog.getByRole('button', { name: 'Abs: not worked' }).click();
     await dialog.getByRole('button', { name: 'Abs: main' }).click(); // main -> helping
