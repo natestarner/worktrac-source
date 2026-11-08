@@ -127,4 +127,14 @@ describe('HelpTab', () => {
     // is exactly the kind of claim `.claude/rules/user-facing-help.md` exists to keep honest.
     expect(screen.getByText(/estimated 1RM = weight/)).toBeInTheDocument();
   });
+
+  // The body diagrams' MIT licence asks for its notice in every copy of the app. It used to sit in
+  // the muscle sheet; this page is now the one place that carries it, so deleting it here would
+  // leave the app shipping the art without its licence.
+  it('carries the body art licence notice', () => {
+    renderHelp();
+    expect(screen.getByText('Open-source credits')).toBeInTheDocument();
+    expect(screen.getByText(/js-rich-body-highlighter 0\.1\.1\. MIT License\./)).toBeInTheDocument();
+    expect(screen.getByText(/Permission is hereby granted, free of charge/)).toBeInTheDocument();
+  });
 });
