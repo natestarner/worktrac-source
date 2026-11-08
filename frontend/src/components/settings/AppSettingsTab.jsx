@@ -4,7 +4,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
-import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
+import { setMemberVisibility, setMuscleMap, updateDefaultUnit } from '../../api/account';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { setRestTimerPreference, setStepperIncrements } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
@@ -63,6 +63,7 @@ export default function AppSettingsTab() {
   const [tagNameError, setTagNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
   const [pendingVisibility, setPendingVisibility] = useState(null);
+  const [pendingMuscleMap, setPendingMuscleMap] = useState(null);
   const [pendingRestPerson, setPendingRestPerson] = useState(null);
   const [pendingStepperPerson, setPendingStepperPerson] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -205,6 +206,19 @@ export default function AppSettingsTab() {
     }
   }
 
+  // Keyed by label for the spinner, like handleVisibilitySelect: `false` must not read as "nothing
+  // pending". Absent on the account (a snapshot from before the setting) reads as off, its default.
+  async function handleMuscleMapSelect(value, label) {
+    if ((account?.muscleMapEnabled === true) === value || pendingMuscleMap) return;
+    setPendingMuscleMap(label);
+    try {
+      await setMuscleMap(value);
+      await refreshPeople();
+    } finally {
+      setPendingMuscleMap(null);
+    }
+  }
+
   const guardedUnitSelect = run(handleUnitSelect, { offlineMessage: 'Changing units needs a connection.' });
   // showServerMessage so the 409 explains itself. This control is hidden on a tier without
   // PRIVATE_MEMBERS, so the refusal should be unreachable -- but a stale auth snapshot naming a
@@ -214,6 +228,10 @@ export default function AppSettingsTab() {
     offlineMessage: 'Changing this needs a connection.',
     errorMessage: "Couldn't change that setting.",
     showServerMessage: true,
+  });
+  const guardedMuscleMapSelect = run(handleMuscleMapSelect, {
+    offlineMessage: 'Changing this needs a connection.',
+    errorMessage: "Couldn't change that setting.",
   });
   const guardedRestTimerToggle = run(handleRestTimerToggle, { offlineMessage: 'Changing this needs a connection.' });
   const guardedStepperIncrements = run(handleStepperIncrements, { offlineMessage: 'Changing this needs a connection.' });
@@ -343,6 +361,72 @@ export default function AppSettingsTab() {
           </Card>
         </>
       )}
+
+      {/* Account-wide and OFF by default (V102), decided with Nate 2026-11-08. The wording says why
+          it starts off without calling the drawings mature: they are a gym's muscle chart, and the
+          point is that each household chooses. MANAGE_HOUSEHOLD, so only the owner gets the
+          switch; anyone else gets the value and who sets it, like Units. Every place that would
+          draw a body reads this through hooks/useMuscleMap.js and links back here when it's off. */}
+      <SectionLabel>Muscle highlighter</SectionLabel>
+      <Card size="dense" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Shades the muscles each exercise works on a drawing of the human body, front and back: in
+          About this exercise, in exercise previews and on Trends. It&rsquo;s off by default so each{' '}
+          {vocab.account} can decide whether to show anatomy drawings, which some families with
+          young children prefer to leave out. The muscle names are listed either way.
+        </div>
+        {!isOwner ? (
+          <div style={{ fontSize: 15, fontWeight: 600 }}>
+            {account?.muscleMapEnabled === true ? 'On' : 'Off'}
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 400, color: 'var(--color-muted)', marginTop: 4 }}>
+              Set by the {vocab.owner}.
+            </span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
+            {[
+              { value: false, label: 'Off' },
+              { value: true, label: 'On' },
+            ].map(({ value, label }) => {
+              const active = (account?.muscleMapEnabled === true) === value;
+              const loading = pendingMuscleMap === label;
+              const textColor = active ? 'var(--color-accent-text)' : 'var(--color-muted)';
+              return (
+                <button
+                  key={label}
+                  onClick={() => guardedMuscleMapSelect(value, label)}
+                  disabled={!!pendingMuscleMap || !online}
+                  title={online ? undefined : 'Changing this needs a connection.'}
+                  aria-label={`Muscle highlighter ${label}`}
+                  aria-pressed={active}
+                  style={{
+                    flex: 1,
+                    minHeight: 40,
+                    padding: 'var(--space-2) 0',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 'var(--weight-semibold)',
+                    cursor: online ? 'pointer' : 'not-allowed',
+                    background: active ? 'var(--color-surface)' : 'transparent',
+                    color: textColor,
+                    boxShadow: active ? 'var(--shadow-1)' : 'none',
+                    opacity: online ? 1 : 0.5,
+                    position: 'relative',
+                  }}
+                >
+                  <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{label}</span>
+                  {loading && (
+                    <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Spinner size={14} color={textColor} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       <SectionLabel>Offline Mode</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>

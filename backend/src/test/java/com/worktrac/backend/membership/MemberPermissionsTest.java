@@ -388,6 +388,12 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                             .content(objectMapper.writeValueAsString(Map.of("defaultUnit", "kg"))))
                     .andExpect(status().isForbidden());
 
+            mockMvc.perform(put("/api/account/muscle-map")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+                    .andExpect(status().isForbidden());
+
             // The whole household in one file. Deliberately NOT the same permission as reading one
             // person's export.csv -- otherwise "members can see everyone" quietly becomes "any
             // member can walk out with the household's complete training history in one click".

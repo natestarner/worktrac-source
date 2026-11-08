@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
 import { createTag } from '../../api/tags';
-import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
+import { setMemberVisibility, setMuscleMap, updateDefaultUnit } from '../../api/account';
 import { setRestTimerPreference, setStepperIncrements } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
@@ -30,7 +30,7 @@ vi.mock('../../api/tags', () => ({
   renameTag: vi.fn(),
   listTags: vi.fn(),
 }));
-vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn(), setMemberVisibility: vi.fn() }));
+vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn(), setMemberVisibility: vi.fn(), setMuscleMap: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../api/dataImport', () => ({ listImports: vi.fn(), undoImport: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ getHistory: vi.fn(), getHistoryWindow: vi.fn() }));
@@ -311,10 +311,17 @@ describe('AppSettingsTab as a member', () => {
 
   // The value is genuinely useful to them -- it is what their own new sets get recorded in --
   // while a dead switch communicates only that something is broken.
+  // Two "Set by the household owner." lines: Units and the muscle highlighter.
   it('shows the household unit as a value, not a toggle', async () => {
     renderTab();
-    expect(await screen.findByText('Set by the household owner.')).toBeInTheDocument();
+    expect(await screen.findAllByText('Set by the household owner.')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'kg' })).not.toBeInTheDocument();
+  });
+
+  it('shows the muscle highlighter as a value, not a toggle', async () => {
+    renderTab();
+    await screen.findByText('Muscle highlighter');
+    expect(screen.queryByRole('button', { name: 'Muscle highlighter On' })).not.toBeInTheDocument();
   });
 
   // A sibling's rest-timer preference is not information a member needs, and their own row must
@@ -555,5 +562,77 @@ describe('AppSettingsTab "Export all data" enablement', () => {
     renderTab();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Export all data' })).not.toBeDisabled());
+  });
+});
+
+// The account-wide muscle highlighter switch: off by default, owner-only (MANAGE_HOUSEHOLD).
+describe('AppSettingsTab muscle highlighter', () => {
+  function signedInAs(accountRole, account) {
+    const refreshPeople = vi.fn().mockResolvedValue();
+    useAuth.mockReturnValue({
+      account,
+      membership: accountRole ? { accountRole } : null,
+      people: [],
+      refreshPeople,
+    });
+    return refreshPeople;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn() });
+    setMuscleMap.mockResolvedValue({});
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  // A snapshot from before the setting has no field at all: that is off, its default.
+  it('reads as Off for an account that predates the setting, and says why it starts off', () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PLUS' });
+    renderTab();
+
+    expect(screen.getByRole('button', { name: 'Muscle highlighter Off' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Muscle highlighter On' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/off by default so each household can decide/)).toBeInTheDocument();
+  });
+
+  it('sends the new value when the owner turns it on, then refreshes the account', async () => {
+    const refreshPeople = signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PLUS', muscleMapEnabled: false });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Muscle highlighter On' }));
+
+    await waitFor(() => expect(setMuscleMap).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(refreshPeople).toHaveBeenCalled());
+  });
+
+  it('does not re-send the state the account is already in', () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PLUS', muscleMapEnabled: true });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Muscle highlighter On' }));
+
+    expect(setMuscleMap).not.toHaveBeenCalled();
+  });
+
+  // The server refuses it (MANAGE_HOUSEHOLD is owner-only), so a manager gets the value instead.
+  it('does not offer the switch to a manager', () => {
+    signedInAs('MANAGER', { defaultUnit: 'lb', plan: 'PRO', muscleMapEnabled: true });
+    renderTab();
+
+    expect(screen.queryByRole('button', { name: 'Muscle highlighter Off' })).not.toBeInTheDocument();
+    expect(screen.getByText('Set by the household owner.')).toBeInTheDocument();
+  });
+
+  it('needs a connection to change', () => {
+    onlineManager.setOnline(false);
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PLUS', muscleMapEnabled: false });
+    renderTab();
+
+    expect(screen.getByRole('button', { name: 'Muscle highlighter On' })).toBeDisabled();
   });
 });

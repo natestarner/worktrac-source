@@ -40,6 +40,22 @@ public class AccountController {
     }
 
     /**
+     * The muscle highlighter (the shaded body diagrams), on or off for the whole account. Off by
+     * default (V102).
+     *
+     * <p>{@code MANAGE_HOUSEHOLD}, so OWNER only, like the default unit: it decides what everyone on
+     * the account sees, so it is the account's call, not one member's or an assistant's.
+     */
+    @PutMapping("/muscle-map")
+    @RequiresPermission(Permission.MANAGE_HOUSEHOLD)
+    public AccountDto setMuscleMap(@Valid @RequestBody MuscleMapRequest request) {
+        return accountService.setMuscleMap(currentUser.accountId(), request.enabled());
+    }
+
+    public record MuscleMapRequest(@NotNull Boolean enabled) {
+    }
+
+    /**
      * Whether members of this account see everyone in it, or only themselves.
      *
      * <p>{@code MANAGE_HOUSEHOLD}, so OWNER only — deliberately not a MANAGER. An assistant with

@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
+import { turnOnMuscleHighlighter } from './support/muscleMap';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: the exercise's "About" strip and sheet -- muscles worked, drawn on a body -- across
@@ -42,6 +43,8 @@ async function shading(page: Page, body: string, muscleId: string) {
 forEachConnectivityMode<void>('the About sheet shows the muscles worked on the chosen body', {
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Tralee');
+    // Off by default (V102); this spec is about the diagram. Off is muscle-highlighter-setting.spec.ts.
+    await turnOnMuscleHighlighter(page);
     await warmCatalog(page);
   },
   navigate: async (page) => {

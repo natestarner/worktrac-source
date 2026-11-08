@@ -1,10 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseAboutStrip from './ExerciseAboutStrip';
-import ExerciseAboutSheet from './ExerciseAboutSheet';
+import ExerciseAboutSheet, { ExerciseAboutContent } from './ExerciseAboutSheet';
 
 const BENCH = { primary: ['chest'], secondary: ['shoulders', 'triceps'] };
 const NONE = { primary: [], secondary: [] };
+const ON = { on: true, canChange: true, owner: 'household owner' };
+const OFF = { on: false, canChange: true, owner: 'household owner' };
 
 describe('ExerciseAboutStrip', () => {
   function renderStrip(muscles, extra = {}) {
@@ -62,7 +65,9 @@ describe('ExerciseAboutSheet', () => {
     const onChooseFigure = vi.fn();
     const onClose = vi.fn();
     render(
-      <ExerciseAboutSheet exerciseName="Barbell Bench Press" muscles={BENCH} bodyFigure={null} onChooseFigure={onChooseFigure} onClose={onClose} {...props} />,
+      <MemoryRouter>
+        <ExerciseAboutSheet exerciseName="Barbell Bench Press" muscles={BENCH} bodyFigure={null} onChooseFigure={onChooseFigure} onClose={onClose} muscleMap={ON} {...props} />
+      </MemoryRouter>,
     );
     return { onChooseFigure, onClose };
   }
@@ -113,5 +118,52 @@ describe('ExerciseAboutSheet', () => {
     const { onClose } = renderSheet({ bodyFigure: 'male' });
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // The muscle highlighter is off: the note, with a link to Settings, stands where the bodies,
+  // the question and the switch would be. The muscle names stay -- they are text.
+  it('shows the note instead of the diagram while the muscle highlighter is off', () => {
+    renderSheet({ bodyFigure: 'male', muscleMap: OFF });
+    expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Body diagram' })).toBeNull();
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent(
+      'The muscle highlighter is off by default. To turn it on, visit the Settings page.',
+    );
+    expect(screen.getByRole('link', { name: 'Settings page' })).toHaveAttribute('href', '/app/settings');
+    expect(screen.getByText('Main muscles')).toBeTruthy();
+    expect(screen.getByText('Triceps')).toBeTruthy();
+  });
+
+  it('does not ask which body to draw while it is off', () => {
+    renderSheet({ bodyFigure: null, muscleMap: OFF });
+    expect(screen.queryByText('Which body should the muscle diagram show?')).toBeNull();
+  });
+
+  // Only the owner can turn it on, so anyone else is told who can.
+  it('names who can turn it on when this login cannot', () => {
+    renderSheet({ bodyFigure: 'male', muscleMap: { on: false, canChange: false, owner: 'trainer' } });
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent(
+      'The muscle highlighter is off by default. Your trainer can turn it on from the Settings page.',
+    );
+  });
+
+  // The routine editor's preview: leaving would throw the unsaved routine away.
+  it('names Settings without linking there when the caller says leaving would lose work', () => {
+    render(
+      <ExerciseAboutContent exerciseName="Barbell Bench Press" muscles={BENCH} bodyFigure="male" onChooseFigure={vi.fn()} muscleMap={OFF} settingsLink={false} />,
+    );
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('visit the Settings page.');
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  // A caller that forgets the prop gets the note, never a body.
+  it('is off when no setting is passed', () => {
+    render(
+      <MemoryRouter>
+        <ExerciseAboutContent exerciseName="Barbell Bench Press" muscles={BENCH} bodyFigure="male" onChooseFigure={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
+    expect(screen.getByTestId('muscle-map-off')).toBeTruthy();
   });
 });

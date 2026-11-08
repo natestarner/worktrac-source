@@ -754,7 +754,9 @@ export default function HelpTab() {
         ))}
         <p>
           The body is the one you picked in an exercise&rsquo;s About sheet. Every shade on it is also a
-          row underneath, with the muscle&rsquo;s name and its number of sets.
+          row underneath, with the muscle&rsquo;s name and its number of sets. The bodies are drawn only
+          when the muscle highlighter is on (<a href="#settings" className="help-inline-link">Settings</a>);
+          with it off, the card keeps the rows.
         </p>
 
         <h3 className="help-h3">Per-exercise progress</h3>
@@ -809,10 +811,16 @@ export default function HelpTab() {
         </p>
         <p>
           The little figure in a circle at the start of that row is about the muscles the exercise
-          works. Tap it to see them drawn on a body, front and back: the main muscles in solid red, the helping ones
-          lighter, and every one named underneath. The first time, it asks whether to draw a male
-          or female body, and you can switch whenever you like. That choice is per person and is
-          saved on this device. All of this works offline.
+          works. Tap it to see every one named: the main muscles and the helping ones. With the
+          muscle highlighter on, they are also drawn on a body, front and back: the main muscles in
+          solid red, the helping ones lighter. The first time, it asks whether to draw a male or
+          female body, and you can switch whenever you like. That choice is per person and is saved
+          on this device. All of this works offline.
+        </p>
+        <p>
+          The muscle highlighter is off until the account owner turns it on in{' '}
+          <a href="#settings" className="help-inline-link">Settings</a>. While it&rsquo;s off, the
+          muscles are still listed by name; only the drawings are left out.
         </p>
         <p>
           Some exercises from Huddle&rsquo;s library also have a how-to video: a play button at the
@@ -872,6 +880,10 @@ export default function HelpTab() {
           head={['Setting', 'What it does']}
           rows={[
             ['Units', 'Sets lb or kg for sets you log from now on.'],
+            [
+              'Muscle highlighter',
+              'Shows the muscles an exercise works shaded on a drawing of the body. Off by default; only the account owner can turn it on, for everyone on the account.',
+            ],
             ['Offline Mode', 'Pins the app offline on this device.'],
             ['Rest Timer', 'An on/off switch per person, all on one screen.'],
             ['Steppers', 'How far one tap of −/+ moves weight and time, per person.'],

@@ -15,6 +15,7 @@ paths:
   - "frontend/src/utils/exerciseFilter.js"
   - "frontend/src/hooks/useRequireOnline.js"
   - "frontend/src/hooks/useGatedMutation.js"
+  - "frontend/src/hooks/useMuscleMap.js"
   - "frontend/src/lib/historyReload.js"
   - "frontend/src/components/history/PullToRefresh.jsx"
   # Member logins. The handbook now states, as fact, who can see and do what in a household --
@@ -53,6 +54,7 @@ that isn't one.
 | **the muscle map counts a set once per main muscle and half per helping muscle**, leaves conditioning and undescribed exercises off the body, and follows the range buttons (rendered from `MUSCLE_MAP_HELP.lines`, so the "?" and the handbook move together) | `utils/muscleSets.js`, `components/trends/chartHelp.js#MUSCLE_MAP_HELP`, `MuscleMapCard.jsx` |
 | what Free and Plus each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isEntitled` derivation, `BillingPlan.features()` and the window), `billing/**`, `csvimport/ImportController` |
 | **that on Pro the trainer's own training is the ONLY person who doesn't take a client place** — an assistant who trains takes one like anybody else | `QuotaService#requirePersonCapacity`'s `clientSeats + 1`, `SubscriptionService#currentClientCount`. ⚠️ Also stated on `marketing/for-trainers.html`, `marketing/pricing.html` and **`marketing/terms.html`**, which is a pricing term — all four move together or the app contradicts the contract |
+| **the muscle highlighter (the body drawings) is off by default, account-wide, and only the owner turns it on**; off, the muscles are still named | `V102__add_muscle_map_enabled_to_accounts.sql`'s default, `AccountController#setMuscleMap`'s permission, `hooks/useMuscleMap.js` |
 | exactly which actions work offline vs. need a connection — **including that History, PRs and Trends all read offline**, and that a how-to video needs a connection while the muscles beside it do not | `useRequireOnline.js`, `useGatedMutation.js`, or moving a write between the two; `hooks/useStatsFromHistory.js` (PRs and Trends read from the device's History); `components/exercise/ExerciseVideoCard.jsx` |
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
