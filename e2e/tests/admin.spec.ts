@@ -30,7 +30,7 @@ function rowWithButton(page, text: string, buttonName: string) {
 }
 
 // Exercises are managed on the exercise screen now (create via the Log picker's "+ Add your
-// own exercise"; rename/delete/setup-fields via the gear "Customize this exercise" modal).
+// own exercise"; rename/delete/setup-fields via the sliders "Customize this exercise" modal).
 // App Settings only keeps units, the household's shared tag manager, and data export.
 test.describe('App Settings', () => {
   test('add a tag, create a custom exercise, add and remove a person, switch units', async ({ page, request }) => {

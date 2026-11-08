@@ -117,11 +117,21 @@ export const IconNote = (props) => (
   </Icon>
 );
 
-export const IconMore = (props) => (
+// "Adjust this one thing": an exercise's Customize (notes, tags, setup numbers). Lucide's
+// sliders-horizontal. It replaced a vertical "more" ellipsis, which reads as overflow only as
+// the last icon in a row -- and Customize sits mid-row since the About strip (2026-11-08). Not a
+// cog: app-wide Settings live in the account menu, and a cog here would read as those.
+export const IconSliders = (props) => (
   <Icon {...props}>
-    <circle cx="12" cy="12" r="1" />
-    <circle cx="12" cy="5" r="1" />
-    <circle cx="12" cy="19" r="1" />
+    <line x1="21" x2="14" y1="4" y2="4" />
+    <line x1="10" x2="3" y1="4" y2="4" />
+    <line x1="21" x2="12" y1="12" y2="12" />
+    <line x1="8" x2="3" y1="12" y2="12" />
+    <line x1="21" x2="16" y1="20" y2="20" />
+    <line x1="12" x2="3" y1="20" y2="20" />
+    <line x1="14" x2="14" y1="2" y2="6" />
+    <line x1="8" x2="8" y1="10" y2="14" />
+    <line x1="16" x2="16" y1="18" y2="22" />
   </Icon>
 );
 
