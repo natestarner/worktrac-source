@@ -136,12 +136,15 @@
   --color-record-border: #c2853c; /* 3.13 surface */
   --color-record-text: #8a4c0a; /* 5.09 own bg / 6.40 bg / 6.73 surface */
 
-  /* The body diagram's muscle tint (components/exercise/BodyMap.jsx). Painted with a multiply
-     blend over the body art at partial opacity, so it is never read as text and has no contrast
-     target; the red was chosen on the mockup (2026-11-05) because the app's orange accent
-     multiplied over skin tones reads as a tan, not as "this muscle". Same in both themes: the dark
-     body art is darker, which the multiply already accounts for. */
-  --color-muscle: #e3261b;
+  /* The body diagram's muscle tint (components/exercise/BodyMap.jsx) and the About sheet's legend
+     swatch. Painted with a multiply blend over the body art at partial opacity, so it is never read
+     as text and has no contrast target. Not the orange accent: that multiplied over skin tones reads
+     as a tan, not as "this muscle" (mockup, 2026-11-05). Not the mockup's pure red #e3261b either:
+     beside the terracotta it read as a second, competing colour (2026-11-08). Brick is the accent's
+     hue family (~10deg vs 16deg), darker, so it still reads as muscle and sits with the brand.
+     Same in both themes: the dark body art is darker, which the multiply already accounts for.
+     Only the bodies use it; the Trends "Sets per muscle" bars are neutral (.muscle-map-bar). */
+  --color-muscle: #b83a22;
 
   --color-dark: #1c1b19;
 
@@ -1949,11 +1952,14 @@ input[type='search']::-webkit-search-results-decoration {
   overflow: hidden;
 }
 
+/* Neutral and solid, on purpose (2026-11-08). The bars were the muscle tint, faded by set count:
+   unblended, a saturated red that turned pink at the low steps, right beside the terracotta and
+   close to --color-danger. The bar's length already says how much; the body carries the colour. */
 .muscle-map-bar {
   display: block;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-muscle);
+  background: var(--color-muted);
 }
 
 .muscle-map-sets {

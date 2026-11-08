@@ -62,7 +62,7 @@ export default function MuscleMapCard({ muscleSets, weeks, gender = 'male', musc
                     <span className="muscle-map-track" aria-hidden="true">
                       <span
                         className="muscle-map-bar"
-                        style={{ width: `${(m.sets / maxSets) * 100}%`, opacity: shadeFor(m.sets, maxSets) / 100 }}
+                        style={{ width: `${(m.sets / maxSets) * 100}%` }}
                       />
                     </span>
                     {/* The number alone keeps the bar wide on a 320px phone; the heading says what

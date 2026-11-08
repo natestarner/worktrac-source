@@ -259,9 +259,12 @@ as a full set (which makes a bench-press-only week read as a triceps week) and o
   muscles (Customize). Households from before muscles existed will see their own custom exercises
   here. That line is the nudge the plan called for, not an error state.
 - **Shading is relative** to the most-worked muscle in the range, in four steps (`SHADE_STEPS`), so a
-  light week still shows its shape and the darkest muscle is always the top row. Each row's bar
-  carries its muscle's shade, so the list and the bodies read as one chart, and every shade is also
-  a name and a number (nothing is said by colour alone).
+  light week still shows its shape and the darkest muscle is always the top row. Every shade is also
+  a row with a name and a number (nothing is said by colour alone). The rows' bars are **neutral
+  grey and solid** (2026-11-08): they used to carry the muscle tint at each row's shade, which put an
+  unblended red, pink at the low steps, beside the terracotta accent. Length already encodes the
+  count, so the colour stays on the bodies, in a brick tint (`--color-muscle`) from the accent's
+  hue family.
 - **Follows the range toggle**, unlike the consistency grid: "what have I been training lately" is a
   range question.
 - **The body is the person's `bodyFigure`** (chosen in an exercise's About sheet), male until chosen.
