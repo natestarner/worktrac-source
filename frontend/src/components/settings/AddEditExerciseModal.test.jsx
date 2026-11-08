@@ -418,7 +418,12 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Zercher Squat' } });
-      expect(await screen.findByText('Suggested from Barbell Back Squat. Tap to change.')).toBeInTheDocument();
+      expect(await screen.findByText('Suggested from Barbell Back Squat. Open a body area to change it.')).toBeInTheDocument();
+      // Folded away, but the Legs row already says what the suggestion picked.
+      expect(screen.getByRole('button', { name: 'Legs' })).toHaveAccessibleDescription(
+        'Main: Glutes, Quads. Helping: Hamstrings.',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
       expect(screen.getByRole('button', { name: 'Quads: main' })).toBeInTheDocument();
 
       // Taking hamstrings off: helping -> not worked. Once touched, the choice is theirs.
@@ -439,6 +444,7 @@ describe('AddEditExerciseModal', () => {
     it('cycles a chip through main, helping and back to not worked', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Mystery Move' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: not worked' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: main' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: helping' }));

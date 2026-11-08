@@ -319,7 +319,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
         <div style={{ marginBottom: 'var(--space-5)' }}>
           <SectionLabel>Muscles worked (optional)</SectionLabel>
           {chosenMuscles === null && suggestion && (
-            <p className="muscle-picker-hint">Suggested from {suggestion.from}. Tap to change.</p>
+            <p className="muscle-picker-hint">Suggested from {suggestion.from}. Open a body area to change it.</p>
           )}
           <MusclePicker value={muscles} onChange={setChosenMuscles} />
         </div>

@@ -45,6 +45,7 @@ describe('ConfigureExerciseModal muscles', () => {
       { isMember: true, ownerName: 'Nate' },
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
     expect(screen.getByRole('button', { name: 'Biceps: main' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Forearms: not worked' }));
     fireEvent.click(screen.getByRole('button', { name: 'Forearms: main' }));
