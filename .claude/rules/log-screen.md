@@ -732,7 +732,8 @@ Mechanism and the general form of the rule: `.claude/rules/offline-internals.md`
 ## The strip under the name: "About this exercise" + the exercise's actions (2026-11-06)
 
 The name has its own full-width line; directly under it, `ExerciseAboutStrip` holds the About
-button (a tiny body with the main muscles shaded, plus their names when there is room), the
+button (the Vitruvian Man glyph, `IconVitruvian`, at the same 18px as the actions -- it was a
+tiny shaded body until 2026-11-08 -- plus the main muscles' names when there is room), the
 favorite / session-note / customize buttons, and the how-to video slot. Tapping About opens
 `ExerciseAboutSheet` (muscles on a body, front and back). Decided with Nate; plan in the PR.
 
@@ -740,10 +741,17 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   an exercise with no muscles gets the same box. The steppers sit below it.
 - **The layout follows the strip's own width** (`@container`, index.css), never the device:
   narrow = five equal slots, no muscle text; wide = the About button takes the spare width.
-- **The video slot is always present, and last.** No video leaves it empty, so the actions never
-  shift sideways between exercises. With one (`exercise.video` on the catalog row, library only,
+- **The video slot is always present, and last, and never empty.** With no video it holds "No
+  how-to video" (`IconPlayOff`, play struck through), which opens the same video sheet saying
+  there is none -- an empty slot read as missing or broken (2026-11-08). The actions never shift
+  sideways between exercises. With one (`exercise.video` on the catalog row, library only,
   read through `utils/exerciseVideo.js` like the muscles) it holds "Show how-to video", which
-  opens the same sheet scrolled to `ExerciseVideoCard`. Not wrapped in `ReadOnlyWrap`: watching is
+  opens `ExerciseVideoSheet`: the video ALONE. **One icon, one sheet** (decided 2026-11-08): the
+  body opens only the muscles, play only the video. It used to be one sheet, scrolled to the video
+  when opened from play -- and on iOS Safari that `scrollIntoView` also scrolled the page behind
+  the fixed overlay, leaving the header and its X above the screen with no way back. **Never
+  scroll from inside a sheet.** (Modal's cap is also `min(80dvh, 100%)` now, via `.modal-panel`, not a bare
+  `80vh`; the `100%` is the scrim, which follows the keyboard -- `frontend-core.md`.) The previews below keep both, since they have one entry. Not wrapped in `ReadOnlyWrap`: watching is
   not a write. It was "Watch how it's done" until real videos arrived: that contains "Done", and 20
   e2e tests clicking the past-workout frame's Done hit two buttons.
 - **The video loads nothing until "Play the video" is tapped** -- no poster, no YouTube request --

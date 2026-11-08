@@ -155,7 +155,7 @@ no undo.
 - **Every modal must be closable** — an `onClose` or a footer button. Nothing enforces this
   mechanically.
 - The header is `position: sticky` (with a `z-index`) because the panel is
-  `maxHeight: min(80vh, 100%)` with its own scrollbar; a static X scrolls out of reach on the
+  capped (`.modal-panel`: `min(80dvh, 100%)`) with its own scrollbar; a static X scrolls out of reach on the
   taller modals.
 - **The scrim is sized to the VISIBLE viewport, not `inset: 0`** (`--visible-viewport-top` /
   `-height`, below). On an iPhone the keyboard covers the layout viewport without shrinking it and

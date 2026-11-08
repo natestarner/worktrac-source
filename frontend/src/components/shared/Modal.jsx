@@ -151,6 +151,12 @@ export default function Modal({
         // lib/visibleViewport.js reveals a focused field by scrolling THIS element, clear of the
         // header marked below.
         data-modal-panel=""
+        // .modal-panel (index.css) carries the height cap: 80% of the VISIBLE viewport (dvh), with
+        // vh as the fallback, and never taller than the scrim (which follows the keyboard). A bare
+        // 80vh is 80% of iOS Safari's LARGEST viewport (toolbars hidden), so with the toolbars
+        // showing a bottom sheet could reach past the top of the screen, taking its sticky header
+        // and the X with it.
+        className="modal-panel"
         style={{
           background: 'var(--color-surface)',
           // In light mode the dimmed scrim is far lighter than --color-surface, so the modal
@@ -169,10 +175,8 @@ export default function Modal({
           // stretching into a 1400px-wide band of controls on a desktop monitor.
           width: isSheet ? '100%' : width,
           maxWidth: isSheet ? width : '100%',
-          // Never taller than the scrim's content box, which is the visible part of the screen (see
-          // the scrim above): with the keyboard up the panel shrinks to what is left and scrolls
-          // inside itself, so every field stays reachable. 80vh is still the cap with no keyboard.
-          maxHeight: 'min(80vh, 100%)',
+          // No maxHeight here: .modal-panel owns the cap (see the className above). An inline one
+          // would override the class.
           overflowY: 'auto',
           // A scroll that reaches the panel's end stops there, instead of carrying on into the
           // locked page behind it (which iOS would otherwise rubber-band).

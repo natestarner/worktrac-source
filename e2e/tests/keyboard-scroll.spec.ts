@@ -99,8 +99,16 @@ test.describe('the keyboard and scrolling', () => {
     const search = page.getByPlaceholder('Search all exercises');
     await search.fill('press');
     await search.blur();
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    // Re-issued on every poll: fill()'s own focus started a smooth scroll that can overtake a
+    // one-shot scrollTo (sticky-chrome.spec.ts hit the same thing).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          window.scrollTo(0, 0);
+          return window.scrollY;
+        }),
+      )
+      .toBe(0);
 
     // A tap, as on the phone.
     await search.click();
@@ -133,24 +141,32 @@ test.describe('the keyboard and scrolling', () => {
     await page.setViewportSize(KEYBOARD_UP);
     const search = page.getByPlaceholder('Search all exercises');
     await search.click();
-    // Let the focus scroll finish: two equal reads a frame apart.
+    // Let the focus scroll finish: the field holds still for 300ms. Two reads a frame apart was not
+    // enough on a loaded machine -- a smooth scroll's last few pixels landed after the baseline.
     await expect
-      .poll(async () => {
-        const a = await page.evaluate(() => window.scrollY);
-        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-        return a === (await page.evaluate(() => window.scrollY));
-      })
+      .poll(() =>
+        page.evaluate(async () => {
+          const field = document.querySelector('.exercise-search-input')!;
+          const a = field.getBoundingClientRect().top;
+          await new Promise((r) => setTimeout(r, 300));
+          return Math.abs(field.getBoundingClientRect().top - a) < 0.5;
+        }),
+      )
       .toBe(true);
 
-    // Sample the field's position on every frame while the first letter, then a no-match search,
-    // are typed. A retrying matcher would wait out a jump down and back; the samples cannot.
+    // Sample the field (and the chrome's bottom edge) on every frame while the first letter, then a
+    // no-match search, are typed. A retrying matcher would wait out a jump and back; samples cannot.
     await page.evaluate(() => {
       const field = document.querySelector('.exercise-search-input')!;
-      const w = window as unknown as { __tops: number[]; __sampling: boolean };
-      w.__tops = [];
+      const chrome = document.querySelector('.app-chrome')!;
+      const w = window as unknown as { __samples: { top: number; chromeBottom: number }[]; __sampling: boolean };
+      w.__samples = [];
       w.__sampling = true;
       const sample = () => {
-        w.__tops.push(Math.round(field.getBoundingClientRect().top));
+        w.__samples.push({
+          top: Math.round(field.getBoundingClientRect().top),
+          chromeBottom: Math.round(chrome.getBoundingClientRect().bottom),
+        });
         if (w.__sampling) requestAnimationFrame(sample);
       };
       sample();
@@ -161,14 +177,23 @@ test.describe('the keyboard and scrolling', () => {
     await search.pressSequentially('qzx');
     await expect(page.getByText(/No exercises match/)).toBeVisible();
     await page.waitForTimeout(400); // a few more frames, for any scroll the typing set off
-    const tops = await page.evaluate(() => {
-      const w = window as unknown as { __tops: number[]; __sampling: boolean };
+    const samples = await page.evaluate(() => {
+      const w = window as unknown as { __samples: { top: number; chromeBottom: number }[]; __sampling: boolean };
       w.__sampling = false;
-      return w.__tops;
+      return w.__samples;
     });
 
-    expect(tops.length, 'the sampler must have run').toBeGreaterThan(3);
-    for (const top of tops) expect(Math.abs(top - before), `field moved to ${top} from ${before}`).toBeLessThanOrEqual(1);
+    // What the bug did, measured red against the old code: the field shot UP under the tab bar
+    // (176 -> 50, the routine block above it vanishing), then was scrolled back. So on every frame
+    // the field must stay clear of the chrome, and must never be pushed DOWN the screen (a page
+    // that shrank under it). A small move up IS allowed: when the setup's short page could not
+    // scroll the field all the way to its landing spot, the first letter makes the page long and
+    // the browser's own keep-the-caret-in-view settles it 15-20px closer to that spot.
+    expect(samples.length, 'the sampler must have run').toBeGreaterThan(3);
+    for (const { top, chromeBottom } of samples) {
+      expect(top, `field went under the tab bar (top ${top}, chrome ends ${chromeBottom})`).toBeGreaterThanOrEqual(chromeBottom);
+      expect(top, `field was pushed down the screen, to ${top} from ${before}`).toBeLessThanOrEqual(before + 1);
+    }
     await expect(page.getByText('Or pick an exercise', { exact: true })).toBeAttached();
     await expect(page.getByText('Start a routine', { exact: true })).toBeAttached();
   });
