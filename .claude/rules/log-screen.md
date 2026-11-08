@@ -565,6 +565,15 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
+## Nothing ABOVE the picker's search field changes when a search starts
+
+The routine quick-start block and "Or pick an exercise" stay on screen while searching. Hiding them
+(as it once did) moved the field up on the first letter typed: the page clamped to its new end and a
+re-scroll pulled it back, a visible jump down and back (2026-11-08). Everything a search changes is
+BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or empty result list
+from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
+`keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
+
 ## The picker is BOUNDED but never REORDERED
 
 `ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to
@@ -741,8 +750,8 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   body opens only the muscles, play only the video. It used to be one sheet, scrolled to the video
   when opened from play -- and on iOS Safari that `scrollIntoView` also scrolled the page behind
   the fixed overlay, leaving the header and its X above the screen with no way back. **Never
-  scroll from inside a sheet.** (Modal's cap is also `80dvh` now, via `.modal-panel`, not a bare
-  `80vh`.) The previews below keep both, since they have one entry. Not wrapped in `ReadOnlyWrap`: watching is
+  scroll from inside a sheet.** (Modal's cap is also `min(80dvh, 100%)` now, via `.modal-panel`, not a bare
+  `80vh`; the `100%` is the scrim, which follows the keyboard -- `frontend-core.md`.) The previews below keep both, since they have one entry. Not wrapped in `ReadOnlyWrap`: watching is
   not a write. It was "Watch how it's done" until real videos arrived: that contains "Done", and 20
   e2e tests clicking the past-workout frame's Done hit two buttons.
 - **The video loads nothing until "Play the video" is tapped** -- no poster, no YouTube request --

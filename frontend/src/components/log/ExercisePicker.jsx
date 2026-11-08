@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
@@ -68,15 +68,14 @@ export default function ExercisePicker({
     searchInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  // Starting (or clearing) a search hides (or reveals) the routine quick-start block ABOVE this
-  // field, which moves the field itself -- exactly the moment someone is mid-keystroke and least
-  // able to tell where their cursor went. The one-time on-focus scroll above can't see this: it
-  // already ran before the reflow happened. Re-running it here, keyed on `searching` flipping
-  // while the field still has focus, is what keeps the field from being left wherever that reflow
-  // happened to leave it.
-  useEffect(() => {
-    if (document.activeElement === searchInputRef.current) scrollSearchIntoView();
-  }, [searching, scrollSearchIntoView]);
+  // ⚠️ Nothing ABOVE the field may change when a search starts or ends. The routine quick-start
+  // block and "Or pick an exercise" used to be hidden while searching, which moved the field
+  // up under the person's thumb on the first letter typed: the page shortened, the browser
+  // clamped the scroll to the new end (showing the bottom of the list), and a re-scroll effect
+  // then smooth-scrolled back up to the field -- a visible jump down and back on every first
+  // letter (2026-11-08). With the block left in place the field never moves, so there is nothing
+  // to correct. What changes on a search is all BELOW the field; `.picker-search-body` keeps
+  // that part tall enough that a short result list can't shorten the page under the field either.
 
   // Default view: favorites first, then everything else the person has logged.
   const favorites = personExercises.filter((e) => e.isFavorite);
@@ -90,7 +89,8 @@ export default function ExercisePicker({
   // Search view: ranked, token-based matching across the whole catalog.
   const searchResults = searching ? searchExercises(catalog, exerciseSearch) : [];
 
-  const showRoutineQuickStart = !searching && !hasActiveRoutine && routines.length > 0;
+  // Not gated on `searching` -- see the warning above.
+  const showRoutineQuickStart = !hasActiveRoutine && routines.length > 0;
   const hasList = personExercises.length > 0;
   const routinesOverflow = routines.length > ROUTINE_PREVIEW_COUNT;
   const visibleRoutines = showAllRoutines ? routines : routines.slice(0, ROUTINE_PREVIEW_COUNT);
@@ -163,64 +163,66 @@ export default function ExercisePicker({
         style={sectionSpacing}
       />
 
-      {loading && (
-        <>
-          <Skeleton width={84} height={12} style={sectionLabelSpacing} />
-          <div className="picker-chip-wrap" style={sectionSpacing}>
-            {[110, 140, 96].map((w, i) => (
-              <Skeleton key={i} width={w} height={46} radius={16} />
-            ))}
-          </div>
-        </>
-      )}
+      <div className={searching ? 'picker-search-body' : undefined}>
+        {loading && (
+          <>
+            <Skeleton width={84} height={12} style={sectionLabelSpacing} />
+            <div className="picker-chip-wrap" style={sectionSpacing}>
+              {[110, 140, 96].map((w, i) => (
+                <Skeleton key={i} width={w} height={46} radius={16} />
+              ))}
+            </div>
+          </>
+        )}
 
-      {/* Search results across the whole catalog */}
-      {!loading && searching && (
-        <div style={sectionSpacing}>
-          <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
-          <ExerciseSearchResults
-            results={searchResults}
-            term={exerciseSearch}
-            onSelect={onSelectExercise}
-            onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
-            emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
-          />
-        </div>
-      )}
-
-      {/* Default view: Favorites + Other Previously Logged */}
-      {!loading && !searching && (
-        !hasList ? (
-          // The first screen a brand-new person ever sees, and it was the barest empty state in the
-          // app: centred grey text, no icon, no hierarchy. No action button here on purpose -- the
-          // search field is directly above and "+ Add your own exercise" directly below, so a third
-          // control would just be a duplicate of one of them.
-          <EmptyState
-            icon={IconDumbbell}
-            title="Let's find your first exercise"
-            body="Search the library above, or add your own at the bottom."
-          />
-        ) : (
-          groups.map((group) => (
-            <ChipGroup
-              key={group.id}
-              group={group}
-              expanded={expandedGroups.has(group.id)}
-              onToggle={() => toggleGroup(group.id)}
-              onSelectExercise={onSelectExercise}
+        {/* Search results across the whole catalog */}
+        {!loading && searching && (
+          <div style={sectionSpacing}>
+            <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
+            <ExerciseSearchResults
+              results={searchResults}
+              term={exerciseSearch}
+              onSelect={onSelectExercise}
+              onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
+              emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
             />
-          ))
-        )
-      )}
+          </div>
+        )}
 
-      {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. It
-          was a hand-rolled grey fill at off-scale 14px/700 -- the one full-width action in the app
-          still drawn that way once those moved to the primitive. */}
-      {!loading && (
-        <Button onClick={() => onAddExercise(exerciseSearch)} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
-          + Add your own exercise
-        </Button>
-      )}
+        {/* Default view: Favorites + Other Previously Logged */}
+        {!loading && !searching && (
+          !hasList ? (
+            // The first screen a brand-new person ever sees, and it was the barest empty state in the
+            // app: centred grey text, no icon, no hierarchy. No action button here on purpose -- the
+            // search field is directly above and "+ Add your own exercise" directly below, so a third
+            // control would just be a duplicate of one of them.
+            <EmptyState
+              icon={IconDumbbell}
+              title="Let's find your first exercise"
+              body="Search the library above, or add your own at the bottom."
+            />
+          ) : (
+            groups.map((group) => (
+              <ChipGroup
+                key={group.id}
+                group={group}
+                expanded={expandedGroups.has(group.id)}
+                onToggle={() => toggleGroup(group.id)}
+                onSelectExercise={onSelectExercise}
+              />
+            ))
+          )
+        )}
+
+        {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. It
+            was a hand-rolled grey fill at off-scale 14px/700 -- the one full-width action in the app
+            still drawn that way once those moved to the primitive. */}
+        {!loading && (
+          <Button onClick={() => onAddExercise(exerciseSearch)} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
+            + Add your own exercise
+          </Button>
+        )}
+      </div>
 
       {preview && <ExercisePreviewSheet exerciseId={preview.id} exerciseName={preview.name} onClose={() => setPreview(null)} />}
     </div>

@@ -133,16 +133,31 @@ describe('ExercisePicker search field', () => {
   });
 });
 
-// Regression: starting (or clearing) a search hides (or reveals) the routine quick-start block
-// ABOVE the field, which moves the field itself out from under a scroll position set before that
-// reflow happened -- "the search box jumps up" while typing on a phone.
-describe('ExercisePicker search field re-scroll on layout shift', () => {
+// Regression (2026-11-08): starting a search used to HIDE the routine quick-start block and the
+// "Or pick an exercise" label above the field. The field moved up on the first letter typed, the
+// page clamped to its new end (the bottom of the list), and a re-scroll smooth-scrolled back up --
+// a jump down and back on every first letter. Nothing above the field may change on a search now,
+// so there is nothing to re-scroll.
+describe('ExercisePicker keeps everything above the search field while searching', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
-  it('re-scrolls the field into view when starting a search collapses the routine block above it, while focused', () => {
+  function renderSearching(term) {
+    useAppState.mockReturnValue({ exerciseSearch: term, setExerciseSearch: vi.fn() });
+    return renderPicker({ routines: routines(2) });
+  }
+
+  it('keeps the routine block and the "Or pick an exercise" label while a search is running', () => {
+    renderSearching('squ');
+    expect(screen.getByText('Start a routine')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Routine 1/ })).toBeInTheDocument();
+    expect(screen.getByText('Or pick an exercise')).toBeInTheDocument();
+    expect(screen.getByText('Search results')).toBeInTheDocument();
+  });
+
+  it('does not scroll the focused field when a search starts', () => {
     const setExerciseSearch = vi.fn();
     useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch });
     const { rerender } = renderPicker({ routines: routines(1) });
@@ -153,34 +168,7 @@ describe('ExercisePicker search field re-scroll on layout shift', () => {
     input.focus();
     scrollIntoView.mockClear(); // the focus event's own call isn't what this test is about
 
-    useAppState.mockReturnValue({ exerciseSearch: 'squ', setExerciseSearch });
-    rerender(
-      <ExercisePicker
-        personExercises={[]}
-        catalog={[]}
-        routines={routines(1)}
-        loading={false}
-        onSelectExercise={vi.fn()}
-        onAddExercise={vi.fn()}
-        onStartRoutine={vi.fn()}
-        hasActiveRoutine={false}
-      />
-    );
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-  });
-
-  it('does not re-scroll on that same transition when the field is not the one focused', () => {
-    const setExerciseSearch = vi.fn();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch });
-    const { rerender } = renderPicker({ routines: routines(1) });
-
-    const input = screen.getByPlaceholderText('Search all exercises');
-    const scrollIntoView = vi.fn();
-    input.scrollIntoView = scrollIntoView;
-    // Deliberately not focused -- e.g. the search term came from restored state, not typing.
-
-    useAppState.mockReturnValue({ exerciseSearch: 'squ', setExerciseSearch });
+    useAppState.mockReturnValue({ exerciseSearch: 's', setExerciseSearch });
     rerender(
       <ExercisePicker
         personExercises={[]}
@@ -195,6 +183,17 @@ describe('ExercisePicker search field re-scroll on layout shift', () => {
     );
 
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  // The space below the field is held at a screen's height while searching, so a short result
+  // list cannot shorten the page under the field (index.css, .picker-search-body).
+  it('holds the space below the field only while a search is running', () => {
+    const { container, unmount } = renderSearching('zzz');
+    expect(container.querySelector('.picker-search-body')).not.toBeNull();
+    expect(container.querySelector('.picker-search-body')).toHaveTextContent('+ Add your own exercise');
+    unmount();
+    const idle = renderSearching('');
+    expect(idle.container.querySelector('.picker-search-body')).toBeNull();
   });
 });
 
