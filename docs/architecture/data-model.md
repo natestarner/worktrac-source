@@ -127,6 +127,15 @@ in-app how-to videos, which share the same entry point and the same library-cura
 - **The picker prefills a suggestion** (`utils/muscles.js#suggestMuscles`): the library exercise
   sharing the most movement words with the typed name, ignoring equipment words ("Cable Fly" is a
   fly). A guess the person can change, never saved on its own.
+- **The picker is grouped by body area** (`components/exercise/MusclePicker.jsx`, 2026-11-08). The
+  22 muscles as one flat wall of chips read as noise, and most exercises use 2-4 of them. Five
+  rows (`utils/muscles.js#MUSCLE_GROUPS`, client-only: the server has no groups) start closed and
+  each names what is picked in it, so a suggestion or a saved set reads without opening anything.
+  A tap still cycles main -> helping -> cleared. `muscles.test.js` fails if a muscle is in no group
+  or two, since an ungrouped muscle could never be picked. The chips wear the body diagram's
+  colour: main is solid `--color-muscle`, helping is that colour at `--muscle-helping-opacity`, the
+  same token the About sheet's key reads, so a muscle tapped here looks the same in the About sheet
+  afterwards (it was the one place muscles still showed in the orange accent).
 - **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.
   Same "who may" as rename (the creator or the owner; `EDIT_OWN_SHARED_RESOURCE` + the service
   check, pinned in `MemberPermissionsTest` and verified red), but without rename's "nobody else is
