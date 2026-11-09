@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { backToPicker, pickExercise } from './support/exercises';
 import { turnOnMuscleHighlighter } from './support/muscleMap';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -9,7 +9,7 @@ import { forEachConnectivityMode } from './support/parity';
 //
 // Nothing in this flow should touch the network: the muscles arrive with the exercise catalog
 // (cached for offline use), the body art is a build asset, and the body choice is per-person local
-// state. So every mode must show the same muscles on the same body. If an assertion here ever
+// state -- male until the person switches. So every mode must show the same muscles on the same body. If an assertion here ever
 // needs to branch on ctx.mode, that is a divergence for resilience.md's register, not an `if`.
 //
 // What this does NOT cover: the body IMAGE loading with no network. Under the dev server a body
@@ -20,6 +20,8 @@ import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
 const ABOUT = 'About this exercise: works Chest, helped by Shoulders and Triceps';
+const OTHER_EXERCISE = 'Barbell Back Squat';
+const OTHER_ABOUT = /^About this exercise: works /;
 
 async function warmCatalog(page: Page) {
   const search = page.getByPlaceholder('Search all exercises');
@@ -52,8 +54,9 @@ forEachConnectivityMode<void>('the About sheet shows the muscles worked on the c
   },
   act: async (page) => {
     await page.getByRole('button', { name: ABOUT }).click();
-    // First visit asks which body to draw rather than guessing.
-    await expect(page.getByText('Which body should the muscle diagram show?')).toBeVisible();
+    // Nothing chosen yet: the male body is drawn at once, with no question first.
+    await expect(page.getByRole('button', { name: 'Show a male body' })).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => shading(page, 'Front of the body', 'pectoralis')).toBe('0.8');
     await page.getByRole('button', { name: 'Show a female body' }).click();
   },
   assert: async (page) => {
@@ -75,9 +78,17 @@ forEachConnectivityMode<void>('the About sheet shows the muscles worked on the c
     await expect(page.getByRole('dialog')).toHaveCount(0);
   },
   afterReconnect: async (page) => {
-    // The choice is the person's and outlives the sheet: reopening draws the same body, no question.
+    // The choice is the person's and outlives the sheet: reopening draws the same body.
     await page.getByRole('button', { name: ABOUT }).click();
-    await expect(page.getByText('Which body should the muscle diagram show?')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show a female body' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // ...and it is not per exercise: another exercise opens on the same body.
+    await backToPicker(page);
+    await pickExercise(page, OTHER_EXERCISE);
+    await page.getByRole('button', { name: OTHER_ABOUT }).click();
+    await expect(page.getByRole('dialog', { name: OTHER_EXERCISE })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Show a female body' })).toHaveAttribute('aria-pressed', 'true');
     // Leave the screen as found: the harness ends by opening History from the tab bar, which a
     // sheet's scrim would cover.

@@ -769,11 +769,14 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
 - **Labels:** the About button's name starts "About this exercise" and contains no other label on
   the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
   "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
-- **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **The body choice is `PERSON_DEFAULTS.bodyFigure`**, per person, on this device. Null draws the
+  male body with no question first (Nate, 2026-11-08); only a tap on the switch stores a choice.
+  Kept per device on purpose: a server column like the rest timer's would make the switch
+  online-only, and a read-only viewer could no longer flip it.
 - **Every body drawing sits behind the muscle highlighter setting** (`AccountDto.muscleMapEnabled`,
   V102, account-wide, owner-set, **off by default** -- decided with Nate 2026-11-08). Read it through
   `hooks/useMuscleMap.js` and pass it down; never read `account` for it at a call site. Off, the
-  sheet shows `MuscleMapOffNote` (linking to Settings) where the diagram, the question and the
+  sheet shows `MuscleMapOffNote` (linking to Settings) where the diagram and the
   body switch would be. (The strip draws no body since #508 -- its About icon is a glyph -- so it
   needs no gating.) The muscle NAMES stay. The components default to OFF, so a caller that
   forgets the prop draws no body. Not a connectivity branch: it comes from the auth snapshot.

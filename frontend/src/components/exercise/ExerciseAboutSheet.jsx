@@ -17,8 +17,10 @@ import { MUSCLE_MAP_OFF } from '../../hooks/useMuscleMap';
 // offline use like the names), and the body art is a build asset. So it opens and draws the same
 // in every connectivity mode -- parity-exercise-about.spec.ts holds it to that.
 //
-// The body figure is a per-person display preference (PERSON_DEFAULTS.bodyFigure). Until it is
-// set, the sheet asks instead of guessing; the same two-button switch then stays under the diagram.
+// The body figure is a per-person display preference (PERSON_DEFAULTS.bodyFigure). Until the
+// person picks one it draws the male body straight away -- no question first (Nate, 2026-11-08) --
+// with the two-button switch under the diagram. Only a tap on the switch stores a choice, and that
+// choice then holds for every exercise this person opens on this device.
 //
 // The diagram, the question and the switch all sit behind the account-wide muscle highlighter
 // setting (`muscleMap`, hooks/useMuscleMap.js), off by default. Off, MuscleMapOffNote takes their
@@ -83,6 +85,8 @@ function MuscleList({ title, codes, tone }) {
 // `settingsLink={false}` names Settings without linking to it (MuscleMapOffNote says when).
 export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, muscleMap = MUSCLE_MAP_OFF, settingsLink = true, onAddMuscles = null, video = null, children }) {
   const hasMuscles = muscles.primary.length > 0;
+  // Male until chosen, the same fallback as the Trends muscle map (TrendsTab).
+  const figure = bodyFigure ?? 'male';
   return (
     <>
       {!hasMuscles ? (
@@ -100,16 +104,12 @@ export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChoo
             <MuscleMapOffNote muscleMap={muscleMap} link={settingsLink} />
           ) : (
             <>
-              {bodyFigure ? (
-                <div className="exercise-about-bodies">
-                  <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="front" label="Front of the body" />
-                  <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={bodyFigure} view="back" label="Back of the body" />
-                </div>
-              ) : (
-                <p className="exercise-about-ask">Which body should the muscle diagram show?</p>
-              )}
+              <div className="exercise-about-bodies">
+                <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={figure} view="front" label="Front of the body" />
+                <BodyMap primary={muscles.primary} secondary={muscles.secondary} gender={figure} view="back" label="Back of the body" />
+              </div>
               <div className="exercise-about-figure">
-                <FigureSwitch value={bodyFigure} onChange={onChooseFigure} />
+                <FigureSwitch value={figure} onChange={onChooseFigure} />
               </div>
             </>
           )}

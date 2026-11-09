@@ -105,9 +105,10 @@ const PERSON_DEFAULTS = {
   checkInDraft: null,
 
   // Which body the muscle diagram draws for this person: 'male' | 'female', or null until they
-  // choose -- the "About this exercise" sheet asks the first time it opens, and offers the switch
-  // from then on. A display preference about the person looking, so it is per person (two people
-  // trading one iPad each see their own) and local to the device, like the Trends switchers above.
+  // choose. Null draws the male body (the About sheet and the Trends muscle map both fall back to
+  // it); the About sheet's switch stores a choice. A display preference about the person looking,
+  // so it is per person (two people trading one iPad each see their own) and local to the device,
+  // like the Trends switchers above -- kept off the server on purpose (Nate, 2026-11-08).
   bodyFigure: null,
 
   // { [exerciseId]: volumeLb } -- the session-volume figure at which this person was last

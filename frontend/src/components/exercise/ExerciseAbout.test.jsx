@@ -72,12 +72,24 @@ describe('ExerciseAboutSheet', () => {
     return { onChooseFigure, onClose };
   }
 
-  it('asks which body to draw the first time, and reports the choice', () => {
+  // No question first: with nothing chosen it draws the male body at once (Nate, 2026-11-08), and
+  // the switch is right there under it.
+  it('draws the male body straight away when no body has been chosen, and reports a switch', () => {
     const { onChooseFigure } = renderSheet();
-    expect(screen.getByText('Which body should the muscle diagram show?')).toBeTruthy();
-    expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
+    expect(screen.queryByText('Which body should the muscle diagram show?')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Front of the body' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Back of the body' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show a male body' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Show a female body' }).getAttribute('aria-pressed')).toBe('false');
+    expect(onChooseFigure).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Show a female body' }));
     expect(onChooseFigure).toHaveBeenCalledWith('female');
+  });
+
+  it('draws the female body once it is chosen', () => {
+    renderSheet({ bodyFigure: 'female' });
+    expect(screen.getByRole('img', { name: 'Front of the body' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show a female body' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('draws front and back once a body is chosen, with the switch still offered', () => {
@@ -120,8 +132,8 @@ describe('ExerciseAboutSheet', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // The muscle highlighter is off: the note, with a link to Settings, stands where the bodies,
-  // the question and the switch would be. The muscle names stay -- they are text.
+  // The muscle highlighter is off: the note, with a link to Settings, stands where the bodies and
+  // the switch would be. The muscle names stay -- they are text.
   it('shows the note instead of the diagram while the muscle highlighter is off', () => {
     renderSheet({ bodyFigure: 'male', muscleMap: OFF });
     expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
@@ -134,9 +146,10 @@ describe('ExerciseAboutSheet', () => {
     expect(screen.getByText('Triceps')).toBeTruthy();
   });
 
-  it('does not ask which body to draw while it is off', () => {
+  it('draws no body while it is off, even with no body chosen yet', () => {
     renderSheet({ bodyFigure: null, muscleMap: OFF });
-    expect(screen.queryByText('Which body should the muscle diagram show?')).toBeNull();
+    expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Body diagram' })).toBeNull();
   });
 
   // Only the owner can turn it on, so anyone else is told who can.
