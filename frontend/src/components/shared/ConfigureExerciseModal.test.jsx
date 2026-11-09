@@ -46,9 +46,9 @@ describe('ConfigureExerciseModal muscles', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
-    expect(screen.getByRole('button', { name: 'Biceps: main' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Biceps: primary' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Forearms: not worked' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Forearms: main' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forearms: primary' }));
     fireEvent.click(screen.getByRole('button', { name: 'Update muscles' }));
 
     await waitFor(() => expect(updateExerciseMuscles).toHaveBeenCalledWith(9, { primary: ['biceps'], secondary: ['forearms'] }));

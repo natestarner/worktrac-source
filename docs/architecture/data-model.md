@@ -131,11 +131,17 @@ in-app how-to videos, which share the same entry point and the same library-cura
   22 muscles as one flat wall of chips read as noise, and most exercises use 2-4 of them. Five
   rows (`utils/muscles.js#MUSCLE_GROUPS`, client-only: the server has no groups) start closed and
   each names what is picked in it, so a suggestion or a saved set reads without opening anything.
-  A tap still cycles main -> helping -> cleared. `muscles.test.js` fails if a muscle is in no group
-  or two, since an ungrouped muscle could never be picked. The chips wear the body diagram's
-  colour: main is solid `--color-muscle`, helping is that colour at `--muscle-helping-opacity`, the
+  A tap still cycles primary -> secondary -> cleared. `muscles.test.js` fails if a muscle is in no
+  group or two, since an ungrouped muscle could never be picked. The chips wear the body diagram's
+  colour: primary is solid `--color-muscle`, secondary is that colour at `--muscle-helping-opacity`, the
   same token the About sheet's key reads, so a muscle tapped here looks the same in the About sheet
   afterwards (it was the one place muscles still showed in the orange accent).
+- **The app says "primary" and "secondary"** (2026-11-08), matching the data model's own
+  `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first, and so did the CSV
+  columns (now `Primary Muscles` / `Secondary Muscles`); they were renamed outright, with no
+  fallback for the old names, because nobody had used them yet. The picker's hint is one fixed line
+  ("Tap once for primary, twice for secondary."), not a running commentary on the
+  last tap: the chips' colours already show that, and the line must not wrap at 375pt.
 - **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.
   Same "who may" as rename (the creator or the owner; `EDIT_OWN_SHARED_RESOURCE` + the service
   check, pinned in `MemberPermissionsTest` and verified red), but without rename's "nobody else is

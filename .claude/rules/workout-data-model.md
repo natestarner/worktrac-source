@@ -105,8 +105,8 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
   not refused — `ExerciseMuscleWriter` normalises, it never validates.
 - **A create writes muscles only on the insert branch.** Like the creator stamp: a replay or a
   duplicate-name match returns the existing row untouched.
-- **CSV import writes muscles only onto an exercise it CREATES** (`Main Muscles` / `Helping
-  Muscles`, by name or code), the insert-branch rule again. An existing exercise, library or
+- **CSV import writes muscles only onto an exercise it CREATES** (`Primary Muscles` /
+  `Secondary Muscles`, by name or code), the insert-branch rule again. An existing exercise, library or
   household, keeps what it has. Export writes every exercise's, by name, as the last two columns.
   `docs/architecture/import-export.md`, "Muscles travel with an exercise the import creates".
 - **`PUT /{id}/muscles` is rename's "who may" without rename's 409.** The annotation admits every

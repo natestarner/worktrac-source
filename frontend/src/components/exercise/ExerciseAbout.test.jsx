@@ -88,10 +88,10 @@ describe('ExerciseAboutSheet', () => {
   });
 
   // Colour is never the only carrier: every muscle is also named, under its role.
-  it('lists main and helping muscles in words', () => {
+  it('lists primary and secondary muscles in words', () => {
     renderSheet({ bodyFigure: 'male' });
-    expect(screen.getByText('Main muscles')).toBeTruthy();
-    expect(screen.getByText('Helping muscles')).toBeTruthy();
+    expect(screen.getByText('Primary muscles')).toBeTruthy();
+    expect(screen.getByText('Secondary muscles')).toBeTruthy();
     expect(screen.getByText('Shoulders')).toBeTruthy();
     expect(screen.getByText('Triceps')).toBeTruthy();
   });
@@ -130,7 +130,7 @@ describe('ExerciseAboutSheet', () => {
       'The muscle highlighter is off by default. To turn it on, visit the Settings page.',
     );
     expect(screen.getByRole('link', { name: 'Settings page' })).toHaveAttribute('href', '/app/settings');
-    expect(screen.getByText('Main muscles')).toBeTruthy();
+    expect(screen.getByText('Primary muscles')).toBeTruthy();
     expect(screen.getByText('Triceps')).toBeTruthy();
   });
 

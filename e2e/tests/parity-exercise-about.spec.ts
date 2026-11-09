@@ -60,7 +60,7 @@ forEachConnectivityMode<void>('the About sheet shows the muscles worked on the c
     const sheet = page.getByRole('dialog', { name: EXERCISE });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Show a female body' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(sheet.getByText('Main muscles')).toBeVisible();
+    await expect(sheet.getByText('Primary muscles')).toBeVisible();
     await expect(sheet.getByText('Chest', { exact: true })).toBeVisible();
     await expect(sheet.getByText('Triceps', { exact: true })).toBeVisible();
 

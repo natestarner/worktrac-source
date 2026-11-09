@@ -421,13 +421,13 @@ describe('AddEditExerciseModal', () => {
       expect(await screen.findByText('Suggested from Barbell Back Squat. Open a body area to change it.')).toBeInTheDocument();
       // Folded away, but the Legs row already says what the suggestion picked.
       expect(screen.getByRole('button', { name: 'Legs' })).toHaveAccessibleDescription(
-        'Main: Glutes, Quads. Helping: Hamstrings.',
+        'Primary: Glutes, Quads. Secondary: Hamstrings.',
       );
       fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
-      expect(screen.getByRole('button', { name: 'Quads: main' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Quads: primary' })).toBeInTheDocument();
 
-      // Taking hamstrings off: helping -> not worked. Once touched, the choice is theirs.
-      fireEvent.click(screen.getByRole('button', { name: 'Hamstrings: helping' }));
+      // Taking hamstrings off: secondary -> not worked. Once touched, the choice is theirs.
+      fireEvent.click(screen.getByRole('button', { name: 'Hamstrings: secondary' }));
       expect(screen.queryByText(/Suggested from/)).toBeNull();
       fireEvent.click(lastAddButton());
 
@@ -441,13 +441,13 @@ describe('AddEditExerciseModal', () => {
       );
     });
 
-    it('cycles a chip through main, helping and back to not worked', () => {
+    it('cycles a chip through primary, secondary and back to not worked', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Mystery Move' } });
       fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: not worked' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Chest: main' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Chest: helping' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: primary' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: secondary' }));
       expect(screen.getByRole('button', { name: 'Chest: not worked' })).toBeInTheDocument();
     });
   });

@@ -2002,13 +2002,13 @@ input[type='search']::-webkit-search-results-decoration {
   text-underline-offset: 2px;
 }
 
-/* MusclePicker: body-area rows, each opening onto a chip per muscle that cycles not worked -> main ->
-   helping. The chips wear the body diagram's colour, so what is tapped here is what the About sheet
-   draws: main solid, helping at the key's strength. Main is also bold on a dark fill, so the state
-   reads without relying on hue alone. */
+/* MusclePicker: body-area rows, each opening onto a chip per muscle that cycles not worked -> primary
+   -> secondary. The chips wear the body diagram's colour, so what is tapped here is what the About
+   sheet draws: primary solid, secondary at the key's strength. Primary is also bold on a dark fill,
+   so the state reads without relying on hue alone. */
 .muscle-picker-key {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-5);
   margin: 0 0 var(--space-1);
   color: var(--color-muted);
   font-size: var(--text-xs);
@@ -2017,13 +2017,18 @@ input[type='search']::-webkit-search-results-decoration {
 .muscle-picker-key > span {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
+/* Fixed copy that fits one line at 375pt; if a larger text setting ever pushes it over, it ends in
+   an ellipsis rather than growing the dialog by a line. */
 .muscle-picker-hint {
   margin: 0 0 var(--space-2);
+  overflow: hidden;
   color: var(--color-muted);
   font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .muscle-group + .muscle-group {
@@ -2049,7 +2054,7 @@ input[type='search']::-webkit-search-results-decoration {
   flex-shrink: 0;
 }
 
-/* What is picked in the row, main first and bold. Truncates rather than wrapping the row. */
+/* What is picked in the row, primary first and bold. Truncates rather than wrapping the row. */
 .muscle-group-summary {
   flex: 1;
   min-width: 0;

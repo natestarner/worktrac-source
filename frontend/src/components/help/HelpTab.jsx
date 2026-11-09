@@ -811,9 +811,9 @@ export default function HelpTab() {
         </p>
         <p>
           The little figure in a circle at the start of that row is about the muscles the exercise
-          works. Tap it to see every one named: the main muscles and the helping ones. With the
-          muscle highlighter on, they are also drawn on a body, front and back: the main muscles in
-          solid red, the helping ones lighter. The first time, it asks whether to draw a male or
+          works. Tap it to see every one named: the primary muscles and the secondary ones. With the
+          muscle highlighter on, they are also drawn on a body, front and back: the primary muscles
+          in solid red, the secondary ones lighter. The first time, it asks whether to draw a male or
           female body, and you can switch whenever you like. That choice is per person and is saved
           on this device. All of this works offline.
         </p>
@@ -836,8 +836,8 @@ export default function HelpTab() {
         </p>
         <p>
           When you add your own exercise you can pick its muscles too. They are grouped by body area;
-          open one and tap a muscle once for a main one (dark red), twice for a helper (lighter red),
-          and a third time to clear it. Huddle suggests a starting point from the closest exercise in
+          open one and tap a muscle once to make it primary (dark red), again for secondary (lighter
+          red), and a third time to clear it. Huddle suggests a starting point from the closest exercise in
           its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
           connection, and only whoever added the exercise or the account owner can. Closing that
           window saves a change you made there.
@@ -1253,8 +1253,8 @@ export default function HelpTab() {
           matched by name, so their order in the file doesn&rsquo;t matter.
         </p>
         <p>
-          An export lists each exercise&rsquo;s muscles in <strong>Main Muscles</strong> and{' '}
-          <strong>Helping Muscles</strong>. Importing uses them only for an exercise the file adds, so
+          An export lists each exercise&rsquo;s muscles in <strong>Primary Muscles</strong> and{' '}
+          <strong>Secondary Muscles</strong>. Importing uses them only for an exercise the file adds, so
           your own exercises keep their muscles when they move to another household. An exercise you
           already have keeps the muscles it has.
         </p>

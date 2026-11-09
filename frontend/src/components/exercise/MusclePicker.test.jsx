@@ -31,30 +31,31 @@ describe('MusclePicker', () => {
     expect(screen.queryByRole('button', { name: /: not worked$/ })).toBeNull();
   });
 
-  it('cycles a muscle main -> helping -> cleared, and the hint says what each tap did', () => {
+  it('cycles a muscle primary -> secondary -> cleared under a hint that never changes', () => {
     render(<Harness />);
-    expect(screen.getByText('Tap once for main, twice for helping, three times to clear.')).toBeInTheDocument();
+    const hint = 'Tap once for primary, twice for secondary.';
+    expect(screen.getByText(hint)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Quads: not worked' }));
-    expect(screen.getByRole('button', { name: 'Quads: main' })).toHaveClass('muscle-chip--primary');
-    expect(screen.getByText('Quads is a main muscle. Tap it again to make it helping.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quads: primary' })).toHaveClass('muscle-chip--primary');
+    expect(screen.getByText(hint)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quads: main' }));
-    expect(screen.getByRole('button', { name: 'Quads: helping' })).toHaveClass('muscle-chip--secondary');
-    expect(screen.getByText('Quads is helping. Tap it again to clear it.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Quads: primary' }));
+    expect(screen.getByRole('button', { name: 'Quads: secondary' })).toHaveClass('muscle-chip--secondary');
+    expect(screen.getByText(hint)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quads: helping' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quads: secondary' }));
     expect(screen.getByRole('button', { name: 'Quads: not worked' })).toHaveClass('muscle-chip--off');
-    expect(screen.getByText('Quads cleared.')).toBeInTheDocument();
+    expect(screen.getByText(hint)).toBeInTheDocument();
   });
 
-  it('names what is picked on each closed row, main first, and says nothing on an empty one', () => {
+  it('names what is picked on each closed row, primary first, and says nothing on an empty one', () => {
     render(<Harness initial={{ primary: ['glutes', 'quads'], secondary: ['hamstrings', 'abs'] }} />);
     expect(screen.getByRole('button', { name: 'Legs' })).toHaveAccessibleDescription(
-      'Main: Glutes, Quads. Helping: Hamstrings.',
+      'Primary: Glutes, Quads. Secondary: Hamstrings.',
     );
-    expect(screen.getByRole('button', { name: 'Core' })).toHaveAccessibleDescription('Helping: Abs.');
+    expect(screen.getByRole('button', { name: 'Core' })).toHaveAccessibleDescription('Secondary: Abs.');
     expect(screen.getByRole('button', { name: 'Chest and arms' })).toHaveAccessibleDescription('');
   });
 
@@ -82,9 +83,9 @@ describe('MusclePicker', () => {
   it('can still be opened to read when disabled, but no muscle changes', () => {
     render(<Harness initial={{ primary: ['biceps'], secondary: [] }} disabled />);
     fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
-    const biceps = screen.getByRole('button', { name: 'Biceps: main' });
+    const biceps = screen.getByRole('button', { name: 'Biceps: primary' });
     expect(biceps).toBeDisabled();
     fireEvent.click(biceps);
-    expect(screen.getByRole('button', { name: 'Biceps: main' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Biceps: primary' })).toBeInTheDocument();
   });
 });

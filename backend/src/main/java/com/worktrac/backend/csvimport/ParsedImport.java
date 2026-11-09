@@ -39,8 +39,8 @@ public record ParsedImport(
             List<String> tags,
             String sessionNote,
             // Muscle names or codes as the file wrote them; empty when the file has none.
-            List<String> mainMuscles,
-            List<String> helpingMuscles) {
+            List<String> primaryMuscles,
+            List<String> secondaryMuscles) {
 
         public boolean isHold() {
             return durationSeconds != null;

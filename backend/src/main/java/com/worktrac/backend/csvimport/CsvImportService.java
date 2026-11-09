@@ -322,7 +322,7 @@ public class CsvImportService {
                     return made;
                 });
                 if (created.contains(exercise.getId()) && !createdMuscles.containsKey(exercise.getId())
-                        && !(row.mainMuscles().isEmpty() && row.helpingMuscles().isEmpty())) {
+                        && !(row.primaryMuscles().isEmpty() && row.secondaryMuscles().isEmpty())) {
                     createdMuscles.put(exercise.getId(), row);
                 }
 
@@ -361,8 +361,8 @@ public class CsvImportService {
         if (!createdMuscles.isEmpty()) {
             Map<String, String> vocabulary = muscleNames.namesByCode();
             createdMuscles.forEach((exerciseId, row) -> exerciseMuscleWriter.replace(exerciseId,
-                    muscleNames.toCodes(row.mainMuscles(), vocabulary),
-                    muscleNames.toCodes(row.helpingMuscles(), vocabulary)));
+                    muscleNames.toCodes(row.primaryMuscles(), vocabulary),
+                    muscleNames.toCodes(row.secondaryMuscles(), vocabulary)));
         }
 
         Written written = new Written();
