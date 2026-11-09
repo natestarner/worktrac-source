@@ -1767,7 +1767,6 @@ input[type='search']::-webkit-search-results-decoration {
   margin-top: var(--space-3);
 }
 
-.exercise-about-ask,
 .exercise-about-empty {
   margin: 0;
   color: var(--color-muted);

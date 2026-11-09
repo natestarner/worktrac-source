@@ -813,8 +813,8 @@ export default function HelpTab() {
           The little figure in a circle at the start of that row is about the muscles the exercise
           works. Tap it to see every one named: the primary muscles and the secondary ones. With the
           muscle highlighter on, they are also drawn on a body, front and back: the primary muscles
-          in solid red, the secondary ones lighter. The first time, it asks whether to draw a male or
-          female body, and you can switch whenever you like. That choice is per person and is saved
+          in solid red, the secondary ones lighter. It draws a male body until you switch to female
+          with the buttons under it. That choice is per person, holds for every exercise, and is saved
           on this device. All of this works offline.
         </p>
         <p>

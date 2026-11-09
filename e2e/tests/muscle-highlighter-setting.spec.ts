@@ -85,10 +85,11 @@ test('the owner turns the muscle highlighter on from the note, and the bodies ap
   await expect(card.getByRole('img', { name: 'Front of the body, shaded by sets per muscle' })).toBeVisible();
   await expect(card.getByTestId('muscle-map-off')).toHaveCount(0);
 
-  // And on Log: the About sheet now asks which body to draw.
+  // And on Log: the About sheet now draws the body (male, since none has been chosen).
   await page.getByRole('link', { name: 'Log', exact: true }).click();
   await openAbout(page);
-  await expect(page.getByText('Which body should the muscle diagram show?')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: EXERCISE }).getByRole('img', { name: 'Front of the body' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show a male body' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Close' }).click();
 
   // It is the account's setting, kept on the server: still on after a reload.
