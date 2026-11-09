@@ -73,7 +73,7 @@ describe('the video in the strip and the sheet', () => {
     render(<ExerciseVideoSheet exerciseName="Barbell Bench Press" video={VIDEO} onClose={vi.fn()} />);
     const sheet = screen.getByRole('dialog', { name: 'Barbell Bench Press' });
     expect(within(sheet).getByRole('region', { name: 'How-to video' })).toBeTruthy();
-    expect(within(sheet).queryByText('Main muscles')).toBeNull();
+    expect(within(sheet).queryByText('Primary muscles')).toBeNull();
     expect(within(sheet).queryByRole('group', { name: 'Body diagram' })).toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe('the video in the strip and the sheet', () => {
       />,
     );
     const sheet = screen.getByRole('dialog', { name: 'Barbell Bench Press' });
-    expect(within(sheet).getByText('Main muscles')).toBeTruthy();
+    expect(within(sheet).getByText('Primary muscles')).toBeTruthy();
     expect(within(sheet).queryByRole('region', { name: 'How-to video' })).toBeNull();
   });
 

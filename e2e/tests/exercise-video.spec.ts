@@ -65,7 +65,7 @@ forEachConnectivityMode<void>('a library exercise’s how-to video opens from th
     const video = sheet.getByRole('region', { name: 'How-to video' });
     await expect(video).toBeInViewport();
     await expect(sheet.getByRole('group', { name: 'Body diagram' })).toHaveCount(0);
-    await expect(sheet.getByText('Main muscles')).toHaveCount(0);
+    await expect(sheet.getByText('Primary muscles')).toHaveCount(0);
     await expect(video.getByText('Video: Muscle & Strength on YouTube.')).toBeVisible();
     await expect(video.getByRole('link', { name: 'Open on YouTube' })).toHaveAttribute(
       'href',
@@ -120,7 +120,7 @@ test.describe('the how-to video', () => {
     await page.getByRole('button', { name: /^About this exercise/ }).click();
     const sheet = page.getByRole('dialog', { name: EXERCISE });
     // The muscle list, not the body switch: the drawings are off by default (V102), the names never.
-    await expect(sheet.getByText('Main muscles')).toBeVisible();
+    await expect(sheet.getByText('Primary muscles')).toBeVisible();
     await expect(sheet.getByRole('region', { name: 'How-to video' })).toHaveCount(0);
   });
 

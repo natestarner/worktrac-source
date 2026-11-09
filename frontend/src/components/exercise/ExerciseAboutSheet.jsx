@@ -114,8 +114,8 @@ export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChoo
             </>
           )}
           <div className="exercise-about-lists">
-            <MuscleList title="Main muscles" codes={muscles.primary} tone="primary" />
-            <MuscleList title="Helping muscles" codes={muscles.secondary} tone="secondary" />
+            <MuscleList title="Primary muscles" codes={muscles.primary} tone="primary" />
+            <MuscleList title="Secondary muscles" codes={muscles.secondary} tone="secondary" />
           </div>
         </>
       )}

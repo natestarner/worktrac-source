@@ -7,29 +7,25 @@ import { IconChevronDown } from '../shared/icons';
 //
 // The 22 muscles are folded into a few body-area rows (MUSCLE_GROUPS), all closed at first; each row
 // names what is already picked in it, so a suggestion or a saved set reads without opening anything.
-// Inside a row, a tap moves a chip through not worked -> main -> helping -> not worked.
+// Inside a row, a tap moves a chip through not worked -> primary -> secondary -> not worked.
 //
-// Colours are the body diagram's own (--color-muscle): main is solid, helping is that colour at the
-// About sheet key's strength, so a muscle tapped here looks the same in the About sheet afterwards.
+// Colours are the body diagram's own (--color-muscle): primary is solid, secondary is that colour at
+// the About sheet key's strength, so a muscle tapped here looks the same in the About sheet afterwards.
 // The key above the rows is that sheet's swatches. Not colour alone: each chip's accessible name says
-// its state ("Chest: main"), main is bold on a dark fill, and the hint says what the last tap did.
+// its state ("Chest: primary") and primary is bold on a dark fill. The hint under the key is fixed:
+// it says how tapping works once, and the chips themselves show what each tap did.
 //
 // Controlled: `value` is { primary, secondary } (codes), `onChange` gets the next one. Which rows are
 // open is plain local state: it lives only as long as the dialog and belongs to nobody's data.
 const NEXT = { off: 'primary', primary: 'secondary', secondary: 'off' };
-const STATE_WORD = { off: 'not worked', primary: 'main', secondary: 'helping' };
-const FIRST_HINT = 'Tap once for main, twice for helping, three times to clear.';
-
-function hintFor(code, state) {
-  const name = muscleName(code);
-  if (state === 'primary') return `${name} is a main muscle. Tap it again to make it helping.`;
-  if (state === 'secondary') return `${name} is helping. Tap it again to clear it.`;
-  return `${name} cleared.`;
-}
+const STATE_WORD = { off: 'not worked', primary: 'primary', secondary: 'secondary' };
+// Short enough for one line on a 375pt-wide iPhone held upright (212px of 278px at --text-xs,
+// measured in Chrome's system font; SF Pro runs a few percent wider). Its CSS never wraps it; past the edge it ends in an ellipsis instead. Not an e2e:
+// the app uses the system font, so a fit measured on a Linux runner says nothing about an iPhone.
+export const PICKER_HINT = 'Tap once for primary, twice for secondary.';
 
 export default function MusclePicker({ value, onChange, disabled = false }) {
   const [open, setOpen] = useState(() => new Set());
-  const [hint, setHint] = useState(FIRST_HINT);
   const idBase = useId();
 
   const stateOf = (code) =>
@@ -44,7 +40,6 @@ export default function MusclePicker({ value, onChange, disabled = false }) {
     // Keep vocabulary order, so what is saved reads the same as what the server sends back.
     const order = (codes) => MUSCLES.map((m) => m.code).filter((c) => codes.includes(c));
     onChange({ primary: order(primary), secondary: order(secondary) });
-    setHint(hintFor(code, next));
   }
 
   function toggle(name) {
@@ -61,27 +56,25 @@ export default function MusclePicker({ value, onChange, disabled = false }) {
       <div className="muscle-picker-key" aria-hidden="true">
         <span>
           <span className="exercise-about-swatch" />
-          Main
+          Primary
         </span>
         <span>
           <span className="exercise-about-swatch exercise-about-swatch--secondary" />
-          Helping
+          Secondary
         </span>
       </div>
-      <p className="muscle-picker-hint" aria-live="polite">
-        {hint}
-      </p>
+      <p className="muscle-picker-hint">{PICKER_HINT}</p>
       <div className="muscle-picker-groups" role="group" aria-label="Muscles worked">
         {MUSCLE_GROUPS.map((group, i) => {
           const isOpen = open.has(group.name);
-          const main = group.codes.filter((c) => stateOf(c) === 'primary').map(muscleName);
-          const helping = group.codes.filter((c) => stateOf(c) === 'secondary').map(muscleName);
+          const primary = group.codes.filter((c) => stateOf(c) === 'primary').map(muscleName);
+          const secondary = group.codes.filter((c) => stateOf(c) === 'secondary').map(muscleName);
           const chipsId = `${idBase}-chips-${i}`;
           const summaryId = `${idBase}-summary-${i}`;
           // Spoken as the row's description, so its name stays just the body area.
           const spoken = [
-            main.length ? `Main: ${main.join(', ')}.` : '',
-            helping.length ? `Helping: ${helping.join(', ')}.` : '',
+            primary.length ? `Primary: ${primary.join(', ')}.` : '',
+            secondary.length ? `Secondary: ${secondary.join(', ')}.` : '',
           ]
             .filter(Boolean)
             .join(' ');
@@ -97,9 +90,9 @@ export default function MusclePicker({ value, onChange, disabled = false }) {
               >
                 <span className="muscle-group-name">{group.name}</span>
                 <span className="muscle-group-summary" aria-hidden="true">
-                  {main.length > 0 && <strong>{main.join(', ')}</strong>}
-                  {main.length > 0 && helping.length > 0 && ' · '}
-                  {helping.length > 0 && helping.join(', ')}
+                  {primary.length > 0 && <strong>{primary.join(', ')}</strong>}
+                  {primary.length > 0 && secondary.length > 0 && ' · '}
+                  {secondary.length > 0 && secondary.join(', ')}
                 </span>
                 <IconChevronDown
                   size={16}

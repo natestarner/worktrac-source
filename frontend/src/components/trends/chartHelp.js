@@ -40,7 +40,7 @@ export const MUSCLE_MAP_HELP = {
   label: 'What the muscle map counts',
   title: 'Muscles worked',
   lines: [
-    'Every set you logged in the range, added up by muscle. A set counts as one set for each muscle the exercise mainly works, and half a set for each muscle that helps.',
+    'Every set you logged in the range, added up by muscle. A set counts as one set for each of the exercise’s primary muscles, and half a set for each secondary muscle.',
     'The darker the muscle, the more sets it got, compared with your most-worked muscle in the same range. The range buttons at the top of the tab change it.',
     'Running, rowing and other conditioning count as sets of their own, not toward any muscle. An exercise with no muscles listed is not counted; add its muscles from Customize on the exercise.',
   ],

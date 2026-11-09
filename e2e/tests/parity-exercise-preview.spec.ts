@@ -21,7 +21,7 @@ function previewButtonFor(page: Page, name: string) {
 }
 
 async function expectBenchMuscles(scope: ReturnType<Page['getByRole']>) {
-  await expect(scope.getByText('Main muscles')).toBeVisible();
+  await expect(scope.getByText('Primary muscles')).toBeVisible();
   await expect(scope.getByText('Chest', { exact: true })).toBeVisible();
   await expect(scope.getByText('Triceps', { exact: true })).toBeVisible();
 }
