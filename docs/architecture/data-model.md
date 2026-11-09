@@ -137,9 +137,9 @@ in-app how-to videos, which share the same entry point and the same library-cura
   same token the About sheet's key reads, so a muscle tapped here looks the same in the About sheet
   afterwards (it was the one place muscles still showed in the orange accent).
 - **The app says "primary" and "secondary"** (2026-11-08), matching the data model's own
-  `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first. The CSV columns are
-  still `Main Muscles` / `Helping Muscles`: renaming them would stop an older export importing its
-  muscles, so that needs the parser to accept both names first. The picker's hint is one fixed line
+  `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first, and so did the CSV
+  columns (now `Primary Muscles` / `Secondary Muscles`); they were renamed outright, with no
+  fallback for the old names, because nobody had used them yet. The picker's hint is one fixed line
   ("Tap once for primary, twice for secondary."), not a running commentary on the
   last tap: the chips' colours already show that, and the line must not wrap at 375pt.
 - **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.

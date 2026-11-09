@@ -624,7 +624,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
         logLiveSet(bench, 135, 8);
 
         String source = exportCsv(personId);
-        assertTrue(source.contains("Main Muscles,Helping Muscles"), "the two columns are in the header");
+        assertTrue(source.contains("Primary Muscles,Secondary Muscles"), "the two columns are in the header");
         assertTrue(source.contains(",Shoulders; Chest,Triceps"),
                 "a custom exercise exports its muscles by name, in the vocabulary's order: " + source);
         assertTrue(source.contains(",Chest,Shoulders; Triceps"), "so does a library one: " + source);
@@ -659,7 +659,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
     @Test
     void anExistingExerciseKeepsItsOwnMuscles() throws Exception {
         createExercise("Landmine Press");
-        String csv = "Date,Exercise,Reps,Main Muscles,Helping Muscles\n"
+        String csv = "Date,Exercise,Reps,Primary Muscles,Secondary Muscles\n"
                 + "2026-06-01,Landmine Press,10,Quads,Calves\n"
                 + "2026-06-01,Barbell Bench Press,8,Quads,Calves\n";
 
@@ -677,7 +677,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
     // never a reason to refuse the row -- the set is what the row is for.
     @Test
     void musclesAreReadByNameOrCodeAndUnknownWordsAreDropped() throws Exception {
-        String csv = "Date,Exercise,Reps,Main Muscles,Helping Muscles\n"
+        String csv = "Date,Exercise,Reps,Primary Muscles,Secondary Muscles\n"
                 + "2026-06-01,Prowler Drive,12,quads; GLUTES; Wings,Calves; Quads\n"
                 + "2026-06-01,Prowler Drive,12,,\n";
 

@@ -1253,8 +1253,8 @@ export default function HelpTab() {
           matched by name, so their order in the file doesn&rsquo;t matter.
         </p>
         <p>
-          An export lists each exercise&rsquo;s muscles in <strong>Main Muscles</strong> and{' '}
-          <strong>Helping Muscles</strong>. Importing uses them only for an exercise the file adds, so
+          An export lists each exercise&rsquo;s muscles in <strong>Primary Muscles</strong> and{' '}
+          <strong>Secondary Muscles</strong>. Importing uses them only for an exercise the file adds, so
           your own exercises keep their muscles when they move to another household. An exercise you
           already have keeps the muscles it has.
         </p>

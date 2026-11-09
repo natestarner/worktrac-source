@@ -149,7 +149,7 @@ test.describe('CSV import', () => {
     await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
   });
 
-  // An exercise the file adds arrives described: its muscles come from the Main/Helping Muscles
+  // An exercise the file adds arrives described: its muscles come from the Primary/Secondary Muscles
   // columns an export writes, so a household's own exercise keeps them when it moves.
   test('an exercise the file adds keeps the muscles the file gives it', async ({ page, request }) => {
     await registerAsPro(page, request, 'Casey');
@@ -158,7 +158,7 @@ test.describe('CSV import', () => {
     await chooseCsv(
       page,
       'muscles.csv',
-      ['Exercise,Date,Reps,Main Muscles,Helping Muscles', 'Prowler Drive,2026-08-20,12,Quads; Glutes,Calves'].join('\n'),
+      ['Exercise,Date,Reps,Primary Muscles,Secondary Muscles', 'Prowler Drive,2026-08-20,12,Quads; Glutes,Calves'].join('\n'),
     );
     await page.getByRole('button', { name: /^Import 1 set into Casey/ }).click();
     await expect(page.getByText('Import complete')).toBeVisible();

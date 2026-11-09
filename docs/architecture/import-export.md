@@ -76,7 +76,7 @@ a spreadsheet they kept by hand rather than only a file this app produced.
 | `Set #` | Advisory only; order comes from the timestamp |
 | `Rest (sec)` | `null`, as for any set not logged live |
 | `Session Note`, `Exercise Note`, `Favorite`, `Tags` | Nothing written |
-| `Main Muscles`, `Helping Muscles` | Nothing written (see below) |
+| `Primary Muscles`, `Secondary Muscles` | Nothing written (see below) |
 
 ### Muscles travel with an exercise the import creates, and only then
 
@@ -96,7 +96,7 @@ lost, and the round trip into a NEW account stopped being byte-identical
   is not that person. Same "never overwrite" stance as the personalization columns.
 - **Names or codes, any case** (`MuscleNames#toCodes`). A word that is no muscle is dropped and
   never rejects the row: the set is what the row is for. `ExerciseMuscleWriter` then normalises as it
-  does for every create (a muscle named as both main and helping stays main).
+  does for every create (a muscle named as both primary and secondary stays primary).
 - Undo does not delete exercises an import created (above), so it leaves their muscles too.
 
 **Read but never imported:** `Custom Fields` (out of scope) and `Est. 1RM` (derived — recomputed on

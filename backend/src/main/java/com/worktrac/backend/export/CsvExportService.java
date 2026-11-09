@@ -98,7 +98,7 @@ public class CsvExportService {
         // through the retroactive "past workout" editor.
         rows.add(List.of("Date", "Time", "Session Start", "Session Type", "Exercise", "Tags", "Favorite",
                 "Custom Fields", "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps",
-                "Duration (sec)", "Rest (sec)", "Est. 1RM", "Main Muscles", "Helping Muscles"));
+                "Duration (sec)", "Rest (sec)", "Est. 1RM", "Primary Muscles", "Secondary Muscles"));
 
         // The exercise's muscles, by name, on every row of it -- like Tags. Last, so a spreadsheet
         // someone built against the older columns by position keeps lining up. Every exercise's,
