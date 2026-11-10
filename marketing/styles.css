@@ -394,6 +394,12 @@ img {
   margin-bottom: 0;
 }
 
+/* A second heading further down the same section (index.html's "Muscles & how-to", under the
+   Trends charts): the space above it separates it from the figures it follows. */
+.section__head--follow {
+  margin-top: clamp(56px, 7vw, 96px);
+}
+
 .prose {
   font-size: clamp(17px, 1.4vw, 18px);
   line-height: 1.6;

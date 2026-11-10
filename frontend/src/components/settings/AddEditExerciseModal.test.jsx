@@ -418,7 +418,11 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Zercher Squat' } });
-      expect(await screen.findByText('Suggested from Barbell Back Squat. Open a body area to change it.')).toBeInTheDocument();
+      const suggestion = await screen.findByText('Suggested from Barbell Back Squat. Open a body area to change it.');
+      // It carries an exercise name of any length, so it must wrap: the fixed hint's class is
+      // one-line-and-ellipsis, and wearing it cut this line off on every iPhone (2026-11-09).
+      expect(suggestion).toHaveClass('muscle-picker-suggestion');
+      expect(suggestion).not.toHaveClass('muscle-picker-hint');
       // Folded away, but the Legs row already says what the suggestion picked.
       expect(screen.getByRole('button', { name: 'Legs' })).toHaveAccessibleDescription(
         'Primary: Glutes, Quads. Secondary: Hamstrings.',

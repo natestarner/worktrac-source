@@ -47,9 +47,20 @@ lean on what people search for that the name doesn't say.
 > A "rest's up" notification when your phone is locked between sets, the screen kept awake during a
 > workout, haptics when you hit a PR, and your data exported through the share sheet.
 >
+> KNOW WHAT EVERY LIFT WORKS
+> Tap the figure beside any exercise to see the muscles it works, and watch a how-to video where
+> there is one. Search the library of 200+ exercises by name or by muscle, and preview one before
+> you add it. Turn on the muscle highlighter and Trends shades the muscles your training has hit.
+>
 > FREE FOR THE WHOLE FAMILY
 > Everybody in the house gets their own log at no cost, with no ads. Huddle Plus adds your lifetime
 > history, all-time records, importing past workouts, and personal logins for anyone who wants one.
+
+### What's New (the version with the About layer, 2026-11)
+
+> Every exercise now shows the muscles it works, and many have a how-to video. Search the library
+> by muscle, preview an exercise before adding it, and choose from 200+ exercises. Turn on the
+> muscle highlighter in Settings to see the muscles your training has hit on Trends.
 
 Before using this, confirm the description matches whatever the app actually offers at
 submission: the "rest's up" notification, keep-awake and haptics are app-only features, and Plus
@@ -162,6 +173,14 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
   the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
 - **Store order is the file number.** Only the first two or three show in search results: logging,
   the PR celebration, then the strength chart.
+- **`08-muscles`** (added 2026-11-09) is Sam's Trends "Muscles worked" card. It draws bodies only
+  while the account's muscle highlighter is on (Settings → App settings; on for both demo accounts
+  since 2026-11-09), and Sam's body choice is made by the script in its own browser, since that
+  choice is device-local and never reaches the account.
+- **Capture from the screenshot account, refreshed first** (see "Two accounts" above, once
+  natestarner/worktrac-source#521 is in). The reviewer account's training ends on 2026-10-26, so a
+  capture from it shows empty weeks at the right of every chart. The iPhone Trends shot starts at
+  Consistency either way, so it never opens on the Volume card's month-on-month change.
 - **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
   progress · started 6:12 AM" reads like a gym; "10:44 PM" does not).
 - The window a Free account shows moves forward every day. By mid-November the July vacation and

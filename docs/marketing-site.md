@@ -246,6 +246,10 @@ What each scene does:
   to; pointed at the reviewer's login it still would, so never run it there while a submission is
   in review (`SCENES=trends,offline,og` writes nothing).
 - **`trends`** captures Sam's squat chart and weekly workouts, card by card.
+- **`muscles`** (2026-11-10) captures Sam's "Muscles worked" card for the homepage's "Muscles &
+  how-to" block: the whole card wide, and at phone width down to the fifth muscle. Bodies show only
+  while the account's muscle highlighter is on; Sam's female figure is chosen in the capture
+  browser (device-local, writes nothing).
 - **`offline`** logs two sets with the network cut and closes the browser before reconnecting, so
   they only ever exist in that throwaway profile. A whole 6.9" iPhone screen, framed on the page
   like the hero phone (below). Light and dark, since the page swaps them with
