@@ -31,6 +31,7 @@ const CAPTIONS = {
   '05-prs': ['Every best, in one place', 'Recomputed from your actual sets'],
   '06-history': ['Works with no signal', 'Sets save on your phone first, then sync'],
   '07-start-workout': ['The whole family', 'Everyone gets their own log'],
+  '08-muscles': ['Every muscle, counted', 'Sets per muscle, shaded on the body'],
 };
 // Keep every title to one line at 112px (about 24 characters): a two-line title shrinks its
 // screenshot, and the set stops reading as one.

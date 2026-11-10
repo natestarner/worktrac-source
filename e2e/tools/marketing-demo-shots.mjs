@@ -45,6 +45,12 @@ const { EMAIL, PASSWORD } = process.env;
 if (!ASSETS || !EMAIL || !PASSWORD) throw new Error('usage: EMAIL=... PASSWORD=... node tools/marketing-demo-shots.mjs <assetsDir>');
 // SCENES=trends,offline,og re-takes only the scenes that write nothing -- for when the demo account
 // is in use (App Review signs in to it) and logging sets there would show up on their screen.
+// Messaging apps cache a preview by its image URL, and the site serves assets for a week, so a
+// changed image under the same name keeps unfurling as the old one. Give each new image a new name,
+// and point every page's og:image / twitter:image at it.
+// Declared up here, not beside ogImage(): the scenes run from top-level code above that function,
+// so a const declared below them is still uninitialised when the og scene reads it.
+const OG_IMAGE = 'og-image-2026-11.png';
 const SCENES = (process.env.SCENES || 'trends,workout,offline,og').split(',');
 if (SCENES.includes('workout') && process.env.ALLOW_WRITES !== '1') {
   throw new Error('the workout scene logs real sets: set ALLOW_WRITES=1, or leave it out of SCENES');
@@ -331,10 +337,6 @@ async function offline(scheme) {
 // (styles.css .device--phone): warm near-black frame, a status band in the app header's white, and
 // a drawn island -- bare, the capture read as a floating card rather than a phone.
 //
-// Messaging apps cache a preview by its image URL, and the site serves assets for a week, so a
-// changed image under the same name keeps unfurling as the old one. Give each new image a new name,
-// and point every page's og:image / twitter:image at it.
-const OG_IMAGE = 'og-image-2026-10.png';
 async function ogImage() {
   const data = (file, type) => `data:${type};base64,${readFileSync(file).toString('base64')}`;
   const lockup = data(new URL('../../frontend/src/assets/huddle-lockup-horizontal-onlight.svg', import.meta.url), 'image/svg+xml');

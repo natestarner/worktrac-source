@@ -123,6 +123,13 @@ checks that every barbell lift's est.-1RM and top-weight charts finish at their 
   the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
 - **Store order is the file number.** Only the first two or three show in search results: logging,
   the PR celebration, then the strength chart.
+- **`08-muscles`** (added 2026-11-09) is Sam's Trends "Muscles worked" card. It draws bodies only
+  while the account's muscle highlighter is on (Settings → App settings; on for the demo household
+  since 2026-11-09), and Sam's body choice is made by the script in its own browser, since that
+  choice is device-local and never reaches the account.
+- **The seeded weeks age.** The household's training ends on 2026-10-26, so every later capture
+  shows more empty weeks at the right of the weekly chart; the iPhone Trends shot starts at
+  Consistency so it doesn't open on a falling Volume card.
 - **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
   progress · started 6:12 AM" reads like a gym; "10:44 PM" does not).
 - The window a Free account shows moves forward every day. By mid-November the July vacation and
