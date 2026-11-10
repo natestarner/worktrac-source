@@ -267,7 +267,11 @@ What each scene does:
 column left 5px text, and phones are where most visitors arrive from. Each `<source>` declares its
 own `width`/`height`.
 
-Then update each `<img>`'s (and `<source>`'s) `width`/`height` in `index.html` to the new files.
+Then bump the `?v=<yyyymmdd>` cache version on every `/assets/shots/` and `/styles.css` URL, on every
+page: `/assets/*` is served with a week's `max-age`, so a re-take under the same names otherwise
+keeps showing returning visitors the old images for up to a week (`check-marketing.sh` check 15
+requires the version to be there; bumping it is yours). And update each `<img>`'s (and `<source>`'s)
+`width`/`height` in `index.html` to the new files.
 `landing.spec.ts`'s "declared at its real shape" test fails on any image whose declared shape no
 longer matches the file.
 

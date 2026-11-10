@@ -155,6 +155,12 @@ a public page, which is what this replaced on 2026-10-27.
   its `workout` scene would log sets there, and its data ends on 2026-10-26.
 - **Every scene's browser signs in, against a cap of 20 sign-ins per hour per email.** A full run
   is 8. Repeated runs empty that account's bucket until it refills (one every 3 minutes).
+- **After a re-take, bump the `?v=<yyyymmdd>` on every screenshot and `styles.css` URL** (all pages).
+  `/assets/*` is cached for a week and `styles.css` for an hour, so new images under the same file
+  names kept showing the OLD screenshots to anyone who had visited that week (2026-11-10, on an
+  iPhone, right after #522 deployed). `check-marketing.sh` check 15 fails an unversioned reference;
+  it cannot tell a stale version from a fresh one, so the bump is on you. A spec matching an asset
+  URL must allow the query (`(\?|$)`, not `$`), or its "never fetched" check passes vacuously.
 - **After a re-take, update each `<img>`'s `width`/`height`.** `landing.spec.ts` fails any image
   whose declared shape doesn't match its file.
 - **The household clip** comes from `e2e/tools/marketing-demo-clip.mjs`, and it writes too (one

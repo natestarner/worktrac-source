@@ -72,7 +72,7 @@ fi
 
 # --- 2. Local references resolve --------------------------------------------
 # Root-relative refs only (href/src/srcset="/..."); external URLs and in-page
-# anchors are skipped.
+# anchors are skipped. A ?v= query is a cache version (check 15), not part of the file name.
 missing_refs=0
 # EVERY page, not just index.html. A second page would otherwise carry unchecked asset paths that
 # 404 in production -- silently, as a missing stylesheet rather than an error.
@@ -88,7 +88,7 @@ for page in "${PAGES[@]}"; do
       fail "$(basename "$page") references a file that does not exist: $ref"
       missing_refs=$((missing_refs + 1))
     fi
-  done < <(grep -oE '(href|src|srcset)="/[^"#]*"' "$page" | sed -E 's/^(href|src|srcset)="//; s/"$//' | sort -u)
+  done < <(grep -oE '(href|src|srcset)="/[^"#]*"' "$page" | sed -E 's/^(href|src|srcset)="//; s/"$//; s/\?.*$//' | sort -u)
 done
 
 if [ "$missing_refs" -eq 0 ]; then
@@ -259,6 +259,21 @@ for url in $(grep -ohE '__SITE_ORIGIN__/assets/[^"]+' "${PAGES[@]}" | sed -E 's#
   fi
 done
 [ "$missing_abs" -eq 0 ] && pass "every absolute asset URL exists"
+
+# --- 15. Screenshots and the stylesheet carry a cache version ----------------
+# /assets/* is served with a week's max-age and styles.css with an hour's, so a re-take under the
+# same file name kept showing the OLD screenshots to anyone who had visited that week (2026-11-10,
+# on an iPhone, after #522 deployed). Every reference carries ?v=<yyyymmdd>, bumped on every re-take,
+# so new images get a URL no browser has cached.
+unversioned=0
+for page in "${PAGES[@]}"; do
+  while IFS= read -r ref; do
+    [ -z "$ref" ] && continue
+    fail "$(basename "$page") references $ref without a ?v= cache version"
+    unversioned=$((unversioned + 1))
+  done < <(grep -oE '(href|src|srcset|data-src|poster)="/(assets/shots/[^"]+|styles\.css[^"]*)"' "$page" | grep -v '?v=' | sed -E 's/^[a-z-]+="//; s/"$//')
+done
+[ "$unversioned" -eq 0 ] && pass "screenshots and styles.css carry a cache version"
 
 # --- 14. Every placeholder is one the deploy can fill ------------------------
 # Runs the real fill on a throwaway copy, so a misspelt or new placeholder fails here, before merge,
