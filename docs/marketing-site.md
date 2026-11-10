@@ -219,8 +219,11 @@ config/production/marketing-robots.txt   →  User-agent: *
 
 Every product image under `marketing/assets/shots/` (and the link preview, `assets/og-image-<yyyy-mm>.png`)
 is a capture of the app actually running, no mockups. Since 2026-10-27 they all come from one
-script and one household: the reviewer demo household (Alex, Sam and Jordan, written into the
-production account by `e2e/tools/demo-household.mjs`). That is the same household the App Store
+script and one household: the demo household (Alex, Sam and Jordan, written by
+`e2e/tools/demo-household.mjs`). Since 2026-11-09 they are captured from the SCREENSHOT account,
+which holds that household moved forward to end last week, not from the reviewer's, which App
+Review signs in to and whose training ends on 2026-10-26 (`docs/app-store-submission.md`, "Two
+accounts"). Refresh it before a re-take. That is the same household the App Store
 screenshots show, so the site and the listing tell one story, and nobody's real family is on a
 public page. The earlier set mixed a real family's names across screenshots, a deadlift chart that
 dived halfway across, and a household video whose still frame caught the app mid-save; the
@@ -232,16 +235,16 @@ cd e2e
 FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1   node tools/marketing-demo-shots.mjs ../marketing/assets
 ```
 
-The login is the reviewer account's (kept outside the repo; never commit it). What each scene
-does:
+The login is the screenshot account's, `screenshot_demo.txt` beside the repo (never commit it).
+What each scene does:
 
 - **`workout`** starts Alex's Squat Day routine on the tablet (the routine strip fills the
   landscape screen; starting one writes nothing), logs two squat sets for the hero pair and the log
   card (tablet and phone width), and waits out part of the rest timer. It refuses to start if
   Alex already has a workout going, and deletes exactly its own sets and ends the workout after,
-  as `app-store-shots.mjs` does. **It writes to the account App Review signs in to**, so don't run
-  it while a submission is in review: `SCENES=trends,offline,og` re-takes everything else without
-  writing anything.
+  as `app-store-shots.mjs` does. Before 2026-11-09 this wrote to the account App Review signs in
+  to; pointed at the reviewer's login it still would, so never run it there while a submission is
+  in review (`SCENES=trends,offline,og` writes nothing).
 - **`trends`** captures Sam's squat chart and weekly workouts, card by card.
 - **`muscles`** (2026-11-10) captures Sam's "Muscles worked" card for the homepage's "Muscles &
   how-to" block: the whole card wide, and at phone width down to the fifth muscle. Bodies show only
@@ -296,10 +299,10 @@ Things that cost a round trip when they were learned:
   (`login-per-email-per-hour`), refilling one every 3 minutes. A full run signs in 8 times (2 for
   trends, 4 for workout, 2 for offline), so three runs in an hour, or a few runs plus probes, empty
   the bucket: the browser's sign-in then gets a 429 and the script dies on `waitForURL`. That
-  bucket is the demo account's, from anywhere, so **App Review is locked out with you** until it
-  refills. Hit it on 2026-10-28 after a night of re-takes; space runs out and run only the scenes you need.
-- **The demo account is shared with App Review.** Its other people may have a workout going (a
-  green dot on their pill) that the script did not start. Leave it alone: the cleanup only ever
+  bucket is the account's, from anywhere -- which is one reason the captures moved off the
+  reviewer's account, where **App Review was locked out with you** until it refilled. Hit it on 2026-10-28 after a night of re-takes; space runs out and run only the scenes you need.
+- **On the reviewer's account, another person may have a workout going** (a green dot on their
+  pill) that the script did not start: App Review's. Leave it alone: the cleanup only ever
   touches the sets this run logged for Alex.
 - **Free shows 90 days**, so Trends' six-month consistency grid is mostly empty on the demo account.
   That is why the second Trends image is the weekly bars, not the grid.

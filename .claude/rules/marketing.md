@@ -145,16 +145,16 @@ desktop-only check can look "close enough" while a phone-width check is unmistak
 ## Product screenshots: one script, one household
 
 Every image in `marketing/assets/shots/` and the link preview `assets/og-image-<yyyy-mm>.png` (renamed whenever it changes, so caches refetch it) comes from
-`e2e/tools/marketing-demo-shots.mjs`, captured from the reviewer demo household (Alex, Sam,
-Jordan), the same people the App Store screenshots show. **Don't add a capture from anywhere else**
+`e2e/tools/marketing-demo-shots.mjs`, captured from the demo household (Alex, Sam, Jordan) in
+the SCREENSHOT account (`screenshot_demo.txt`; refresh it first with `demo-household.mjs
+--replace`, docs/app-store-submission.md), the same people the App Store screenshots show. **Don't add a capture from anywhere else**
 (an on-device photo, a real family's account): it brings back mismatched names and a real family on
 a public page, which is what this replaced on 2026-10-27.
 
-- **Its `workout` scene logs real sets on the account App Review uses.** Never run it while a
-  submission is in review; `SCENES=trends,offline,og` writes nothing.
+- **Never capture from the reviewer's account** (`reviewer_demo.txt`): App Review signs in to it,
+  its `workout` scene would log sets there, and its data ends on 2026-10-26.
 - **Every scene's browser signs in, against a cap of 20 sign-ins per hour per email.** A full run
-  is 8. Repeated runs empty the demo account's bucket, and App Review's sign-in is refused with
-  yours until it refills (one every 3 minutes).
+  is 8. Repeated runs empty that account's bucket until it refills (one every 3 minutes).
 - **After a re-take, update each `<img>`'s `width`/`height`.** `landing.spec.ts` fails any image
   whose declared shape doesn't match its file.
 - **The household clip** comes from `e2e/tools/marketing-demo-clip.mjs`, and it writes too (one
