@@ -2030,6 +2030,16 @@ input[type='search']::-webkit-search-results-decoration {
   white-space: nowrap;
 }
 
+/* "Suggested from <exercise>. Open a body area to change it." (AddEditExerciseModal) looks like the
+   hint but is NOT fixed copy: it carries an exercise name of any length, so it can never be sized to
+   one line. It wraps. Sharing the hint's nowrap cut it off on every iPhone (found 2026-11-09). */
+.muscle-picker-suggestion {
+  margin: 0 0 var(--space-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
 .muscle-group + .muscle-group {
   border-top: 1px solid var(--color-border);
 }
