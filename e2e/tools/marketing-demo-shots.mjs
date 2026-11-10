@@ -51,7 +51,7 @@ if (!ASSETS || !EMAIL || !PASSWORD) throw new Error('usage: EMAIL=... PASSWORD=.
 // Declared up here, not beside ogImage(): the scenes run from top-level code above that function,
 // so a const declared below them is still uninitialised when the og scene reads it.
 const OG_IMAGE = 'og-image-2026-11.png';
-const SCENES = (process.env.SCENES || 'trends,workout,offline,og').split(',');
+const SCENES = (process.env.SCENES || 'trends,muscles,workout,offline,og').split(',');
 if (SCENES.includes('workout') && process.env.ALLOW_WRITES !== '1') {
   throw new Error('the workout scene logs real sets: set ALLOW_WRITES=1, or leave it out of SCENES');
 }
@@ -77,6 +77,13 @@ try {
     for (const [device, suffix] of [[FIGURE, ''], [FIGURE_PHONE, '-phone']]) {
       const f = await open(device);
       await trends(f, suffix);
+      await f.ctx.close();
+    }
+  }
+  if (SCENES.includes('muscles')) {
+    for (const [device, suffix] of [[FIGURE, ''], [FIGURE_PHONE, '-phone']]) {
+      const f = await open(device);
+      await muscles(f, suffix);
       await f.ctx.close();
     }
   }
@@ -242,6 +249,29 @@ async function trends({ page, person, tab, card }, suffix) {
   await card(/^Exercise progress/, join(SHOTS, `app-trends-main${suffix}.jpg`), bests - top + 44);
   await page.evaluate(() => window.scrollTo(0, 0));
   await card(/^Workouts per week$/, join(SHOTS, `app-trends-secondary${suffix}.jpg`));
+}
+
+// Sam's "Muscles worked" card (2026-11-10). Bodies are drawn only while the account's muscle
+// highlighter is on, and Sam is a woman: the body choice is device-local (never sent to the
+// server), so it is made here through the About sheet's own switch and writes nothing.
+async function muscles({ page, person, tab, openExercise, card }, suffix) {
+  await person('Sam');
+  await openExercise(EXERCISE);
+  await page.getByRole('button', { name: /^About this exercise/ }).click();
+  await page.getByRole('button', { name: 'Show a female body' }).click();
+  await page.keyboard.press('Escape');
+  await tab('Trends');
+  await page.locator('.muscle-map-bodies').waitFor();
+  // At phone width the list runs on under the bodies for 15 rows: the shot ends after the fifth.
+  let max;
+  if (suffix) {
+    max = await page.locator('[data-testid="muscle-map"]').evaluate((c) => {
+      const rows = c.querySelectorAll('.muscle-map-row');
+      const end = (rows[4].getBoundingClientRect().bottom + rows[5].getBoundingClientRect().top) / 2;
+      return end - c.getBoundingClientRect().top;
+    });
+  }
+  await card(/^Muscles worked/, join(SHOTS, `app-muscles${suffix}.jpg`), max);
 }
 
 async function workout(figure) {
