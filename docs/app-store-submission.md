@@ -89,9 +89,48 @@ clean session, repeat after a miss, drop back after a third stall). So the plate
 August, the family vacation in July and the recoveries all come out of the model. The tool also
 checks that every barbell lift's est.-1RM and top-weight charts finish at their best.
 
-- **Never put a real account's login in the repo.** The tool reads it from the environment.
+- **Never put a real account's login in the repo.** The tool reads it from `--creds <file>` or the
+  environment, and both login files live in the folder above the repo.
 - **A local copy** (`--register --write` against a local stack) is the same household, for trying
   screens before touching production.
+
+### Two accounts: the reviewer's, and the screenshots'
+
+The same household lives in two production accounts (2026-11-09), because the reviewer's ages:
+its training ends on 2026-10-26, so every week after that adds an empty week to the right of every
+chart.
+
+| | Reviewer account (29) | Screenshot account (33) |
+|---|---|---|
+| Login | `reviewer_demo.txt` | `screenshot_demo.txt` |
+| Who signs in | App Review, and nobody else | The screenshot tools |
+| Data | Seeded once, 2026-10-26, never wiped | Wiped and re-seeded, ending last week |
+
+**Refresh the screenshot account** (from the repo root, before any re-take; Monday is best, since
+the household's last week then ends yesterday):
+
+```bash
+API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../screenshot_demo.txt --replace --write
+```
+
+- **It is the same household, not a new one.** The model never reads the date: its random streams
+  are drawn in a fixed order on the pinned calendar, and `--as-of` (default today) only moves the
+  finished plan forward by WHOLE weeks as it is written, keeping each workout's New York wall-clock
+  time across the clock change. Verified 2026-11-09 against the previous tool through a fake API:
+  on the original calendar all 1,900 writes are byte-identical, and a shifted run differs only in
+  its 1,884 timestamps. Don't "improve" the model to re-tune a refreshed account: every tuned
+  property (charts ending at their bests, the plateaus, the notes) comes from replaying it exactly.
+- **The wipe**: Sam and Jordan are removed. Alex is the primary person, who can't be removed, so his
+  routines and every set are deleted. A workout with no sets shows nowhere (History, the hidden
+  count and every stat skip it). On Free, History lists only 90 days, so the older workouts come from
+  `screenshot_demo.state.json`, the record each run writes beside the login file. **Don't delete
+  that file.** Without it, the wipe finds Alex's older workouts still counted as hidden and stops
+  before writing anything. (Recovery: delete the account in the app, register it again with Alex
+  as the first person, turn on the muscle highlighter, and run the refresh.)
+- **Guards**: `--replace` is refused for the reviewer account anywhere, and on production for any
+  account but 33. It also refuses while anyone in the household has a workout in progress.
+- **After it**: the muscle highlighter (Settings → App settings) is an account setting, so a refresh
+  keeps it. Favorites come back on their own, because logging a set stars the exercise.
 - **Screenshots** come from `e2e/tools/app-store-shots.mjs`: the iPhone 6.9" (1320 × 2868) and iPad
   13" (2064 × 2752) sizes App Store Connect requires, light mode, captured from the running app. Two
   scenes have to log a set (mid-workout with the rest timer running, and the PR celebration); they

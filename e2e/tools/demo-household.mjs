@@ -1,20 +1,32 @@
-/* The App Store reviewer demo household: three made-up people (Alex, Sam, Jordan) and ~20 weeks of
- * believable training, written through the app's own API. It is exactly what was seeded into the
- * production reviewer account on 2026-10-26 (same model, same seeds), so a local copy previews what
- * the reviewer -- and the store screenshots -- will see. See docs/app-store-submission.md.
+/* The demo household: three made-up people (Alex, Sam, Jordan) and ~20 weeks of believable
+ * training, written through the app's own API. The same household lives in two production accounts:
+ *
+ *   - the App Store REVIEWER account (account 29), seeded once on 2026-10-26 and never wiped -- App
+ *     Review signs in to it, so its history stays put;
+ *   - the SCREENSHOT account (account 33), wiped and re-seeded with `--replace`, the household moved
+ *     forward to end last week, so the store and marketing screenshots never show empty weeks.
  *
  *   node tools/demo-household.mjs                       dry run: build the plan and print it
+ *   node tools/demo-household.mjs --as-of 2026-10-26    dry run on the original calendar
  *   API=http://localhost:8080 E2E_TEST_SUPPORT_KEY=... \
  *     node tools/demo-household.mjs --register --write  register a throwaway LOCAL household
  *                                                       and seed it; prints the login
- *   API=https://... DEMO_EMAIL=... DEMO_PASSWORD=... \
- *     node tools/demo-household.mjs --write             seed an existing, EMPTY account
+ *   API=https://api.huddle.fitness \
+ *     node tools/demo-household.mjs --creds ../../screenshot_demo.txt --replace --write
+ *                                                       refresh the screenshot account
  *
- * --write refuses an account whose people already have workouts, so it cannot double up. Never
- * put a real account's credentials in this file or in a commit; pass them in the environment.
+ * Credentials come from `--creds <file>` (REVIEWER_EMAIL= / REVIEWER_PASSWORD= lines, kept OUTSIDE
+ * the repo) or DEMO_EMAIL / DEMO_PASSWORD. Never put a real account's credentials in this file or in
+ * a commit, and never print them.
  *
- * The calendar is pinned (TODAY below), not relative to now: the point is to reproduce that one
- * household. Months later the window a Free account shows will have moved past most of it.
+ * --write alone refuses an account whose people already have workouts, so it cannot double up.
+ * --replace empties the account first and is refused for the reviewer account anywhere, and for any
+ * production account but the screenshot one (REPLACEABLE below).
+ *
+ * THE MODEL'S CALENDAR IS PINNED (TODAY below: Mon 26 Oct 2026) and it never reads the real date:
+ * that is what keeps the tuned household identical run to run. `--as-of` (default: today in New
+ * York) only moves the finished plan forward by whole weeks as it is written -- see "The calendar,
+ * moved" below -- so every number, weekday and time of day is the one that was tuned.
  */
 //
 // Realism model, per lift: a hidden "true strength" (estimated 1RM) that grows the way real people
@@ -24,9 +36,22 @@
 // add after a clean session (not always), repeat after missed reps, drop back ~8% after a third
 // stall. Illness and a vacation knock strength down and it recovers over the following weeks.
 // So plateaus, resets and setbacks emerge from the model instead of being drawn on.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+
 const WRITE = process.argv.includes('--write');
 const REGISTER = process.argv.includes('--register');
+const REPLACE = process.argv.includes('--replace');
+const argValue = (flag) => { const i = process.argv.indexOf(flag); return i > 0 ? process.argv[i + 1] : undefined; };
+const CREDS = argValue('--creds');
+// The record of the workouts this tool wrote for the PRIMARY person, beside the credentials file.
+// The primary person can't be removed, and a Free account's History only lists the last 90 days,
+// so without this record a wipe could not reach the older ones (see wipe() below).
+const STATE = argValue('--state') ?? (CREDS ? CREDS.replace(/\.[^./\\]+$/, '') + '.state.json' : undefined);
 const API = process.env.API;
+// Production account ids, which are not secrets. The reviewer account is never wiped anywhere; on
+// production only the screenshot account may be.
+const REVIEWER_ACCOUNT = 29;
+const REPLACEABLE = { 'api.huddle.fitness': [33] };
 
 // ------------------------------------------------------------------ deterministic randomness
 function mulberry32(seed) {
@@ -398,6 +423,74 @@ for (const { person, sessions, notes } of plans) {
   for (const n of notes) console.log(`  note ${fmt(n.session.date)} ${n.exercise}: ${n.note}`);
 }
 
+// ------------------------------------------------------------------ the calendar, moved
+// Everything above ran on the pinned calendar, and the random streams are drawn in a fixed ORDER,
+// never by date, so the plan is the same tuned household every run. Here it is moved forward by
+// WHOLE WEEKS to end just before the week of `--as-of`: Monday's squat stays on a Monday, each
+// week's workouts stay in one week of the charts, and every workout keeps its New York wall-clock
+// time (the model wrote them as EDT, UTC-4; a shifted one in winter is written as EST, UTC-5, so a
+// 5:41 AM squat is still 5:41 AM on screen).
+const DAY = 86400000;
+const NY = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', hourCycle: 'h23', weekday: 'short',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+const nyParts = (ms) => Object.fromEntries(NY.formatToParts(new Date(ms)).map((p) => [p.type, p.value]));
+// New York's offset from UTC at an instant, in ms (-4h in summer, -5h in winter).
+const nyOffset = (ms) => {
+  const p = nyParts(ms);
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - (ms - (((ms % 1000) + 1000) % 1000));
+};
+// A New York wall-clock time (written as if it were UTC) back to the instant it names.
+const fromWall = (wall) => { const t = wall - nyOffset(wall); return wall - nyOffset(t); };
+const asOf = argValue('--as-of')
+  ? new Date(`${argValue('--as-of')}T00:00:00Z`)
+  : (() => { const p = nyParts(Date.now()); return new Date(Date.UTC(+p.year, +p.month - 1, +p.day)); })();
+if (Number.isNaN(asOf.getTime())) throw new Error('--as-of takes a date: YYYY-MM-DD');
+const anchor = new Date(asOf.getTime() - ((asOf.getUTCDay() + 6) % 7) * DAY); // that week's Monday
+const SHIFT_DAYS = Math.round((anchor - TODAY) / DAY);
+if (SHIFT_DAYS < 0) throw new Error(`--as-of ${fmt(asOf)} is before the household's own calendar (${fmt(TODAY)})`);
+const shift = (ms) => fromWall(ms + nyOffset(ms) + SHIFT_DAYS * DAY);
+
+// When each set is logged, decided here (before the dry-run exit) rather than in the write loop, so
+// a dry run can check it. Same draws from the same stream in the same order as when the write loop
+// drew them, so the times are the ones the reviewer account was written with.
+for (const { person, sessions } of plans) {
+  for (const s of sessions) {
+    s.at = new Date(shift(s.startedAt.getTime()));
+    let t = s.startedAt.getTime() + r(4, 9) * 60000; // warm-up before the first logged set
+    s.writes = [];
+    for (const ex of s.exercises) {
+      const lift = person.lifts[ex.name];
+      for (let i = 0; i < ex.sets.length; i++) {
+        s.writes.push({ exercise: ex.name, i, set: ex.sets[i], original: t, loggedAt: new Date(shift(t)) });
+        t += r(lift.rest[0], lift.rest[1]) * 1000;
+      }
+      t += r(2, 5) * 60000; // moving to the next exercise
+    }
+  }
+}
+// Prove the move, rather than trust the arithmetic: every workout and every set lands exactly
+// SHIFT_DAYS later on New York's calendar, on the same weekday, at the same wall-clock minute.
+for (const { person, sessions } of plans) {
+  for (const s of sessions) {
+    const pairs = [[s.startedAt.getTime(), s.at.getTime()], ...s.writes.map((w) => [w.original, w.loggedAt.getTime()])];
+    for (const [from, to] of pairs) {
+      const a = nyParts(from), b = nyParts(to);
+      const days = (Date.UTC(+b.year, +b.month - 1, +b.day) - Date.UTC(+a.year, +a.month - 1, +a.day)) / DAY;
+      if (days !== SHIFT_DAYS || a.weekday !== b.weekday || a.hour !== b.hour || a.minute !== b.minute) {
+        throw new Error(`${person.name} ${fmt(s.date)}: moved to ${b.year}-${b.month}-${b.day} ${b.hour}:${b.minute}, not ${SHIFT_DAYS} days on at ${a.hour}:${a.minute}`);
+      }
+    }
+    if (s.writes.at(-1).loggedAt.getTime() > Date.now()) throw new Error(`${person.name}: --as-of would write workouts in the future`);
+  }
+}
+if (SHIFT_DAYS) {
+  const nyDate = (d) => { const p = nyParts(d.getTime()); return `${p.year}-${p.month}-${p.day}`; };
+  console.log(`\nmoved forward ${SHIFT_DAYS / 7} weeks (as of ${fmt(asOf)}), wall-clock times kept:`);
+  for (const { person, sessions } of plans) console.log(`  ${person.name}: ${nyDate(sessions[0].at)} .. ${nyDate(sessions.at(-1).at)}`);
+}
+
 if (!WRITE) { console.log('\n(dry run -- nothing written; pass --write to perform)'); process.exit(0); }
 
 // ------------------------------------------------------------------ write, through the app's API
@@ -426,8 +519,15 @@ if (REGISTER) {
   ({ token } = await confirm.json());
   console.log(`registered ${email} / ${password}`);
 } else {
-  if (!process.env.DEMO_EMAIL || !process.env.DEMO_PASSWORD) throw new Error('set DEMO_EMAIL and DEMO_PASSWORD, or pass --register');
-  const login = await post('/api/auth/login', { email: process.env.DEMO_EMAIL, password: process.env.DEMO_PASSWORD });
+  let email = process.env.DEMO_EMAIL, password = process.env.DEMO_PASSWORD;
+  if (CREDS) {
+    const lines = Object.fromEntries(readFileSync(CREDS, 'utf8').split(/\r?\n/).filter((l) => l.includes('='))
+      .map((l) => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]));
+    email = lines.REVIEWER_EMAIL ?? lines.EMAIL;
+    password = lines.REVIEWER_PASSWORD ?? lines.PASSWORD;
+  }
+  if (!email || !password) throw new Error('pass --creds <file>, set DEMO_EMAIL and DEMO_PASSWORD, or pass --register');
+  const login = await post('/api/auth/login', { email, password });
   if (!login.ok) throw new Error(`login ${login.status}`);
   ({ token } = await login.json());
 }
@@ -440,10 +540,71 @@ async function call(method, path, body, attempt = 1) {
   throw new Error(`${method} ${path} -> ${res.status}: ${(await res.text()).slice(0, 300)}`);
 }
 
+const me = await call('GET', '/api/auth/me');
+const accountId = me.account?.id;
+const host = new URL(API).hostname;
+const primaryOf = (list) => list.find((p) => p.isPrimary ?? p.primary);
+
+// ------------------------------------------------------------------ --replace: empty the account
+// Sam and Jordan are removed (that deletes their whole history). Alex is the account's primary
+// person, which the app won't remove, so his routines are deleted and every set of every workout he
+// has is deleted; a workout with no sets is dropped by History, by the "older workouts hidden"
+// count and by every stat (WorkoutSessionRepository's EXISTS sub-select), so it shows nowhere.
+//
+// Finding Alex's workouts: History lists only a Free account's last 90 days, so the older ones come
+// from the record of what the last run wrote (STATE). The wipe then checks History AND the hidden
+// count are both zero -- a run that can't reach something says so instead of seeding beside it.
+async function wipe() {
+  if (accountId === REVIEWER_ACCOUNT) throw new Error('refusing to --replace the App Store reviewer account');
+  if (REPLACEABLE[host] && !REPLACEABLE[host].includes(accountId)) {
+    throw new Error(`refusing to --replace account ${accountId} on ${host}: only ${REPLACEABLE[host].join(', ')} may be`);
+  }
+  const list = await call('GET', '/api/people');
+  for (const p of list) {
+    if (await call('GET', `/api/people/${p.id}/sessions/live`)) throw new Error(`${p.name} has a workout in progress -- not wiping over it`);
+  }
+  const primary = primaryOf(list);
+  if (primary.name !== 'Alex') throw new Error(`the primary person is "${primary.name}", not Alex -- rename them first`);
+  for (const p of list.filter((x) => x !== primary)) {
+    await call('DELETE', `/api/people/${p.id}`);
+    console.log(`removed ${p.name} and their history`);
+  }
+  for (const routine of await call('GET', `/api/people/${primary.id}/routines`)) {
+    await call('DELETE', `/api/people/${primary.id}/routines/${routine.id}`);
+  }
+  const targets = new Map(); // workout id -> exercise ids in it
+  const recorded = STATE && existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : null;
+  if (recorded && recorded.accountId !== accountId) throw new Error(`${STATE} records account ${recorded.accountId}, not ${accountId}`);
+  for (const w of recorded?.workouts ?? []) targets.set(w.id, new Set(w.exerciseIds));
+  for (const h of await call('GET', `/api/people/${primary.id}/history`)) {
+    const ids = targets.get(h.id) ?? new Set();
+    for (const e of h.entries) ids.add(e.exerciseId);
+    targets.set(h.id, ids);
+  }
+  let deleted = 0;
+  for (const [sessionId, exerciseIds] of targets) {
+    for (const exerciseId of exerciseIds) {
+      for (const set of await call('GET', `/api/sessions/${sessionId}/sets?exerciseId=${exerciseId}`)) {
+        await call('DELETE', `/api/sets/${set.id}`);
+        deleted++;
+      }
+    }
+  }
+  const left = (await call('GET', `/api/people/${primary.id}/history`)).length;
+  const hidden = (await call('GET', `/api/people/${primary.id}/history-window`)).hiddenSessions ?? 0;
+  if (left || hidden) {
+    throw new Error(`${primary.name} still has ${left} workouts in History and ${hidden} older ones hidden after the wipe -- `
+      + `the record of the last run (${STATE ?? 'none: pass --creds or --state'}) doesn't cover them. Nothing new was written.`);
+  }
+  console.log(`emptied ${primary.name}: ${deleted} sets deleted from ${targets.size} workouts`);
+}
+
+if (REPLACE) await wipe();
 let people = await call('GET', '/api/people');
 for (const p of people) {
   const h = await call('GET', `/api/people/${p.id}/history`);
-  if (h.length) throw new Error(`${p.name} already has ${h.length} workouts -- refusing to seed twice`);
+  const hidden = (await call('GET', `/api/people/${p.id}/history-window`)).hiddenSessions ?? 0;
+  if (h.length || hidden) throw new Error(`${p.name} already has ${h.length + hidden} workouts -- refusing to seed twice (--replace empties the account first)`);
 }
 for (const { person } of plans) {
   if (!people.some((p) => p.name === person.name)) await call('POST', '/api/people', { name: person.name });
@@ -458,27 +619,31 @@ const exId = (name) => {
 // Fail before writing anything if a name doesn't resolve.
 for (const { person } of plans) Object.keys(person.lifts).forEach(exId);
 
+// A fresh prefix per run: an idempotency key outlives the set it created, so a key reused after a
+// wipe would answer with the deleted set instead of writing a new one.
+const RUN = Date.now().toString(36);
+const record = { accountId, writtenAt: new Date().toISOString(), workouts: [] };
+const saveRecord = () => { if (STATE) writeFileSync(STATE, JSON.stringify(record, null, 1)); };
+
 for (const { person, sessions, notes } of plans) {
   const pid = people.find((p) => p.name === person.name).id;
+  const isPrimary = pid === primaryOf(people).id;
   let n = 0;
   for (const s of sessions) {
-    const created = await call('POST', `/api/people/${pid}/sessions`, { startedAt: s.startedAt.toISOString() });
+    const created = await call('POST', `/api/people/${pid}/sessions`, { startedAt: s.at.toISOString() });
     s.id = created.id;
-    let t = s.startedAt.getTime() + r(4, 9) * 60000; // warm-up before the first logged set
-    for (const ex of s.exercises) {
-      const lift = person.lifts[ex.name];
-      for (let i = 0; i < ex.sets.length; i++) {
-        const set = ex.sets[i];
-        await call('POST', `/api/sessions/${s.id}/sets`, {
-          exerciseId: exId(ex.name), weight: set.weight, reps: set.reps,
-          durationSeconds: set.durationSeconds,
-          idempotencyKey: `demo-household-${pid}-${s.startedAt.getTime()}-${ex.name}-${i}`,
-          clientLoggedAt: new Date(t).toISOString(),
-        });
-        n++;
-        t += r(lift.rest[0], lift.rest[1]) * 1000;
-      }
-      t += r(2, 5) * 60000; // moving to the next exercise
+    // Recorded as soon as it exists, so a run that dies half-way can still be wiped next time.
+    if (isPrimary) { record.workouts.push({ id: s.id, exerciseIds: [...new Set(s.exercises.map((e) => exId(e.name)))] }); saveRecord(); }
+    for (const w of s.writes) {
+      await call('POST', `/api/sessions/${s.id}/sets`, {
+        exerciseId: exId(w.exercise), weight: w.set.weight, reps: w.set.reps,
+        durationSeconds: w.set.durationSeconds,
+        // Ids, not names: workout_sets.client_key is 64 characters, and "demo-household-<run>-...
+        // -Dumbbell Overhead Press-0" was over it (the backend answers that with a 503).
+        idempotencyKey: `dh-${RUN}-${s.id}-${exId(w.exercise)}-${w.i}`,
+        clientLoggedAt: w.loggedAt.toISOString(),
+      });
+      n++;
     }
   }
   for (const nt of notes) {
@@ -492,6 +657,11 @@ for (const { person, sessions, notes } of plans) {
   for (let i = 0; i < person.rotation.length; i++) {
     await call('POST', `/api/people/${pid}/routines`, { name: names[i], exercises: person.rotation[i].map((x) => ({ exerciseId: exId(x) })) });
   }
-  console.log(`wrote ${person.name}: ${sessions.length} workouts, ${n} sets, ${notes.length} notes, ${person.rotation.length} routines`);
+  // Read it back: every planned workout is either in History or counted as hidden behind the Free
+  // window, and nothing else is.
+  const shown = (await call('GET', `/api/people/${pid}/history`)).length;
+  const hidden = (await call('GET', `/api/people/${pid}/history-window`)).hiddenSessions ?? 0;
+  if (shown + hidden !== sessions.length) throw new Error(`${person.name}: wrote ${sessions.length} workouts but the account shows ${shown} + ${hidden} hidden`);
+  console.log(`wrote ${person.name}: ${sessions.length} workouts (${shown} in History, ${hidden} older), ${n} sets, ${notes.length} notes, ${person.rotation.length} routines`);
 }
 console.log('done');
