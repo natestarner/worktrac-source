@@ -198,7 +198,9 @@ test.describe('marketing landing page', () => {
   // the browser picks by each <source>'s type, so this accepts whichever one it chose.
   test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
     const video = page.locator('video.js-lazy-video');
-    const isClip = (url: string) => /app-household\.(mp4|webm)$/.test(url);
+    // `(\?|$)`: the URL carries a ?v= cache version (check-marketing.sh check 15). Anchored at `$`
+    // alone this matched no request at all, so both "never fetched" checks below passed vacuously.
+    const isClip = (url: string) => /app-household\.(mp4|webm)(\?|$)/.test(url);
 
     // Reduced motion: the clip must never be fetched -- the poster frame is the whole experience.
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -222,7 +224,7 @@ test.describe('marketing landing page', () => {
     await video.scrollIntoViewIfNeeded();
     await expect
       .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
-      .toMatch(/app-household\.(mp4|webm)$/);
+      .toMatch(/app-household\.(mp4|webm)(\?|$)/);
   });
 
   // Safari plays only the MP4, and this site sends nosniff, so a clip served as
