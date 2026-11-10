@@ -126,14 +126,22 @@ async function capture(device) {
 
   // ---- read-only scenes, before anything is logged (a live workout puts its bar on every screen)
   await person('Sam');
+  // Sam is a woman, and the muscle map draws the male body until a person chooses. The choice is
+  // device-local (AppStateContext's bodyFigure, never sent to the server), so making it here,
+  // through the About sheet's own switch, writes nothing to the account.
+  await openExercise('Barbell Back Squat');
+  await page.getByRole('button', { name: /^About this exercise/ }).click();
+  await page.getByRole('button', { name: 'Show a female body' }).click();
+  await page.keyboard.press('Escape');
   await tab('Trends');
   await page.locator('select').last().selectOption({ label: 'Barbell Back Squat' });
   if (device.startsWith('iphone')) {
     await park(page.getByText(/^Exercise progress/).first(), 12, { card: true });
     await shot('03-progress-chart');
     await page.evaluate(() => window.scrollTo(0, 0));
-    // Below Streak and This week: a Tuesday-morning "0 workouts, -4 vs last week" is no pitch.
-    await park(page.getByText(/^Volume · last 30 days$/i).first(), 12, { card: true });
+    // Below the summary cards: a Tuesday-morning "0 workouts, -4 vs last week" is no pitch, and
+    // neither is the Volume card once the seeded weeks age (2026-11-09: "-20% vs last month").
+    await park(page.getByText(/^Consistency/).first(), 12, { card: true });
   } else {
     // The iPad lays Streak, This week and Volume out as one row, and the page is too short to park
     // the progress chart at the top -- so one Trends shot, from the heatmap down: the weekly bars
@@ -141,6 +149,12 @@ async function capture(device) {
     await park(page.getByText(/^Consistency/).first(), 12, { card: true });
   }
   await shot('04-trends-overview');
+
+  // The muscle map: the bodies shaded by sets, with the per-muscle readout beside or under them.
+  // Shows the drawings only while the account's muscle highlighter is on (off by default; the
+  // demo household has it on since 2026-11-09) -- off, the card holds a "turned off" note instead.
+  await park(page.getByText(/^Muscles worked/).first(), 12, { card: true });
+  await shot('08-muscles');
 
   await person('Alex');
   await tab('PRs');
