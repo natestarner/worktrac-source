@@ -9,8 +9,8 @@ submission time.
 
 | Field | Draft | Limit |
 |---|---|---|
-| Name | Huddle: Workout Tracker | 23 / 30 |
-| Subtitle | Gym log for the whole family | 28 / 30 |
+| Name | Huddle: Family Workout Tracker | 30 / 30 |
+| Subtitle | Celebrate your PRs together | 27 / 30 |
 | Category | Health & Fitness (secondary: none) | |
 | Keywords | `lifting,weightlifting,strength,sets,reps,PR,1RM,training,fitness,offline,kids,coach,routine,barbell` | 99 / 100 |
 | Promotional text | Log a set in two taps, switch between everyone in the house, and keep logging with no signal. Your whole history, PRs and trends, on one screen. | 144 / 170 |
@@ -20,6 +20,13 @@ submission time.
 
 Keywords deliberately repeat no word from the name or subtitle (Apple already indexes those) and
 lean on what people search for that the name doesn't say.
+
+**Name and subtitle changed with 1.1.0 (2026-11-10).** 1.0 shipped as "Huddle: Workout Tracker" /
+"Gym log for the whole family". "Family" moved into the name because it is what sets Huddle apart,
+which freed the subtitle for the marketing site's "celebrate your PRs together" line. The subtitle
+now says "PRs", so `PR` in the keywords is a repeat that can be swapped for a new word. The name on
+the home screen is still "Huddle" (set in the app, not the listing). The store URL's slug may change
+with the name; Apple routes by the numeric id and redirects, so the existing links keep working.
 
 ### Description
 
