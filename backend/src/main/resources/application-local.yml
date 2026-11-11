@@ -47,6 +47,11 @@ spring:
     clean-disabled: false    # OK to allow clean locally (never in prod)
 
 app:
+  # On locally so the e2e suite can sign in through the test identity provider (TestIdentityTokens,
+  # which also needs test-support-key below). Apple and Google stay unavailable here until real
+  # client ids are exported, and Apple refuses localhost anyway.
+  social-sign-in:
+    enabled: ${SOCIAL_SIGN_IN_ENABLED:true}
   jwt:
     # Local-dev-only secret. NEVER reuse this value in lower/production -- those must set
     # APP_JWT_SECRET via a real secret store (see CLAUDE.md: never commit real secrets).

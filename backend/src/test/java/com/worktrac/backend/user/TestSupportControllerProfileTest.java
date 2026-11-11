@@ -1,6 +1,7 @@
 package com.worktrac.backend.user;
 
 import com.worktrac.backend.config.EmailProperties;
+import com.worktrac.backend.identity.TestIdentityTokens;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -17,7 +18,8 @@ class TestSupportControllerProfileTest {
     void beanExistsUnderLocalProfile() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().setActiveProfiles("local");
-            context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class);
+            context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class,
+                    TestIdentityTokens.class);
             registerMockRegistrationEventRepository(context);
             context.refresh();
 
@@ -29,12 +31,15 @@ class TestSupportControllerProfileTest {
     void beanDoesNotExistUnderProductionProfile() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().setActiveProfiles("production");
-            context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class);
+            context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class,
+                    TestIdentityTokens.class);
             registerMockRegistrationEventRepository(context);
             context.refresh();
 
             assertEquals(0, context.getBeanNamesForType(TestSupportController.class).length);
             assertEquals(0, context.getBeanNamesForType(TestCodeCache.class).length);
+            // The test identity provider mints ID tokens for any email: it must not exist here.
+            assertEquals(0, context.getBeanNamesForType(TestIdentityTokens.class).length);
         }
     }
 
@@ -74,5 +79,7 @@ class TestSupportControllerProfileTest {
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.MembershipInviteRepository.class));
         context.registerBean(org.springframework.jdbc.core.JdbcTemplate.class,
                 () -> org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class));
+        // Added with the test identity provider's minting route (sign in with Apple / Google).
+        context.registerBean(java.time.Clock.class, java.time.Clock::systemUTC);
     }
 }

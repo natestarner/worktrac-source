@@ -62,7 +62,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(ConflictException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(409, ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(409, ex.getMessage(), ex.getCode()));
     }
 
     @ExceptionHandler(UnauthorizedException.class)

@@ -11,6 +11,9 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('../../api/people', () => ({ removePerson: vi.fn(), updatePerson: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
+// Not loaded yet: every component renders exactly what it did before sign in with Apple/Google.
+vi.mock('../../hooks/useSignInMethods', () => ({ useSignInMethods: () => ({ data: undefined }) }));
+vi.mock('./SignInMethodsSection', () => ({ default: () => null }));
 
 describe('ProfileTab', () => {
   let refreshPeople;

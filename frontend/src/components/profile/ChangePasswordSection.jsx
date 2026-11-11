@@ -6,6 +6,8 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { useSignInMethods } from '../../hooks/useSignInMethods';
+import ProviderButtons from '../auth/ProviderButtons';
 
 /**
  * "Change your password", for whoever is signed in.
@@ -22,9 +24,48 @@ import { useGatedMutation } from '../../hooks/useGatedMutation';
  * change in the same commit.
  */
 export default function ChangePasswordSection() {
-  const { changeOwnPassword } = useAuth();
+  const { changeOwnPassword, setFirstPassword } = useAuth();
   const { showToast } = useUI();
   const [open, setOpen] = useState(false);
+  // Unknown (not loaded, or offline on a device that never loaded it) reads as "has a password":
+  // exactly what this section always showed. The server's NO_PASSWORD answer corrects it.
+  const { data: methods } = useSignInMethods();
+  const noPassword = methods?.hasPassword === false;
+  const connected = (methods?.connected ?? []).map((c) => c.provider);
+
+  if (noPassword) {
+    return (
+      <>
+        <SectionLabel>Password</SectionLabel>
+        <div style={cardStyle}>
+          <div style={rowStyle}>
+            <div style={{ minWidth: 0 }}>
+              <div style={labelStyle}>No password yet</div>
+              <div style={hintStyle}>
+                You sign in with Apple or Google. Add a password to sign in with your email too.
+              </div>
+            </div>
+            <OfflineDisabledWrap message="Setting a password needs a connection.">
+              <button onClick={() => setOpen(true)} style={linkStyle}>
+                Set a password
+              </button>
+            </OfflineDisabledWrap>
+          </div>
+        </div>
+        {open && (
+          <SetPasswordModal
+            providers={connected}
+            onClose={() => setOpen(false)}
+            onSet={() => {
+              setOpen(false);
+              showToast('Password set. You can sign in with your email and it now.');
+            }}
+            setFirstPassword={setFirstPassword}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -155,6 +196,86 @@ function ChangePasswordModal({ onClose, onChanged, changeOwnPassword }) {
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/**
+ * The FIRST password on an Apple / Google login. There is no current password to prove, so the
+ * person confirms with a provider already connected to this login instead -- a session alone proves
+ * a device, not a person (the server enforces this; POST /api/user/password/initial).
+ */
+function SetPasswordModal({ providers, onClose, onSet, setFirstPassword }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [localError, setLocalError] = useState(null);
+  const { online, pending, run } = useGatedMutation();
+
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const tooShort = newPassword.length > 0 && newPassword.length < 8;
+  const ready = newPassword.length >= 8 && newPassword === confirmPassword;
+
+  function confirmAndSet(provider, token) {
+    if (!ready) {
+      setLocalError('Enter a new password of at least 8 characters, twice.');
+      return;
+    }
+    setLocalError(null);
+    run(
+      async () => {
+        await setFirstPassword({
+          newPassword,
+          reconfirmation: { provider, idToken: token.idToken, nonce: token.nonce },
+        });
+        onSet();
+      },
+      {
+        offlineMessage: 'Setting a password needs a connection.',
+        errorMessage: "Couldn't set your password.",
+        showServerMessage: true,
+      },
+    )();
+  }
+
+  return (
+    <Modal title="Set a password" onClose={onClose}>
+      <label htmlFor="first-password" style={fieldLabelStyle}>New password</label>
+      <Input
+        id="first-password"
+        type="password"
+        autoComplete="new-password"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+        error={tooShort ? 'Use at least 8 characters.' : undefined}
+      />
+      <label htmlFor="first-password-confirm" style={{ ...fieldLabelStyle, marginTop: 'var(--space-4)' }}>
+        Confirm new password
+      </label>
+      <Input
+        id="first-password-confirm"
+        type="password"
+        autoComplete="new-password"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        error={mismatch ? "Those don't match." : undefined}
+      />
+      <p style={noticeStyle}>
+        To make sure it&rsquo;s you, confirm with the account you sign in with. Every other device signed
+        in as you will be signed out.
+      </p>
+      {localError && <div style={errorStyle}>{localError}</div>}
+      <div style={{ marginTop: 'var(--space-4)' }}>
+        <ProviderButtons
+          only={providers}
+          verb="Confirm with"
+          disabled={!online || pending || !ready}
+          onToken={confirmAndSet}
+          onError={() => setLocalError("Couldn't reach the sign-in service. Try again.")}
+        />
+      </div>
+      <button type="button" onClick={onClose} style={{ ...secondaryButtonStyle, width: '100%', marginTop: 'var(--space-3)' }}>
+        Cancel
+      </button>
     </Modal>
   );
 }

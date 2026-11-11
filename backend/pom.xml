@@ -89,6 +89,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <!-- Verifies Apple and Google ID tokens (signature, JWKS fetch + key rotation, issuer,
+             audience, timestamps against our Clock). Deliberately this module rather than
+             spring-boot-starter-oauth2-resource-server: the starter auto-configures a bearer-token
+             filter that would compete with JwtAuthenticationFilter. Version managed by Boot.
+             See docs/architecture/social-sign-in.md. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
 
         <!-- JWT (Spring Security has no bundled JWT issuance/parsing support) -->
         <dependency>

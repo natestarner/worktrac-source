@@ -14,5 +14,13 @@
 		<string>applinks:$(APP_LINK_DOMAIN)</string>
 		<string>webcredentials:$(APP_LINK_DOMAIN)</string>
 	</array>
+	<!-- Sign in with Apple (lib/native/socialSignIn.js, docs/architecture/social-sign-in.md). Both App
+	     IDs have the capability (enabled 2026-11-11, which invalidated the old profiles): run
+	     mobile-release.yml's `certificates` lane once before the next `beta`, or signing fails because
+	     the profiles lack this entitlement. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

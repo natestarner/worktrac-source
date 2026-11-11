@@ -10,6 +10,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
+vi.mock('../context/UIContext', () => ({ useUI: () => ({ deferOnboarding: vi.fn() }) }));
 
 function renderPage(initialEntry = '/register') {
   return render(

@@ -6,6 +6,9 @@ import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.ChangePasswordRequest;
+import com.worktrac.backend.user.dto.SetInitialPasswordRequest;
+import com.worktrac.backend.common.ConflictException;
+import com.worktrac.backend.identity.ReconfirmationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,21 +41,26 @@ public class PasswordChangeService {
     // rather than a second one. Somebody holding a borrowed unlocked phone gets one budget for
     // guessing a password, not one per screen that asks for it.
     private static final int MAX_FAILED_ATTEMPTS = 10;
+
+    /** The client swaps "Change password" for "Set a password" on this code. */
+    public static final String NO_PASSWORD_CODE = "NO_PASSWORD";
     private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccountAccessService accountAccessService;
     private final AuthService authService;
+    private final ReconfirmationService reconfirmationService;
     private final Clock clock;
 
     public PasswordChangeService(UserRepository userRepository, PasswordEncoder passwordEncoder,
                                   AccountAccessService accountAccessService, AuthService authService,
-                                  Clock clock) {
+                                  ReconfirmationService reconfirmationService, Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.accountAccessService = accountAccessService;
         this.authService = authService;
+        this.reconfirmationService = reconfirmationService;
         this.clock = clock;
     }
 
@@ -90,6 +98,17 @@ public class PasswordChangeService {
         if (user.isLockedAt(now)) {
             log.warn("Password change refused for user {}: locked until {}", userId, user.getLockedUntil());
             throw new LockedException("Too many failed attempts. Try again in a few minutes.");
+        }
+
+        // An Apple or Google login that never set a password has no "current password" to prove.
+        // 403 (never 401 -- see below) with a code the client acts on, and NOT counted as a failed
+        // attempt: nothing was guessed. This is not an enumeration risk, because the caller is the
+        // signed-in owner of this very login. Setting a first password is its own flow.
+        if (!user.hasPassword()) {
+            log.info("Password change refused for user {}: login has no password (Apple/Google)", userId);
+            throw new ForbiddenException(
+                    "You sign in with Apple or Google, so this login has no password to change yet.",
+                    NO_PASSWORD_CODE);
         }
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
@@ -131,6 +150,37 @@ public class PasswordChangeService {
         // one entry point that always checks is harder to misuse than two where one skips the
         // check, and this caller has already proved the current password, which is a stronger
         // claim than any token version.
+        return authService.startSession(userId, user.getTokenVersion(), accountId);
+    }
+
+    /**
+     * Sets the FIRST password on a login created with Apple or Google, after the person re-confirms
+     * with a provider connected to THIS login, and hands back a fresh session.
+     *
+     * <p>409 for a login that already has one: changing a password needs the current one
+     * ({@link #changePassword}), and accepting a provider re-confirmation instead would turn a
+     * stolen Google account into a way to replace the password on a login that has one.
+     *
+     * <p>Bumps {@code token_version} like a change does, for the same reason: setting a password is
+     * a moment somebody may be securing a login they suspect is shared, so every other session ends.
+     */
+    @Transactional
+    public AuthResponse setInitialPassword(Long userId, Long accountId, SetInitialPasswordRequest request) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new UnauthorizedException("That login is no longer active."));
+        if (user.hasPassword()) {
+            throw new ConflictException("This login already has a password. Use Change password instead.");
+        }
+
+        reconfirmationService.require(user, request.reconfirmation());
+
+        user.updatePasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.clearLoginLockout();
+        user.bumpTokenVersion();
+        userRepository.save(user);
+        accountAccessService.invalidateUser(user.getId());
+
+        log.info("First password set for user {}", userId);
         return authService.startSession(userId, user.getTokenVersion(), accountId);
     }
 }

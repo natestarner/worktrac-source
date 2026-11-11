@@ -1,5 +1,9 @@
 package com.worktrac.backend.user;
 
+import com.worktrac.backend.identity.TestIdentityTokens;
+import java.time.Clock;
+import java.time.Instant;
+
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.Subscription;
 import com.worktrac.backend.account.Account;
@@ -25,6 +29,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -63,6 +68,8 @@ public class TestSupportController {
     private final PasswordEncoder passwordEncoder;
     private final MembershipInviteRepository inviteRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final TestIdentityTokens testIdentityTokens;
+    private final Clock clock;
 
     public TestSupportController(TestCodeCache testCodeCache, EmailProperties emailProperties,
                                   AccountMembershipRepository membershipRepository,
@@ -74,7 +81,9 @@ public class TestSupportController {
                                   RegistrationEventRepository registrationEventRepository,
                                   UserRepository userRepository,
                                   SubscriptionRepository subscriptionRepository,
-                                  SubscriptionService subscriptionService) {
+                                  SubscriptionService subscriptionService,
+                                  TestIdentityTokens testIdentityTokens,
+                                  Clock clock) {
         this.testCodeCache = testCodeCache;
         this.emailProperties = emailProperties;
         this.registrationEventRepository = registrationEventRepository;
@@ -87,6 +96,8 @@ public class TestSupportController {
         this.passwordEncoder = passwordEncoder;
         this.inviteRepository = inviteRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.testIdentityTokens = testIdentityTokens;
+        this.clock = clock;
     }
 
     @GetMapping("/api/auth/test/pending-code")
@@ -314,4 +325,41 @@ public class TestSupportController {
                 .map(AccountMembership::getAccount);
     }
 
+
+    /**
+     * Mints an ID token from the test identity provider, the e2e suite's stand-in for Apple and
+     * Google (which bot checks keep out of automation). The spec then signs in through the REAL
+     * route, {@code POST /api/auth/oauth/test}, so everything after the token is the production path.
+     *
+     * <p>Every claim is the caller's to choose -- including wrong ones (a foreign audience, a stale
+     * issue time, an unverified email) -- so a spec can prove each is refused end to end. The raw
+     * nonce goes in and its hash goes on the token, exactly as a real client and provider do it.
+     *
+     * <p>Profile-gated and key-gated like every route here, so it exists in local/lower only.
+     */
+    @PostMapping("/api/auth/test/id-token")
+    public ResponseEntity<Map<String, Object>> idToken(
+            @RequestBody TestIdTokenRequest request,
+            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
+        if (!keyMatches(testKey) || !testIdentityTokens.isEnabled()
+                || request.subject() == null || request.subject().isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+        Instant issuedAt = clock.instant().minusSeconds(request.ageSeconds() == null ? 0 : request.ageSeconds());
+        Instant expiresAt = issuedAt.plusSeconds(request.lifetimeSeconds() == null ? 600 : request.lifetimeSeconds());
+        String token = testIdentityTokens.mint(request.subject(), request.email(),
+                request.emailVerified() == null || request.emailVerified(), request.nonce(),
+                request.audience(), issuedAt, expiresAt);
+        return ResponseEntity.ok(Map.of("idToken", token));
+    }
+
+    /**
+     * @param ageSeconds      how long ago the token was issued (default 0)
+     * @param lifetimeSeconds how long it lives from then (default 600, Apple's)
+     * @param emailVerified   default true
+     * @param audience        default the test provider's own; anything else must be refused
+     */
+    public record TestIdTokenRequest(String subject, String email, Boolean emailVerified, String nonce,
+                                     String audience, Long ageSeconds, Long lifetimeSeconds) {
+    }
 }

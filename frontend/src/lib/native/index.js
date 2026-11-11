@@ -14,3 +14,9 @@ export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
 export { appPathForUrl, appReturnUrl, listenForAppLinks } from './appLinks';
 export { keepFocusedFieldVisible } from './keyboard';
 export { requestAppReview, appReviewUrl } from './review';
+export {
+  availableSignInProviders,
+  googleUsesRenderedButton,
+  renderGoogleButton,
+  signInWithProvider,
+} from './socialSignIn';

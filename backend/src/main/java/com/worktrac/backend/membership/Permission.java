@@ -42,6 +42,13 @@ public enum Permission {
      * else's password is ever added, that copy has to change in the same commit.
      */
     CHANGE_OWN_PASSWORD,
+    /**
+     * Connect or disconnect YOUR OWN Apple or Google sign-in. Held by every role, for exactly the
+     * reason {@link #CHANGE_OWN_PASSWORD} is: it is a way into one person's login, and nobody else
+     * -- an owner included -- may add one. An owner who could attach their own Google account to a
+     * member's login could sign in as that member.
+     */
+    MANAGE_OWN_SIGN_IN_METHODS,
 
     // ── Household-scoped ─────────────────────────────────────────────────────────────────────
     /** Add or remove a person, and rename/configure someone who is not you. */

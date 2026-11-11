@@ -7,11 +7,17 @@ import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.contact.ContactMessageRepository;
+import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.tag.TagRepository;
+import com.worktrac.backend.identity.ReconfirmationService;
+import com.worktrac.backend.identity.UserIdentityRepository;
+import com.worktrac.backend.identity.VerifiedIdentity;
+import com.worktrac.backend.identity.dto.Reconfirmation;
+import com.worktrac.backend.user.PasswordChangeService;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
@@ -48,6 +54,8 @@ public class AccountDeletionService {
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccountAccessService accountAccessService;
+    private final ReconfirmationService reconfirmationService;
+    private final UserIdentityRepository identityRepository;
 
     public AccountDeletionService(AccountMembershipRepository membershipRepository,
                                    MembershipInviteRepository inviteRepository,
@@ -59,7 +67,9 @@ public class AccountDeletionService {
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
                                    AccountRepository accountRepository, PasswordEncoder passwordEncoder,
-                                  AccountAccessService accountAccessService) {
+                                  AccountAccessService accountAccessService,
+                                  ReconfirmationService reconfirmationService,
+                                  UserIdentityRepository identityRepository) {
         this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
@@ -74,23 +84,64 @@ public class AccountDeletionService {
         this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
         this.accountAccessService = accountAccessService;
+        this.reconfirmationService = reconfirmationService;
+        this.identityRepository = identityRepository;
     }
 
     @Transactional
     public void deleteAccount(Long accountId, Long userId, String password) {
+        deleteAccount(accountId, userId, password, null);
+    }
+
+    @Transactional
+    public void deleteAccount(Long accountId, Long userId, String password, Reconfirmation reconfirmation) {
         // Re-authenticate before erasing anything. Typing DELETE proves intent, but only the
         // password proves the person at the keyboard is the account holder -- and the bearer
         // token that got them here is valid for 30 days with no revocation, so on its own it is
         // a weak thing to hang an irreversible, unrecoverable action on.
         //
-        // 401 rather than 403: the request is well-formed and the caller is allowed to delete
-        // their own account, they just have not proved who they are.
+        // ⚠️ A wrong password is 403, NEVER 401. The session that made this request is fine; the
+        // password is a SECOND credential this route asks for. api/client.js reads any 401 on a
+        // token-bearing request as "your session expired" and signs the person out, so this used
+        // to end their session over a typo in the Delete account box, with no message -- the shape
+        // of docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md
+        // (backend-core.md, "Error handling"). AccountDeletionTest#wrongPasswordDoesNotDeleteAccount.
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("User no longer exists"));
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            log.warn("Refused account deletion for account {}: incorrect password", accountId);
-            throw new UnauthorizedException("That password is not correct.");
+
+        // TWO ways to prove it, the password or signing in with a connected Apple/Google account
+        // again (ReconfirmationService). The second is the ONLY way for a login with no password.
+        // Both refusals of the provider path are 403, never 401: the session is fine, and a 401
+        // signs the person out (backend-core.md).
+        //
+        // A re-confirmation, when sent, is checked first and is sufficient on its own. That order
+        // matters for a login with a password AND Apple connected: deleting it needs Apple's code
+        // (see revokeAppleIfLinked), so its client re-confirms with Apple, and that must not be
+        // ignored because a password field happened to be filled in as well.
+        VerifiedIdentity reconfirmed = null;
+        boolean passwordGiven = password != null && !password.isBlank();
+        if (reconfirmation != null && reconfirmation.isPresent()) {
+            reconfirmed = reconfirmationService.require(user, reconfirmation);
+        } else if (passwordGiven && user.hasPassword()) {
+            if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+                log.warn("Refused account deletion for account {}: incorrect password", accountId);
+                throw new ForbiddenException("That password is not correct.");
+            }
+        } else if (!user.hasPassword()) {
+            log.warn("Refused account deletion for account {}: no password and no re-confirmation", accountId);
+            throw new ForbiddenException("Confirm with Apple or Google to delete your account.",
+                    PasswordChangeService.NO_PASSWORD_CODE);
+        } else {
+            // A password login that sent neither: the 400 the @NotBlank used to give, now that the
+            // field is optional for logins that have no password.
+            throw new IllegalArgumentException("Enter your password to confirm.");
         }
+
+        // Before anything is deleted: a login with Apple connected must have Huddle's Apple sign-in
+        // revoked (App Store requirement). Fails closed with a 503 and deletes nothing.
+        reconfirmationService.revokeAppleIfLinked(user,
+                reconfirmation == null ? new Reconfirmation(null, null, null, null, null) : reconfirmation,
+                reconfirmed);
 
         // Read the subscription id while its row still exists; the Stripe call itself happens
         // after this transaction commits (see the afterCommit hook below, and
@@ -178,6 +229,13 @@ public class AccountDeletionService {
         }
         for (Long memberUserId : memberUserIds) {
             if (membershipRepository.countByUser_Id(memberUserId) == 0) {
+                // ⚠️ The login's Apple/Google identities FIRST, by an explicit bulk delete. The
+                // FK cascades in the database, but a re-confirmation earlier in THIS transaction
+                // may have loaded an identity row, and Hibernate refuses to flush a managed
+                // identity whose user was just removed ("references an unsaved transient
+                // instance") -- a 503 from an irreversible action the person had already
+                // confirmed. ReconfirmationFlowTest#aLoginWithNoPasswordDeletesByReconfirming.
+                identityRepository.deleteAllForUser(memberUserId);
                 userRepository.deleteById(memberUserId);
             }
         }

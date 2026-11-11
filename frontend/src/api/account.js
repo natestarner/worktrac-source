@@ -19,6 +19,9 @@ export function setMuscleMap(enabled) {
   return apiClient.put('/api/account/muscle-map', { enabled });
 }
 
-export function deleteAccount(confirmationText, password) {
-  return apiClient.delete('/api/account', { confirmationText, password });
+// `reconfirmation` is the Apple / Google proof ({ provider, idToken, nonce, appleAuthorizationCode?,
+// appleRedirectUri? }) a login with no password sends instead of `password` -- and that a login with
+// Apple connected must send (with Apple's code) so Huddle's Apple sign-in can be revoked first.
+export function deleteAccount(confirmationText, password, reconfirmation) {
+  return apiClient.delete('/api/account', { confirmationText, password, reconfirmation });
 }

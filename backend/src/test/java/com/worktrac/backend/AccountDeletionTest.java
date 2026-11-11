@@ -42,6 +42,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 // Deleting an account must erase every row it owns (people, sessions, sets, routines,
 // setup values, its own exercises, its tags, its user, and the account row itself) while
@@ -415,9 +416,16 @@ class AccountDeletionTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(deleteAccountBody("DELETE", "not-the-right-password")))
-                .andExpect(status().isUnauthorized());
+                // ⚠️ 403, NOT 401. The session is fine; the password is a second credential. A 401
+                // here made api/client.js sign the person out and dump them on /login, so a typo in
+                // the Delete account box ended their session with no explanation -- the shape of
+                // docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md.
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("That password is not correct."));
 
         assertTrue(accountRepository.findById(accountId).isPresent(), "the account must still be here");
         assertTrue(personRepository.findById(personId).isPresent());
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
     }
 }

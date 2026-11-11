@@ -68,6 +68,8 @@ public enum AccountRole {
             // Their credential, not the household's. See Permission.CHANGE_OWN_PASSWORD for why
             // there is no owner-side counterpart to this one.
             Permission.CHANGE_OWN_PASSWORD,
+            // Same argument: their Apple/Google sign-in is a way into THEIR login.
+            Permission.MANAGE_OWN_SIGN_IN_METHODS,
             Permission.CREATE_SHARED_RESOURCE,
             Permission.EDIT_OWN_SHARED_RESOURCE,
             Permission.DELETE_OWN_SHARED_RESOURCE));

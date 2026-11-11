@@ -6,7 +6,7 @@ import { MUSCLE_MAP_HELP } from '../trends/chartHelp';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
 import { useAuth } from '../../context/AuthContext';
-import { externalLinkProps, isNativeApp } from '../../lib/native';
+import { availableSignInProviders, externalLinkProps, isNativeApp } from '../../lib/native';
 import Button from '../shared/Button';
 import BackLink from '../shared/BackLink';
 import { useGoBack } from '../../hooks/useGoBack';
@@ -58,6 +58,12 @@ export default function HelpTab() {
   const { hash } = useLocation();
   const { startTour } = useUI();
   const appStoreUrl = useAuth().client?.appStoreUrl || null;
+  // Sign in with Apple / Google is described only where it is actually offered: this environment's
+  // config.json names the providers (lib/native/socialSignIn.js). Production carries none until
+  // launch, so its handbook says exactly what it always did. Words branching on configuration, not
+  // on platform -- the same shape as appStoreUrl above. The e2e test provider is never named.
+  const signInProviders = availableSignInProviders().filter((p) => p !== 'test');
+  const signInNames = signInProviders.map((p) => (p === 'apple' ? 'Apple' : 'Google')).join(' or ');
 
   // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
   // section ids are advertised as deep links right above -- so "How Free and Plus differ"
@@ -131,6 +137,15 @@ export default function HelpTab() {
           <li>Check your email for a six-digit code and enter it on the confirmation screen.</li>
           <li>Add the people you train with, and start logging.</li>
         </ol>
+        {signInNames && (
+          <p>
+            Or tap <T>Continue with {signInNames}</T> on the Register or Log in screen instead. There
+            is no password to choose and no code to type: Huddle asks your name and creates the
+            household. If you already have a Huddle login with that email, sign in with your password
+            first and connect {signInNames} from <T>Profile</T>. Huddle never joins two logins just
+            because their emails match.
+          </p>
+        )}
         <p>
           That&rsquo;s the whole setup. There is nothing to configure before your first set. Units,
           rest timers and routines all have working defaults, and can wait until you want them.
@@ -904,7 +919,27 @@ export default function HelpTab() {
           deletion. Deleting an account is permanent, so export your data first. The
           confirmation dialog offers exactly that. It also asks you to type <T>DELETE</T> and to
           enter your password, so a device someone left signed in can&rsquo;t erase the household.
+          {signInNames && (
+            <>
+              {' '}If you sign in with {signInNames} and have no password, you confirm with{' '}
+              {signInNames} instead.
+              {signInProviders.includes('apple') && (
+                <>
+                  {' '}With Apple connected you always confirm with Apple, because deleting also
+                  disconnects Huddle from your Apple ID.
+                </>
+              )}
+            </>
+          )}
         </p>
+        {signInNames && (
+          <p>
+            <T>Profile</T> &rarr; <T>Sign in with</T> lists the {signInNames} accounts that can sign
+            in to your login, and connects or disconnects them. Disconnecting signs you out on every
+            other device. A login created with {signInNames} has no password until you add one there
+            with <T>Set a password</T>.
+          </p>
+        )}
       </Section>
 
       {/* ⚠️ THIS SECTION IS A PROMISE, NOT A DESCRIPTION.
@@ -1403,6 +1438,12 @@ export default function HelpTab() {
               'Forgotten password',
               '“Forgot password” on the login screen emails you a reset code.',
             ],
+            ...(signInNames
+              ? [[
+                  `“You already have a Huddle login for this email”`,
+                  `Sign in with your password, then connect ${signInNames} in Profile. Huddle never links them on its own.`,
+                ]]
+              : []),
             [
               'Too many wrong passwords',
               'Sign-in locks for about 15 minutes. It lifts on its own, or use “Forgot password”, which gets you straight back in.',

@@ -16,6 +16,19 @@ public enum RegistrationEventType {
     CONFIRM_EXPIRED,
     CONFIRM_LOCKED,
     CONFIRM_NOT_FOUND,
+    // An account created by signing up with Apple or Google (SocialSignInService). The provider
+    // verified the address, so there is no REGISTER_STARTED / code / CONFIRM_SUCCESS sequence --
+    // which is also why RegistrationDispatchWatchdog never expects a verification email for one.
+    SOCIAL_SIGN_UP,
+    // Apple's server-to-server notifications (AppleNotificationController). The person stopped
+    // using their Apple ID with Huddle, or deleted it: the Apple identity is disconnected and the
+    // login's sessions end. The detail says whether the login still has another way in.
+    APPLE_CONSENT_REVOKED,
+    APPLE_ACCOUNT_DELETED,
+    // Hide My Email forwarding turned off / back on. While off, every email to that relay address
+    // is dropped by Apple -- this is the row that explains a "sent" email nobody received.
+    APPLE_EMAIL_DISABLED,
+    APPLE_EMAIL_ENABLED,
 
     // A request to one of the three registration endpoints that never reached
     // RegistrationService at all -- a malformed body, a validation failure, a database
