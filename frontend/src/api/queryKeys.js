@@ -22,6 +22,10 @@ export const queryKeys = {
   // Billing belongs to the household, not to whoever is currently selected -- one subscription
   // per account, so this is one of the few reads that legitimately has no personId.
   subscription: () => ['subscription'],
+  // The signed-in LOGIN's own ways in (password? Apple? Google?). Neither per person nor per
+  // household: it belongs to the credential. Keyed by user id so two members on one device never
+  // read each other's (the cache is reset on every sign-in anyway).
+  signInMethods: (userId) => ['sign-in-methods', userId],
 
   // Per-person.
   liveSession: (personId) => ['live-session', personId],

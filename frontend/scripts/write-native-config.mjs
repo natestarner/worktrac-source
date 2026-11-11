@@ -29,8 +29,27 @@ if (!/^https:\/\/[^/]+$/.test(embedOrigin)) {
   process.exit(1);
 }
 
+// Sign in with Apple / Google (lib/native/socialSignIn.js). OPTIONAL, unlike the two above: unset,
+// the app offers no provider buttons, which is exactly today's app. The release workflow sets them
+// per environment once the console setup is done (docs/social-sign-in-setup.md):
+//   NATIVE_GOOGLE_IOS_CLIENT_ID  the iOS OAuth client for THIS app's bundle id. Also needs its
+//                                reversed id as a URL scheme in Info.plist, or Google's sheet can't
+//                                hand the result back to the app.
+//   NATIVE_APPLE_SIGN_IN=1       only once the bundle's App ID has the Sign In with Apple capability
+//                                AND App.entitlements carries com.apple.developer.applesignin --
+//                                Apple's sheet fails without both.
+const socialSignIn = {};
+const googleIosClientId = (process.env.NATIVE_GOOGLE_IOS_CLIENT_ID || '').trim();
+if (googleIosClientId) socialSignIn.google = { iosClientId: googleIosClientId };
+if (process.env.NATIVE_APPLE_SIGN_IN === '1') socialSignIn.apple = {};
+
 writeFileSync(
   new URL('../dist/config.json', import.meta.url),
-  JSON.stringify({ apiUrl: apiUrl.replace(/\/+$/, ''), embedOrigin }, null, 2) + '\n'
+  JSON.stringify({
+    apiUrl: apiUrl.replace(/\/+$/, ''),
+    embedOrigin,
+    ...(Object.keys(socialSignIn).length ? { socialSignIn } : {}),
+  }, null, 2) + '\n'
 );
-console.log(`write-native-config: dist/config.json -> ${apiUrl}, videos from ${embedOrigin}`);
+console.log(`write-native-config: dist/config.json -> ${apiUrl}, videos from ${embedOrigin}`
+  + `, sign in with: ${Object.keys(socialSignIn).join(', ') || 'none'}`);

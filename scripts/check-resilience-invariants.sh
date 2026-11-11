@@ -289,10 +289,10 @@ fi
 #     component never branches on platform itself (.claude/rules/native-apps.md). A direct
 #     @capacitor/* import elsewhere is a second, untested way to reach a device API.
 # ---------------------------------------------------------------------------------------------
-OUT=$(grep -E "(from|import\()[[:space:]]*['\"]@capacitor/" "$INDEX" \
+OUT=$(grep -E "(from|import\()[[:space:]]*['\"]@(capacitor/|capgo/capacitor-)" "$INDEX" \
   | awk -F: -v p="$SRC/lib/native/" 'index($1, p) != 1 { print "  " $0 }')
 if [ -n "$OUT" ]; then
-  fail "@capacitor/* imported outside $SRC/lib/native/"
+  fail "@capacitor/* or @capgo/capacitor-* imported outside $SRC/lib/native/"
   echo "$OUT" >&2
   echo "  -> Add (or reuse) a function in lib/native/ whose web branch is today's code, and call that." >&2
 fi

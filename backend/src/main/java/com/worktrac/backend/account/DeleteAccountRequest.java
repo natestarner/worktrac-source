@@ -1,5 +1,8 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.identity.dto.Reconfirmation;
+import jakarta.validation.Valid;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -15,6 +18,11 @@ public record DeleteAccountRequest(
         @Pattern(regexp = "DELETE", message = "you must type DELETE to confirm")
         String confirmationText,
 
-        @NotBlank(message = "enter your password to confirm")
-        String password) {
+        // Optional since sign in with Apple / Google: a login with no password proves itself with
+        // `reconfirmation` instead. A password login that sends neither still gets a 400
+        // (AccountDeletionService). Relaxing a required field is additive (api-compatibility.md).
+        String password,
+
+        @Valid
+        Reconfirmation reconfirmation) {
 }

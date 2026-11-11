@@ -119,6 +119,23 @@ app:
   native:
     min-supported-build: ${NATIVE_MIN_SUPPORTED_BUILD:0}
     app-store-url: ${NATIVE_APP_STORE_URL:}
+  # Sign in with Apple / Google (SocialSignInProperties, docs/architecture/social-sign-in.md). OFF
+  # unless enabled AND the provider has client ids. Each environment lists its OWN client ids,
+  # comma-separated: a token is accepted only if its audience is one of them. Not secrets.
+  social-sign-in:
+    enabled: ${SOCIAL_SIGN_IN_ENABLED:false}
+    google:
+      client-ids: ${SOCIAL_SIGN_IN_GOOGLE_CLIENT_IDS:}
+    apple:
+      client-ids: ${SOCIAL_SIGN_IN_APPLE_CLIENT_IDS:}
+    # Revoking a person's Apple sign-in when they delete their account (App Store requirement).
+    # Team id and key id are not secret; the private key IS (the .p8's PEM text) and must come from
+    # a Container App secret. Unset here = revocation skipped with a warning (fine in local dev,
+    # NOT in production once Apple sign-in is on).
+    apple-revocation:
+      team-id: ${APPLE_TEAM_ID:}
+      key-id: ${APPLE_SIGN_IN_KEY_ID:}
+      private-key: ${APPLE_SIGN_IN_PRIVATE_KEY:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   jwt:

@@ -7,6 +7,9 @@ import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import LegalLinks from '../components/shared/LegalLinks';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
+import SocialSignIn from '../components/auth/SocialSignIn';
+import AccountPicker from '../components/auth/AccountPicker';
+import { useUI } from '../context/UIContext';
 
 // Every paid plan a marketing CTA is allowed to name on the way in. marketing/index.html's
 // "Go Plus" button links here as /register?plan=plus, and every CTA on
@@ -30,8 +33,13 @@ const MARKETING_PLAN_INTENTS = new Map([
 ]);
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, chooseAccount } = useAuth();
+  const { deferOnboarding } = useUI();
   const navigate = useNavigate();
+  // Apple / Google: the household picker (somebody with two households who tapped Apple here), and
+  // the sign-up name step, during which this page's own form steps aside. See SocialSignIn.
+  const [choice, setChoice] = useState(null);
+  const [signingUp, setSigningUp] = useState(false);
   // 'PLUS' | 'PRO' | null. Anything else in the URL is ignored -- this is a hint from a URL, not a
   // capability. It decides where someone lands, never what they are entitled to: the plan an
   // account actually holds is derived server-side from the subscription, never from this.
@@ -107,6 +115,39 @@ export default function RegisterPage() {
     }
   }
 
+  // Signed in with Apple / Google from here: honour a marketing plan intent exactly as
+  // ConfirmEmailPage does for a password registration.
+  function afterProviderSignIn() {
+    if (wantsPlan) {
+      deferOnboarding();
+      navigate(`/app/billing?intent=${wantsPlan.toLowerCase()}`);
+    } else {
+      navigate('/app/log');
+    }
+  }
+
+  async function handleChoose(accountId) {
+    setError('');
+    try {
+      await chooseAccount(accountId, choice.selectionToken);
+      afterProviderSignIn();
+    } catch (err) {
+      setError(err.message || 'That took too long. Sign in again to pick a household.');
+      setChoice(null);
+    }
+  }
+
+  if (choice) {
+    return (
+      <AccountPicker
+        accounts={choice.accounts}
+        onChoose={handleChoose}
+        onCancel={() => { setChoice(null); setError(''); }}
+        error={error}
+      />
+    );
+  }
+
   return (
     <main
       style={{
@@ -118,8 +159,9 @@ export default function RegisterPage() {
         padding: 'var(--space-6)',
       }}
     >
-      <form
-        onSubmit={handleSubmit}
+      {/* The card is a wrapper, not the form: the Apple / Google block is a sibling of the
+          password form because its sign-up step is a form of its own (forms can't nest). */}
+      <div
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
@@ -138,6 +180,9 @@ export default function RegisterPage() {
             style={{ display: 'block', margin: '0 auto 24px', width: 216, maxWidth: '100%', height: 'auto' }}
           />
         </picture>
+
+        {!signingUp && (
+        <form onSubmit={handleSubmit}>
 
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>
           {isProIntent ? 'Create your account' : 'Create your household'}
@@ -229,14 +274,27 @@ export default function RegisterPage() {
           )}
         </button>
 
+        </form>
+        )}
+
+        <SocialSignIn
+          onSignedIn={afterProviderSignIn}
+          onNeedsChoice={setChoice}
+          onSignUpStep={setSigningUp}
+          accountNoun={isProIntent ? 'Account' : 'Household'}
+        />
+
+        {/* Below both ways in, so it covers an Apple / Google sign-up as much as a password one. */}
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
           By creating {isProIntent ? 'an account' : 'a household'}, you agree to our <LegalLinks />.
         </div>
 
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>
-          Already have an account? <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Log in</Link>
-        </div>
-      </form>
+        {!signingUp && (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>
+            Already have an account? <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Log in</Link>
+          </div>
+        )}
+      </div>
     </main>
   );
 }

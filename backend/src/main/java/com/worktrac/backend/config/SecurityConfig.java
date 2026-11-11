@@ -8,6 +8,7 @@ import com.worktrac.backend.security.RequestSizeLimitFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -75,7 +76,14 @@ public class SecurityConfig {
                                 // to supply -- they exist to CREATE the login a test then signs in as.
                                 "/api/auth/test/member",
                                 "/api/auth/test/member-visibility",
-                                "/api/auth/test/pending-invite").permitAll()
+                                "/api/auth/test/pending-invite",
+                                // Test-only stand-in for Apple/Google tokens; same two gates as
+                                // the routes above (TestIdentityTokens' @Profile + the shared key).
+                                "/api/auth/test/id-token").permitAll()
+                        // Sign in with Apple / Google: no session yet, the provider's ID token is
+                        // the credential (SocialSignInController). ONE path segment only, so this
+                        // can never widen to anything nested under it.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/oauth/*").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // The Container Apps liveness/readiness probes. Same public, detail-free
                         // answer as /actuator/health (show-details: never).
@@ -88,6 +96,10 @@ public class SecurityConfig {
                         // StripeWebhookController. An environment with no webhook secret rejects
                         // every call rather than defaulting open.
                         .requestMatchers("/api/webhooks/stripe").permitAll()
+                        // Server-to-server (Apple), no JWT of OURS possible -- authenticated by the
+                        // notification itself, an Apple-signed JWT addressed to our client id,
+                        // verified in AppleNotificationController before anything is read.
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/apple-sign-in").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // setStatus, not sendError: sendError triggers the servlet container's internal

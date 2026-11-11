@@ -108,3 +108,14 @@ export function getApiUrl(path) {
   if (!config || !config.apiUrl) return path;
   return `${config.apiUrl}${path}`;
 }
+
+// Sign in with Apple / Google, per environment (config.json's `socialSignIn`). Client ids are not
+// secrets. A provider shows a button only when its block is here -- so production, whose deployed
+// config.json carries none until launch, shows nothing, whatever the backend's flag says.
+//   { google: { webClientId, iosClientId }, apple: { servicesId, redirectUri }, test: true }
+// `test` is the e2e suite's stand-in provider: local dev's config.json only, and it does nothing
+// unless Playwright also installs its hook (lib/native/socialSignIn.js).
+export function getSocialSignInConfig() {
+  const value = config?.socialSignIn;
+  return value && typeof value === 'object' ? value : {};
+}

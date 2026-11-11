@@ -128,6 +128,26 @@ public class AuthService {
     }
 
     /**
+     * Signs in a user whose identity some OTHER proof has already established -- today, an Apple
+     * or Google ID token that {@code SocialSignInService} verified and matched to a linked identity.
+     *
+     * <p>Exactly the tail of {@link #login}: the admin-role reconcile, then {@link #sessionOrPicker},
+     * so a provider sign-in answers with the same two response shapes a password does and the
+     * client needs no new vocabulary. Deliberately no lockout check: the lockout throttles password
+     * GUESSING, and nothing was guessed here. (A forgot-password reset clears it for the same
+     * reason.)
+     *
+     * <p>⚠️ Takes a {@link User}, never an email. Every caller must already hold proof that names
+     * this exact row; an overload that looked the user up by address would be a way to sign in as
+     * anybody.
+     */
+    @Transactional
+    public AuthResponse completeVerifiedSignIn(User user) {
+        reconcileAdminRole(user);
+        return sessionOrPicker(user);
+    }
+
+    /**
      * Finishes an invitation: proves who the invitee is, attaches the membership, and answers with
      * the same two shapes a login does.
      *
@@ -267,7 +287,19 @@ public class AuthService {
                     + " or reset your password to get back in right away.");
         }
 
-        if (rawPassword == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+        // ⚠️ An Apple or Google login with no password (V104) fails EXACTLY like a wrong password:
+        // same refusal, same failed-attempt count, and the same BCrypt work. BCryptPasswordEncoder
+        // returns false at once for a null hash without hashing anything, so letting it see one
+        // would answer ~100ms faster -- a timing oracle telling anyone with the sign-in form which
+        // addresses use Apple or Google. Hence the comparison against DUMMY_HASH, never a skip.
+        boolean matches;
+        if (user.hasPassword()) {
+            matches = rawPassword != null && passwordEncoder.matches(rawPassword, user.getPasswordHash());
+        } else {
+            passwordEncoder.matches(rawPassword == null ? "" : rawPassword, DUMMY_HASH);
+            matches = false;
+        }
+        if (!matches) {
             user.recordFailedLogin(MAX_FAILED_LOGINS, now, LOCKOUT_DURATION);
             userRepository.save(user);
             if (user.getLockedUntil() != null) {

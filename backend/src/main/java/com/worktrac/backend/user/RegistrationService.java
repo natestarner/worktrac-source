@@ -263,6 +263,41 @@ public class RegistrationService {
         eventPublisher.publishEvent(new VerificationCodeIssuedEvent(email, rawCode));
     }
 
+    /**
+     * Creates a household for somebody who signed up with Apple or Google: the same account, owner
+     * login, person and Free subscription {@link #confirmEmail} creates, with NO password.
+     *
+     * <p>There is no emailed code because the provider has already verified the address -- the
+     * caller ({@code SocialSignInService}) refuses a token without a verified email before it gets
+     * here. The welcome email and the audit row match a confirmed registration, so the Activity tab
+     * and the inbox read the same however somebody joined.
+     *
+     * <p>The caller must have checked the address has no login; this re-checks anyway, because
+     * two sign-ups for one address can race, and the second must be an honest 409 rather than a
+     * unique-index violation surfacing as a 503.
+     */
+    @Transactional
+    public AuthResponse createSocialLogin(String email, String personName, String accountName,
+                                          String providerName, String ipAddress) {
+        if (!rateLimiter.tryConsumePerIp(ipAddress) || !rateLimiter.tryConsumeGlobal()) {
+            auditService.record(email, RegistrationEventType.REGISTER_RATE_LIMITED,
+                    "Sign-up with " + providerName + " rate limited", ipAddress);
+            throw new TooManyRequestsException("Too many new accounts from here right now -- please try again later.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            auditService.record(email, RegistrationEventType.REGISTER_DUPLICATE_EMAIL,
+                    "Account already exists (sign-up with " + providerName + ")", ipAddress);
+            throw new ConflictException("An account with that email already exists");
+        }
+        AuthResponse response = createAccountUserPerson(email, null, personName.trim(), accountName);
+        eventPublisher.publishEvent(new RegistrationConfirmedEvent(email));
+        log.info("Registration with {} for {} from ip {}", providerName, email, ipAddress);
+        auditService.record(email, RegistrationEventType.SOCIAL_SIGN_UP,
+                "Account created with " + providerName + " (accountId=" + response.account().id() + ")",
+                ipAddress);
+        return response;
+    }
+
     private AuthResponse createAccountUserPerson(String email, String passwordHash, String personName,
                                                   String accountNameRaw) {
         String accountName = accountNameRaw == null || accountNameRaw.isBlank()

@@ -35,7 +35,11 @@ class HandlerPermissionCoverageTest {
     //   AuthController                 -- /api/auth/** is permitAll in SecurityConfig (register,
     //                                     login, the code flows). /me is the bootstrap call every
     //                                     member needs before any account context exists to check.
+    //   SocialSignInController         -- /api/auth/oauth/** is permitAll: sign in with Apple or
+    //                                     Google, before any session exists. The provider's ID
+    //                                     token is the credential (IdTokenVerifier checks it).
     //   StripeWebhookController        -- permitAll, authenticated by Stripe's signature.
+    //   AppleNotificationController    -- permitAll, authenticated by Apple's signed JWT.
     //   EmailDeliveryWebhookController -- permitAll, authenticated by a shared-secret query param.
     //   AdminController                -- /api/admin/** is hasRole("ADMIN") at the filter chain,
     //                                     and is the one deliberate cross-account reader.
@@ -47,7 +51,9 @@ class HandlerPermissionCoverageTest {
     // say what that something else is.
     private static final Set<String> EXEMPT_CONTROLLERS = Set.of(
             "AuthController",
+            "SocialSignInController",
             "StripeWebhookController",
+            "AppleNotificationController",
             "EmailDeliveryWebhookController",
             "AdminController",
             "TestDataAdminController",

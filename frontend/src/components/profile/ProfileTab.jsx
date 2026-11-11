@@ -9,6 +9,7 @@ import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ChangePasswordSection from './ChangePasswordSection';
+import SignInMethodsSection from './SignInMethodsSection';
 import LoginsSection from './LoginsSection';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import BackLink from '../shared/BackLink';
@@ -98,6 +99,9 @@ export default function ProfileTab() {
           every role can do, and for a member it is the ONLY thing. Putting it below would bury a
           member's single action under a block that renders nothing for them. */}
       <ChangePasswordSection />
+      {/* Every role's own Apple / Google sign-in, beside the password for the same reason: a way
+          into THIS login. Renders nothing where no provider is configured and none is connected. */}
+      <SignInMethodsSection />
 
       {/* Everything below is household management, which is MANAGE_PEOPLE / DELETE_ACCOUNT and
           therefore owner-only. Hidden rather than disabled: a member has no path to any of it, so

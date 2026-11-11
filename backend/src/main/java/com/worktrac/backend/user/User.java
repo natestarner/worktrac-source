@@ -29,7 +29,10 @@ public class User {
     @Column(nullable = false, length = 255)
     private String email;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    // NULL for a login created with Apple or Google that has never set a password (V104). Never
+    // compare against it directly: AuthService.verifyCredentials is the one place a password is
+    // checked, and it treats NULL exactly like a wrong password, timing included.
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
     // 'USER' or 'ADMIN'. The env-driven ADMIN_EMAILS allowlist is the real source of
@@ -83,6 +86,11 @@ public class User {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    /** False for an Apple or Google login that has never set a password. */
+    public boolean hasPassword() {
+        return passwordHash != null && !passwordHash.isEmpty();
     }
 
     public void updatePasswordHash(String passwordHash) {

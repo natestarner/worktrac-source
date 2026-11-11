@@ -11,6 +11,7 @@ import {
   successBannerStyle,
 } from '../components/auth/authStyles';
 import AnimatedLockup from '../components/auth/AnimatedLockup';
+import SocialSignIn from '../components/auth/SocialSignIn';
 
 export default function LoginPage() {
   const { login, chooseAccount } = useAuth();
@@ -29,6 +30,9 @@ export default function LoginPage() {
   // route would also be meaningless when reached without it. See api/client.js's bearerOverride
   // for the same argument one layer down.
   const [choice, setChoice] = useState(null);
+  // True while a new person signing up with Apple / Google is giving their name: the password form
+  // steps aside so the screen asks one thing at a time.
+  const [signingUp, setSigningUp] = useState(false);
   const successMessage = location.state?.message;
 
   async function handleSubmit(e) {
@@ -81,13 +85,18 @@ export default function LoginPage() {
 
   return (
     <main style={authPageStyle}>
-      <form onSubmit={handleSubmit} style={authCardStyle}>
+      {/* The card is a wrapper, not the form: the Apple / Google block below is a sibling of the
+          password form because its sign-up step is a form of its own (forms can't nest). */}
+      <div style={authCardStyle}>
         <AnimatedLockup width={216} style={{ maxWidth: '100%', height: 'auto', marginBottom: 40 }} />
 
         {/* No visible title on this page -- the lockup above is the branding. A screen reader
             still needs to know which screen it landed on, and axe's page-has-heading-one flagged
             its absence. */}
         <h1 className="sr-only">Log in</h1>
+
+        {!signingUp && (
+        <form onSubmit={handleSubmit}>
 
         {successMessage && (
           <div role="status" style={successBannerStyle}>
@@ -153,13 +162,24 @@ export default function LoginPage() {
           )}
         </button>
 
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)' }}>
-          New household?{' '}
-          <Link to="/register" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
-            Register
-          </Link>
-        </div>
-      </form>
+        </form>
+        )}
+
+        <SocialSignIn
+          onSignedIn={() => navigate('/app/log')}
+          onNeedsChoice={setChoice}
+          onSignUpStep={setSigningUp}
+        />
+
+        {!signingUp && (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)' }}>
+            New household?{' '}
+            <Link to="/register" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
+              Register
+            </Link>
+          </div>
+        )}
+      </div>
     </main>
   );
 }

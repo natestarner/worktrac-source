@@ -8,6 +8,8 @@ import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { cancelButtonStyle, deleteButtonStyle } from '../shared/ConfirmDialog';
+import ProviderButtons from '../auth/ProviderButtons';
+import { useSignInMethods } from '../../hooks/useSignInMethods';
 
 const CONFIRMATION_WORD = 'DELETE';
 
@@ -31,15 +33,46 @@ export default function DeleteAccountModal({ onClose }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  async function handleDelete() {
+  // How this login proves it's them. A password, as always -- or, for a login with no password,
+  // signing in again with a connected Apple / Google account. A login with APPLE connected must
+  // confirm with Apple even if it has a password: deleting has to disconnect Huddle from the Apple
+  // ID, and only Apple's sheet hands over the one-time code that needs (App Store requirement).
+  //
+  // Unknown (not loaded) reads as today's password form; the server's NO_PASSWORD or
+  // APPLE_RECONFIRMATION_REQUIRED answer then switches it (`serverAsked`).
+  const { data: methods } = useSignInMethods();
+  const [serverAsked, setServerAsked] = useState(null);
+  const connected = (methods?.connected ?? []).map((c) => c.provider);
+  const appleConnected = connected.includes('apple') || serverAsked === 'APPLE_RECONFIRMATION_REQUIRED';
+  const noPassword = methods?.hasPassword === false || serverAsked === 'NO_PASSWORD';
+  const confirmWith = appleConnected ? ['apple'] : noPassword ? connected : null;
+
+  async function submit(reconfirmation) {
     setError('');
     try {
-      await deleteAccount(CONFIRMATION_WORD, password);
+      // The password path sends exactly what it always did.
+      if (reconfirmation) await deleteAccount(CONFIRMATION_WORD, undefined, reconfirmation);
+      else await deleteAccount(CONFIRMATION_WORD, password);
       logout();
       navigate('/login');
     } catch (err) {
+      if (err?.code === 'NO_PASSWORD' || err?.code === 'APPLE_RECONFIRMATION_REQUIRED') {
+        setServerAsked(err.code);
+      }
       setError(err.message || 'Could not delete your account');
     }
+  }
+
+  const handleDelete = () => submit(null);
+
+  function handleProviderToken(provider, token) {
+    return submit({
+      provider,
+      idToken: token.idToken,
+      nonce: token.nonce,
+      appleAuthorizationCode: token.appleAuthorizationCode,
+      appleRedirectUri: token.appleRedirectUri,
+    });
   }
 
   return (
@@ -115,6 +148,30 @@ export default function DeleteAccountModal({ onClose }) {
         }}
       />
 
+      {confirmWith ? (
+        <>
+          {/* No password to type (or Apple must be asked): confirming with the provider is the
+              proof, and it is the delete. Not offered until DELETE is typed. */}
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            {appleConnected
+              ? 'Confirm with Apple. Deleting also disconnects Huddle from your Apple ID.'
+              : 'Confirm it’s you'}
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <ProviderButtons
+              only={confirmWith}
+              verb="Delete and confirm with"
+              disabled={confirmText !== CONFIRMATION_WORD}
+              onToken={handleProviderToken}
+              onError={() => setError("Couldn't reach the sign-in service. Try again.")}
+            />
+          </div>
+          <button onClick={onClose} style={{ ...cancelButtonStyle, width: '100%' }}>
+            Cancel
+          </button>
+        </>
+      ) : (
+      <>
       {/* Typing DELETE proves intent; the password proves identity. The token that got them this
           far is valid for 30 days with no revocation, which is a weak thing to hang an
           irreversible, unrecoverable action on -- a family tablet left signed in is enough. */}
@@ -148,6 +205,8 @@ export default function DeleteAccountModal({ onClose }) {
           Delete account
         </Button>
       </div>
+      </>
+      )}
     </Modal>
   );
 }

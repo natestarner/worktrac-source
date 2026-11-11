@@ -61,6 +61,14 @@ class PermissionMappingTest {
         // become "can walk out with the whole roster in one click" — an argument that applies with
         // MORE force to an assistant than to a family member. A manager can still export any one
         // client, which is what an assistant actually needs.
+        // Their own Apple/Google sign-in is a way into THEIR login, so every role manages its own --
+        // the same decision as CHANGE_OWN_PASSWORD, made deliberately rather than inherited.
+        @Test
+        void managesTheirOwnSignInMethods() {
+            assertThat(AccountRole.MANAGER.permissions(true)).contains(Permission.MANAGE_OWN_SIGN_IN_METHODS);
+            assertThat(AccountRole.MEMBER.permissions(false)).contains(Permission.MANAGE_OWN_SIGN_IN_METHODS);
+        }
+
         @Test
         void cannotWalkOutWithTheWholeAccountInOneFile() {
             assertThat(AccountRole.MANAGER.permissions(true)).doesNotContain(Permission.EXPORT_ACCOUNT_DATA);
@@ -99,6 +107,7 @@ class PermissionMappingTest {
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
                     Permission.CHANGE_OWN_PASSWORD,
+                    Permission.MANAGE_OWN_SIGN_IN_METHODS,
                     Permission.VIEW_OTHER_PEOPLE,
                     Permission.CREATE_SHARED_RESOURCE,
                     Permission.EDIT_OWN_SHARED_RESOURCE,
@@ -111,6 +120,7 @@ class PermissionMappingTest {
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
                     Permission.CHANGE_OWN_PASSWORD,
+                    Permission.MANAGE_OWN_SIGN_IN_METHODS,
                     Permission.CREATE_SHARED_RESOURCE,
                     Permission.EDIT_OWN_SHARED_RESOURCE,
                     Permission.DELETE_OWN_SHARED_RESOURCE);

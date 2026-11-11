@@ -12,6 +12,8 @@ vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
+// Not loaded yet: every component renders exactly what it did before sign in with Apple/Google.
+vi.mock('../../hooks/useSignInMethods', () => ({ useSignInMethods: () => ({ data: undefined }) }));
 
 describe('DeleteAccountModal', () => {
   let logout;
