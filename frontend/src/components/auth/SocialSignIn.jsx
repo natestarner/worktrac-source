@@ -86,6 +86,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
         </div>
       )}
       <ProviderButtons
+        size="large"
         disabled={busy}
         onToken={(provider, token) => finish(provider, token, {})}
         onError={(err) => setError(err?.message ? `Couldn't sign you in: ${err.message}` : "Couldn't sign you in.")}

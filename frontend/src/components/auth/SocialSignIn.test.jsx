@@ -34,6 +34,13 @@ describe('SocialSignIn', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // Apple's guidelines (and App Review) want Sign in with Apple no smaller than the screen's other
+  // ways to sign in. Here that is "Log in" / "Create household", the large primary button (52px).
+  it('draws the Apple button as large as the primary button beside it', () => {
+    render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Continue with Apple' })).toHaveStyle({ minHeight: '52px' });
+  });
+
   it('signs in and hands over to the page', async () => {
     signInWithIdToken.mockResolvedValue(null);
     const onSignedIn = vi.fn();

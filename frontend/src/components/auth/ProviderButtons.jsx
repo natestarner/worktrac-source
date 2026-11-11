@@ -18,10 +18,18 @@ const LABELS = { apple: 'Apple', google: 'Google', test: 'Test provider' };
  * `only` limits it to the providers named (re-confirming must use one ALREADY connected), and
  * `verb` is the button's first word ("Continue with", "Connect", "Confirm with").
  *
+ * `size="large"` on the Log in and Register screens: 52px with the primary button's type, matching
+ * "Log in" / "Create household" beside it. Apple's Human Interface Guidelines ask that Sign in with
+ * Apple be no smaller than the screen's other ways to sign in, and App Review checks. Elsewhere
+ * (Profile, confirm dialogs) the default 44px matches the buttons around it. Google's web button
+ * is Google's own and tops out at 40px; that small difference is the accepted norm.
+ *
  * A provider whose script can't load (offline, a content blocker) just drops out; nothing else on
  * the screen depends on it.
  */
-export default function ProviderButtons({ onToken, onError, disabled = false, only, verb = 'Continue with' }) {
+export default function ProviderButtons({
+  onToken, onError, disabled = false, only, verb = 'Continue with', size = 'default',
+}) {
   const providers = useMemo(() => {
     const all = availableSignInProviders();
     return only ? all.filter((p) => only.includes(p)) : all;
@@ -48,6 +56,7 @@ export default function ProviderButtons({ onToken, onError, disabled = false, on
               key={provider}
               provider={provider}
               verb={verb}
+              size={size}
               disabled={disabled}
               onToken={onToken}
               onError={onError}
@@ -58,7 +67,7 @@ export default function ProviderButtons({ onToken, onError, disabled = false, on
   );
 }
 
-function ProviderButton({ provider, verb, disabled, onToken, onError }) {
+function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
   const [busy, setBusy] = useState(false);
 
   async function handleClick() {
@@ -73,7 +82,10 @@ function ProviderButton({ provider, verb, disabled, onToken, onError }) {
     }
   }
 
-  const style = provider === 'apple' ? appleStyle : neutralStyle;
+  const style = {
+    ...(provider === 'apple' ? appleStyle : neutralStyle),
+    ...(size === 'large' ? largeStyle : null),
+  };
   return (
     <button
       type="button"
@@ -82,8 +94,8 @@ function ProviderButton({ provider, verb, disabled, onToken, onError }) {
       disabled={disabled || busy}
       style={style}
     >
-      {provider === 'apple' && <AppleLogo />}
-      {provider === 'google' && <GoogleLogo />}
+      {provider === 'apple' && <AppleLogo size={size === 'large' ? 20 : 16} />}
+      {provider === 'google' && <GoogleLogo size={size === 'large' ? 20 : 16} />}
       <span>{`${verb} ${LABELS[provider]}`}</span>
     </button>
   );
@@ -141,6 +153,14 @@ const baseStyle = {
 // Apple's colours, not ours, which is why they are literals rather than tokens.
 const appleStyle = { ...baseStyle, background: '#000', color: '#fff', border: '1px solid #000' };
 
+// The primary button's large size (.btn-lg in index.css), so the Apple button stands level with
+// "Log in" and "Create household" rather than below them.
+const largeStyle = {
+  minHeight: 52,
+  fontSize: 'var(--text-xl)',
+  fontWeight: 'var(--weight-bold)',
+};
+
 const neutralStyle = {
   ...baseStyle,
   background: 'var(--color-surface)',
@@ -148,18 +168,18 @@ const neutralStyle = {
   border: '1px solid var(--color-border)',
 };
 
-function AppleLogo() {
+function AppleLogo({ size = 16 }) {
   return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
       <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z" />
     </svg>
   );
 }
 
 // Google's four-colour "G", which its branding rules require on a custom Google button (the app's).
-function GoogleLogo() {
+function GoogleLogo({ size = 16 }) {
   return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 48 48">
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 48 48">
       <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
       <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
       <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
