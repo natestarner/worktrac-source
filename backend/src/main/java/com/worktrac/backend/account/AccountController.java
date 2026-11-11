@@ -105,7 +105,8 @@ public class AccountController {
     @DeleteMapping
     @RequiresPermission(Permission.DELETE_ACCOUNT)
     public ResponseEntity<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
-        accountDeletionService.deleteAccount(currentUser.accountId(), currentUser.userId(), request.password());
+        accountDeletionService.deleteAccount(currentUser.accountId(), currentUser.userId(), request.password(),
+                request.reconfirmation());
         return ResponseEntity.noContent().build();
     }
 }

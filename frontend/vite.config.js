@@ -76,7 +76,12 @@ const pwaPlugin = (mode) => VitePWA({
   devOptions: { enabled: false },
 })
 
+// A Capacitor plugin module: @capacitor/* except core (which the web genuinely runs), and the
+// community @capgo/capacitor-* plugins. Either path separator.
+const NATIVE_PLUGIN = /[\\/](@capacitor[\\/](?!core[\\/])|@capgo[\\/]capacitor-)/;
+
 // https://vite.dev/config/
+
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(isTest ? [] : [pwaPlugin(mode)])],
   // Stamped into the bundle at build time and attached to Contact Us submissions, so a bug report
@@ -106,13 +111,19 @@ export default defineConfig(({ mode }) => ({
   // Lazy chunks made only of Capacitor plugins get a `native-` prefix so the service worker can
   // leave them out of the web precache (globIgnores above). @capacitor/core is excluded from the
   // test: it is the one Capacitor package the web genuinely runs (isNativePlatform), and it lives
-  // in the main chunk anyway.
+  // in the main chunk anyway. The community @capgo/capacitor-* plugins (today the Apple and Google
+  // sign-in sheets) are plugins too; without them in the test their chunk would land in every web
+  // install's precache.
   build: {
     rolldownOptions: {
       output: {
+        // A chunk counts as native when it holds at least one plugin and nothing else but
+        // `tslib`, the TypeScript helper the @capgo plugins import (it rode along in the sign-in
+        // plugin's chunk and kept it out of `native-`, so the web precached 44 KB it can never run).
+        // "At least one plugin" keeps an app chunk that merely uses tslib from being renamed.
         chunkFileNames: (chunk) =>
-          chunk.moduleIds.length > 0 &&
-          chunk.moduleIds.every((id) => /[\\/]@capacitor[\\/](?!core[\\/])/.test(id))
+          chunk.moduleIds.some((id) => NATIVE_PLUGIN.test(id)) &&
+          chunk.moduleIds.every((id) => NATIVE_PLUGIN.test(id) || /[\\/]node_modules[\\/]tslib[\\/]/.test(id))
             ? 'assets/native-[hash].js'
             : 'assets/[name]-[hash].js',
       },

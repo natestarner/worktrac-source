@@ -14,6 +14,11 @@ import {
 } from '../api/auth';
 import { changePassword as apiChangePassword } from '../api/password';
 import { acceptInvite as apiAcceptInvite, previewInvite as apiPreviewInvite } from '../api/logins';
+import {
+  disconnectSignInMethod as apiDisconnectSignInMethod,
+  setInitialPassword as apiSetInitialPassword,
+  signInWithIdToken as apiSignInWithIdToken,
+} from '../api/socialSignIn';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
 import { clearOutbox, getOutboxScope, restoreOutbox, setOutboxScope } from '../lib/outboxPersistence';
@@ -439,6 +444,43 @@ export function AuthProvider({ children }) {
     await establishSession(token);
   }, [establishSession]);
 
+  /**
+   * Signs in (or up) with an Apple / Google ID token. Returns EXACTLY what `login` returns -- null
+   * once signed in, or `{ accounts, selectionToken }` for the household picker -- and throws the
+   * server's ApiError otherwise. A 409 with `code === 'SIGN_UP_REQUIRED'` means a new person: the
+   * caller asks their name and calls again with the SAME token and nonce plus `personName`.
+   *
+   * Through establishSession like every other way into a session. When `personName` is sent and
+   * a session comes back, the account was created by this very request -- the one other path with
+   * confirmEmail's guarantee -- so it arms the first-run welcome the same way.
+   */
+  const signInWithIdToken = useCallback(async (provider, { idToken, nonce, personName, accountName }) => {
+    const response = await apiSignInWithIdToken(provider, { idToken, nonce, personName, accountName });
+    if (!response.token) {
+      return { accounts: response.accounts ?? [], selectionToken: response.selectionToken };
+    }
+    await establishSession(response.token, personName
+      ? { afterSnapshot: (data) => markOnboardingPending(data.account?.id) }
+      : undefined);
+    return null;
+  }, [establishSession]);
+
+  /**
+   * Disconnects an Apple / Google sign-in from this login. Like a password change it bumps
+   * token_version server-side and answers with a REPLACEMENT session, which MUST go through
+   * establishSession or the next request signs the person out as a result of succeeding.
+   */
+  const disconnectSignInMethod = useCallback(async (provider) => {
+    const { token } = await apiDisconnectSignInMethod(provider);
+    await establishSession(token);
+  }, [establishSession]);
+
+  /** Sets the first password on an Apple / Google login (proved with a provider). Same rule. */
+  const setFirstPassword = useCallback(async ({ newPassword, reconfirmation }) => {
+    const { token } = await apiSetInitialPassword({ newPassword, reconfirmation });
+    await establishSession(token);
+  }, [establishSession]);
+
   // Starts the pending registration (sends a verification code) -- no account exists yet, so
   // this does not log the user in. That happens in confirmEmail below, once the code checks
   // out and the account is actually created.
@@ -515,6 +557,9 @@ export function AuthProvider({ children }) {
         previewInvite,
         switchAccount,
         changeOwnPassword,
+        signInWithIdToken,
+        disconnectSignInMethod,
+        setFirstPassword,
         register,
         confirmEmail,
         resendCode,

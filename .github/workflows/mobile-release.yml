@@ -73,6 +73,12 @@ jobs:
       # Monotonic per workflow, which is what both stores require of a build number.
       NATIVE_BUILD_NUMBER: ${{ github.run_number }}
       NATIVE_API_URL: ${{ vars.NATIVE_API_URL }}
+      # Sign in with Apple / Google (scripts/write-native-config.mjs). Unset = no provider buttons,
+      # i.e. today's app. Set per environment (mobile-lower / mobile-production) only after the
+      # console setup in docs/social-sign-in-setup.md; NATIVE_APPLE_SIGN_IN=1 also needs the Sign In
+      # with Apple entitlement in App.entitlements, or Apple's sheet fails.
+      NATIVE_GOOGLE_IOS_CLIENT_ID: ${{ vars.NATIVE_GOOGLE_IOS_CLIENT_ID }}
+      NATIVE_APPLE_SIGN_IN: ${{ vars.NATIVE_APPLE_SIGN_IN }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}

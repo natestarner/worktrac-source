@@ -1,3 +1,4 @@
 {
-  "apiUrl": ""
+  "apiUrl": "",
+  "socialSignIn": { "test": true }
 }

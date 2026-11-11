@@ -39,6 +39,11 @@ platform :ios do
       type: "appstore",
       app_identifier: VARIANTS.values.map { |v| v[:bundle_id] },
       readonly: false,
+      # Re-issue the profiles on every run of this lane. It only runs when signing has to change --
+      # the yearly certificate, or a capability added to an App ID (Sign in with Apple, 2026-11-11),
+      # which invalidates the stored profiles and leaves `beta` unable to sign until they are
+      # re-issued with the new entitlement. The certificate itself is reused, not re-created.
+      force: true,
       api_key: asc_api_key,
     )
   end

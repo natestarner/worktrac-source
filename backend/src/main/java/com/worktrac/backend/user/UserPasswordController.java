@@ -5,6 +5,7 @@ import com.worktrac.backend.membership.RequiresPermission;
 import com.worktrac.backend.security.CurrentUser;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.ChangePasswordRequest;
+import com.worktrac.backend.user.dto.SetInitialPasswordRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,6 +49,17 @@ public class UserPasswordController {
     @RequiresPermission(Permission.CHANGE_OWN_PASSWORD)
     public AuthResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         return passwordChangeService.changePassword(
+                currentUser.userId(), currentUser.accountId(), request);
+    }
+
+    /**
+     * Sets the FIRST password on a login created with Apple or Google, which proves itself by
+     * re-confirming with that provider. Returns a replacement session, like a change.
+     */
+    @PostMapping("/password/initial")
+    @RequiresPermission(Permission.CHANGE_OWN_PASSWORD)
+    public AuthResponse setInitialPassword(@Valid @RequestBody SetInitialPasswordRequest request) {
+        return passwordChangeService.setInitialPassword(
                 currentUser.userId(), currentUser.accountId(), request);
     }
 }

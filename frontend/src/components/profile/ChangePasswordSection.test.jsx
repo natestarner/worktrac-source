@@ -22,6 +22,8 @@ vi.mock('../shared/Modal', () => ({
     </div>
   ),
 }));
+// Not loaded yet: every component renders exactly what it did before sign in with Apple/Google.
+vi.mock('../../hooks/useSignInMethods', () => ({ useSignInMethods: () => ({ data: undefined }) }));
 
 function openModal() {
   render(<ChangePasswordSection />);

@@ -19,6 +19,7 @@ const POSITIVE_EVENT_TYPES = new Set([
   'REGISTER_STARTED',
   'RESEND_REQUESTED',
   'CONFIRM_SUCCESS',
+  'SOCIAL_SIGN_UP',
   'VERIFICATION_EMAIL_SENT',
   'SUCCESS_EMAIL_SENT',
   'PASSWORD_RESET_EMAIL_SENT',
@@ -115,7 +116,8 @@ function ActivityLegend() {
       </div>
       <div>
         <strong>Registration flow:</strong> REGISTER_STARTED / RESEND_REQUESTED / CONFIRM_SUCCESS
-        are the happy path. REGISTER_DUPLICATE_EMAIL, REGISTER_RATE_LIMITED, RESEND_THROTTLED,
+        are the happy path. SOCIAL_SIGN_UP is an account created with Apple or Google, which skips
+        the emailed code. REGISTER_DUPLICATE_EMAIL, REGISTER_RATE_LIMITED, RESEND_THROTTLED,
         RESEND_NOT_FOUND, and CONFIRM_WRONG_CODE / CONFIRM_EXPIRED / CONFIRM_LOCKED /
         CONFIRM_NOT_FOUND are the ways it can fail before an account is created.
       </div>

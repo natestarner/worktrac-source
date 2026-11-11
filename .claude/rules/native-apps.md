@@ -38,7 +38,9 @@ anywhere else.
   branch.** If the web branch is not provably today's behaviour, the change is not invisible on
   the web, and its PR must say so.
 - **Plugin chunks are not precached on the web.** `vite.config.js` names any lazy chunk made only of
-  `@capacitor/*` (core excepted) `native-*.js`, and the service worker's `globIgnores` skips them.
+  `@capacitor/*` (core excepted) and `@capgo/capacitor-*` plugins (plus the `tslib` helper they
+  import) `native-*.js`, and the service worker's `globIgnores` skips them. `@capgo/capacitor-*`
+  imports are confined to `lib/native/` by the same §5b guard as `@capacitor/*`.
   A new plugin import is covered automatically; don't import a plugin together with app code in
   one dynamic `import()`, or its chunk loses the prefix and lands in every web install's precache.
 
@@ -56,6 +58,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link (or the checkout scheme link) that opened the app (`appUrlOpen`, or the launch URL, read once per launch) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
 | `appReturnUrl(hostname, search)` | the same on both: a pure function | `<bundle id>://checkout-complete…` for the app claiming that host, or `null` | `CheckoutCompletePage`'s "Return to the Huddle app" |
 | `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
+| `availableSignInProviders()` / `signInWithProvider(p)` / `renderGoogleButton(el, …)` / `googleUsesRenderedButton()` (`socialSignIn.js`) | Google Identity Services' own rendered button; Apple's JS in popup mode; both scripts lazy. Nothing offered without a `socialSignIn` block in config.json | `@capgo/capacitor-social-login`: Apple's and Google's native sheets (Google refuses web sign-in inside a WebView). `useProperTokenExchange` returns Apple's one-time code UNEXCHANGED, which the backend needs to revoke on account deletion | `SocialSignIn.jsx` (Login, Register), `ProviderButtons.jsx` (Profile's Sign in with, Set a password, Delete account), `HelpTab` (copy only) |
 | `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutConfirmModal`'s End tap |
 | `appReviewUrl(storeUrl)` | `null` (so the web menu is unchanged) | The listing (`/me`'s `client.appStoreUrl`) with `?action=write-review`, or `null` while that is unset | `UserMenu`'s "Rate Huddle", opened with `openInBrowser` (the App Store app, not the sheet) |
 
