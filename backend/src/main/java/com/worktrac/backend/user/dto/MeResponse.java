@@ -25,7 +25,12 @@ import java.util.List;
 //
 // `client` is what the server tells the App Store app about itself -- the minimum build it still
 // supports (ClientConfigDto). Additive in the same way.
+//
+// `renewedToken` keeps a person who uses the app signed in: a fresh 30-day session token, sent when
+// the one this request carried is more than a day old (AuthService#renewalFor), else null. The
+// client stores it in place of its own. Additive too: an older client ignores it and keeps the
+// fixed 30 days it always had.
 public record MeResponse(UserDto user, AccountDto account, MembershipDto membership,
                           List<PersonDto> people, List<AccountChoiceDto> accounts,
-                          ClientConfigDto client) {
+                          ClientConfigDto client, String renewedToken) {
 }

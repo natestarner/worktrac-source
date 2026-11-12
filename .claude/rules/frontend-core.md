@@ -334,6 +334,14 @@ trigger. Any `/me` that lands stamps `identityConfirmedAtRef` (boot, `establishS
 `refreshPeople`, the reconcile), and one in flight blocks another. Pinned by
 `AuthContext.resume.test.jsx`, verified red against the boot-and-reconnect-only version.
 
+**`/me` also renews the session.** A token over a day old gets `renewedToken` back (a fresh 30-day
+one, `AuthService#renewalFor`; never for admins), so anyone who opens the app at least once every 30
+days stays signed in. Sessions used to end exactly 30 days after sign-in however often the app was
+used. Every `/me` caller adopts it through `takeRenewal`, **after** its own "is this answer still for
+my token?" check. Swapping inside `apiMe()` would trip those checks and drop the boot's own answer.
+The renewed token never goes into the snapshot or state. Pinned by `AuthContext.renewal.test.jsx` and
+`SessionRenewalTest`, both verified red.
+
 ## A set write invalidates every view derived from sets
 
 `queryClient.js`'s `LOG_SET` `onSettled` and `reconcileSetChange` must refresh **all** of
