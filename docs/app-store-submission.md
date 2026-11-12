@@ -76,7 +76,7 @@ details must match `billing.md`.
 ## Notes for the reviewer (checklist 10.8)
 
 Paste into App Store Connect → the version → App Review Information → Notes, with the demo login
-(checklist 10.1) in the sign-in fields.
+(checklist 10.1) in the sign-in fields. This is the text submitted with 1.2.0 (2026-11-12).
 
 > Huddle is a workout log for households: one account holds several people (for example a parent
 > and their children), each with a separate log. Profiles for children are created and managed by
@@ -92,17 +92,17 @@ Paste into App Store Connect → the version → App Review Information → Note
 > checkout (Stripe), opened in Safari, as permitted for US storefront apps under guideline 3.1.1(a).
 > On any other storefront the app shows no prices, purchase buttons or links. The app is available
 > in the United States only. The demo account is on the Free plan so the upgrade link is visible
-> under Account → Plan & billing.
+> under the account menu → Plan & billing.
 >
 > Sign in with Apple and Google: offered on the Log in and Sign up screens, with Sign in with Apple
 > first and the same size as the other ways to sign in (guideline 4.8). An account created with
 > Apple or Google needs no password, and Hide My Email addresses work. Account deletion is in the
 > app: the account menu → Profile → "Delete account". For an account connected to Apple, the person
 > confirms with Apple, and deleting revokes Huddle's Sign in with Apple token, so Huddle is removed
-> from that Apple ID's "Sign in with Apple" list (guideline 5.1.1(v)). The demo account below uses a
-> password; any Apple ID can be used to try Sign in with Apple.
+> from that Apple ID's "Sign in with Apple" list (guideline 5.1.1(v)).
 >
-> Demo account: [email] / [password].
+> Demo account: the sign-in details are in the fields above. It uses a password; any Apple ID or
+> Google account can be used to try Sign in with Apple or Google.
 
 ## The demo account and the screenshots (checklist 10.1, 10.2)
 
