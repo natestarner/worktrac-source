@@ -94,6 +94,14 @@ Paste into App Store Connect → the version → App Review Information → Note
 > in the United States only. The demo account is on the Free plan so the upgrade link is visible
 > under Account → Plan & billing.
 >
+> Sign in with Apple and Google: offered on the Log in and Sign up screens, with Sign in with Apple
+> first and the same size as the other ways to sign in (guideline 4.8). An account created with
+> Apple or Google needs no password, and Hide My Email addresses work. Account deletion is in the
+> app: the account menu → Profile → "Delete account". For an account connected to Apple, the person
+> confirms with Apple, and deleting revokes Huddle's Sign in with Apple token, so Huddle is removed
+> from that Apple ID's "Sign in with Apple" list (guideline 5.1.1(v)). The demo account below uses a
+> password; any Apple ID can be used to try Sign in with Apple.
+>
 > Demo account: [email] / [password].
 
 ## The demo account and the screenshots (checklist 10.1, 10.2)
@@ -207,7 +215,7 @@ type below is **Linked to the user**, purpose **App Functionality** unless noted
 | Health & Fitness | Health | Bodyweight check-ins |
 | User Content | Other User Content | Workout and check-in notes |
 | User Content | Customer Support | Contact Us messages |
-| Identifiers | User ID | Account and login ids |
+| Identifiers | User ID | Account and login ids, including the Apple or Google account id a person signs in with (Sign in with Apple / Google) |
 | Identifiers | Device ID | The random per-install id sent with each request to match a bug report to the logs (not an advertising id) |
 | Purchases | Purchase History | Plan and billing events. Purposes: App Functionality, **Analytics** (the upgrade funnel in `billing.md`) |
 | Diagnostics | Crash Data | The last client error, only when attached to a Contact Us message |
