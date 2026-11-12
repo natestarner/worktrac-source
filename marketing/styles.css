@@ -1567,6 +1567,18 @@ img {
   color: var(--color-muted);
 }
 
+/* The trademark and copyright notice, the one place the site claims the name and logo in writing.
+   It lives here, not as a ™ beside the header wordmark: the notice does the legal work, and the
+   brand stays clean where people look at it (Nate's call, 2026-11-12). Pulled up under the legal
+   line so the two read as one block rather than two rows a footer gap apart. */
+.site-footer__trademark {
+  flex-basis: 100%;
+  margin: calc(-1 * var(--space-2)) 0 0;
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
 
 /* Terms and Privacy. Long-form prose rather than marketing sections, so headings need their own
    rhythm -- the section styles here are built for one heading per screen, not a dozen. */

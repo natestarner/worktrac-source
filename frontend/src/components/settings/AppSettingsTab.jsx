@@ -741,7 +741,14 @@ export default function AppSettingsTab() {
           conversation needs, so it belongs somewhere you can just go and look. */}
       <SectionLabel>About</SectionLabel>
       <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)' }}>
-        Huddle · build {APP_BUILD}
+        <div>Huddle · build {APP_BUILD}</div>
+        {/* The app's one trademark claim, kept here rather than as a ™ on the sign-in lockup or
+            the header: the notice does the legal work, and the brand stays clean where people look
+            at it. Same sentence as the marketing footer (marketing.md); ™ becomes ® everywhere
+            together once the registration issues. */}
+        <div style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-1)' }}>
+          Huddle™ and the Huddle logo are trademarks of Starner Consulting Co.
+        </div>
       </div>
     </div>
   );
