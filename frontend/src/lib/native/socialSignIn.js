@@ -31,6 +31,24 @@ export async function createNonce() {
   return { raw, hashed: await sha256Hex(raw) };
 }
 
+/**
+ * The `given_name` claim of an ID token, or undefined. ONLY to pre-fill the sign-up name field,
+ * which the person can change: the payload is read without checking the signature, so nothing here
+ * may be trusted for anything else (the backend verifies the token itself). Google puts the name in
+ * the token, while Apple sends it beside the token, once, and never in it.
+ */
+export function givenNameFromIdToken(idToken) {
+  try {
+    const payload = idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
+    const name = JSON.parse(new TextDecoder().decode(bytes)).given_name;
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+  } catch {
+    // Not a readable token: the field just starts empty, as it did before.
+    return undefined;
+  }
+}
+
 export async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -97,7 +115,13 @@ export function renderGoogleButton(container, { onToken, onError, text = 'contin
         nonce: nonce.hashed,
         // The ID token straight back to this page; no redirect, no cookie on our side.
         callback: (response) => {
-          if (response?.credential) onToken({ idToken: response.credential, nonce: nonce.raw });
+          if (response?.credential) {
+            onToken({
+              idToken: response.credential,
+              nonce: nonce.raw,
+              givenName: givenNameFromIdToken(response.credential),
+            });
+          }
         },
         use_fedcm_for_button: true,
         itp_support: true,
@@ -223,7 +247,12 @@ async function nativeSignIn(provider, nonce) {
     idToken: result.idToken,
     nonce: nonce.raw,
     appleAuthorizationCode: provider === 'apple' ? result.authorizationCode : undefined,
-    givenName: provider === 'apple' ? result.profile?.givenName ?? undefined : undefined,
+    // Apple: the name it sends beside the token on the first sign-in only. Google: the plugin's
+    // profile, else the token's own given_name claim.
+    givenName:
+      (provider === 'apple'
+        ? result.profile?.givenName
+        : result.profile?.givenName || givenNameFromIdToken(result.idToken)) ?? undefined,
   };
 }
 

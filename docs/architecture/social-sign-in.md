@@ -157,6 +157,12 @@ the sign-up step.
     awaited first, and every attempt re-arms with a new nonce. Pinned by
     `socialSignIn.appleTap.test.js`. A failure other than a closed popup carries Apple's error code
     into the message, so a report from a phone says what Apple refused.
+  - **The sign-up name step is pre-filled from each provider differently.** Apple sends the name
+    BESIDE its token, on the first authorization only, and never in it. Google never sends it beside
+    the token: it is the token's own `given_name` claim, read by `givenNameFromIdToken` (web and app;
+    in the app the plugin's `profile.givenName` first). Unverified on purpose: it only fills a field
+    the person can change, and only `idToken` + `nonce` reach the backend. Before this a Google
+    sign-up met an empty name field (`socialSignIn.googleName.test.js`).
   - **Google's button is an iframe with a light-only document.** On a dark page the browser paints an
     opaque backdrop behind an iframe whose colour scheme differs, which drew a white box around the
     button in iPhone Safari's dark mode. Its host sets `color-scheme: light`

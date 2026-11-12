@@ -274,7 +274,9 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   logged depends on either.
 # 72 with lib/native/socialSignIn.js (+1): re-arming Sign in with Apple for the NEXT tap failed
 #   (its script or init). Nothing is lost: that next tap arms again and reports its own failure.
-EXPECTED_LIB_SWALLOWS=72
+# 73 with socialSignIn.js#givenNameFromIdToken (+1): an unreadable token only leaves the sign-up name
+#   field empty for the person to type, as it always was; the token itself is verified by the backend.
+EXPECTED_LIB_SWALLOWS=73
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
