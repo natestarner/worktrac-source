@@ -35,10 +35,17 @@ describe('SocialSignIn', () => {
   });
 
   // Apple's guidelines (and App Review) want Sign in with Apple no smaller than the screen's other
-  // ways to sign in. Here that is "Log in" / "Create household", the large primary button (52px).
-  it('draws the Apple button as large as the primary button beside it', () => {
+  // ways to sign in: here "Log in" / "Create household", the large primary button. It takes that
+  // button's own classes rather than copying a size, because a copied min-height of 52 measured
+  // 6px short on lower ("Log in" is 58: its padding carries it past its own minimum). jsdom has no
+  // layout, so the class is what can be pinned here; no inline size may override it.
+  it("draws the Apple button with the primary button's own size classes", () => {
     render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Continue with Apple' })).toHaveStyle({ minHeight: '52px' });
+    const apple = screen.getByRole('button', { name: 'Continue with Apple' });
+    expect(apple).toHaveClass('btn', 'btn-lg', 'btn-full');
+    for (const property of ['minHeight', 'padding', 'fontSize', 'fontWeight', 'lineHeight']) {
+      expect(apple.style[property]).toBe('');
+    }
   });
 
   it('signs in and hands over to the page', async () => {

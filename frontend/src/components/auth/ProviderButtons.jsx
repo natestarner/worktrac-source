@@ -18,8 +18,8 @@ const LABELS = { apple: 'Apple', google: 'Google', test: 'Test provider' };
  * `only` limits it to the providers named (re-confirming must use one ALREADY connected), and
  * `verb` is the button's first word ("Continue with", "Connect", "Confirm with").
  *
- * `size="large"` on the Log in and Register screens: 52px with the primary button's type, matching
- * "Log in" / "Create household" beside it. Apple's Human Interface Guidelines ask that Sign in with
+ * `size="large"` on the Log in and Register screens: the primary button's own classes (`.btn-lg`),
+ * so it is exactly the size of "Log in" / "Create household" beside it. Apple's Human Interface Guidelines ask that Sign in with
  * Apple be no smaller than the screen's other ways to sign in, and App Review checks. Elsewhere
  * (Profile, confirm dialogs) the default 44px matches the buttons around it. Google's web button
  * is Google's own and tops out at 40px; that small difference is the accepted norm.
@@ -82,17 +82,19 @@ function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
     }
   }
 
-  const style = {
-    ...(provider === 'apple' ? appleStyle : neutralStyle),
-    ...(size === 'large' ? largeStyle : null),
-  };
+  // Large = the primary button's own classes (.btn .btn-lg .btn-full, the "Log in" / "Create
+  // household" box), so the two can never drift apart: an inline min-height of 52 measured 52px
+  // on lower while "Log in" is 58 (its padding and line height carry it past its own minimum).
+  // Only the colours are set here, because inline size properties would override the class.
+  const colors = provider === 'apple' ? appleColors : neutralColors;
+  const large = size === 'large';
   return (
     <button
       type="button"
-      className="pressable"
+      className={large ? 'btn btn-lg btn-full pressable' : 'pressable'}
       onClick={handleClick}
       disabled={disabled || busy}
-      style={style}
+      style={large ? colors : { ...baseStyle, ...colors }}
     >
       {provider === 'apple' && <AppleLogo size={size === 'large' ? 20 : 16} />}
       {provider === 'google' && <GoogleLogo size={size === 'large' ? 20 : 16} />}
@@ -151,18 +153,9 @@ const baseStyle = {
 // Apple's Human Interface Guidelines fix this button's colours: black with white text, in both
 // themes (a white variant exists for dark backgrounds, but black passes on ours in both). These are
 // Apple's colours, not ours, which is why they are literals rather than tokens.
-const appleStyle = { ...baseStyle, background: '#000', color: '#fff', border: '1px solid #000' };
+const appleColors = { background: '#000', color: '#fff', border: '1px solid #000' };
 
-// The primary button's large size (.btn-lg in index.css), so the Apple button stands level with
-// "Log in" and "Create household" rather than below them.
-const largeStyle = {
-  minHeight: 52,
-  fontSize: 'var(--text-xl)',
-  fontWeight: 'var(--weight-bold)',
-};
-
-const neutralStyle = {
-  ...baseStyle,
+const neutralColors = {
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
   border: '1px solid var(--color-border)',
