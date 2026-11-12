@@ -130,7 +130,7 @@ export default function HelpTab() {
         </p>
         <ol className="help-steps">
           <li>
-            Tap <T>Register</T> and enter your name, your email and a password of at least 8
+            Tap <T>Sign up</T> and enter your name, your email and a password of at least 8
             characters. The household name is optional. Leave it blank and it becomes
             &ldquo;Your Name&rsquo;s Household&rdquo;. Then tap <T>Create household</T>
           </li>
@@ -139,7 +139,7 @@ export default function HelpTab() {
         </ol>
         {signInNames && (
           <p>
-            Or tap <T>Continue with {signInNames}</T> on the Register or Log in screen instead. There
+            Or tap <T>Continue with {signInNames}</T> on the Sign up or Log in screen instead. There
             is no password to choose and no code to type: Huddle asks your name and creates the
             household. If you already have a Huddle login with that email, sign in with your password
             first and connect {signInNames} from <T>Profile</T>. Huddle never joins two logins just

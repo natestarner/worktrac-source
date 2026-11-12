@@ -272,7 +272,9 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   read or written (private mode, quota), which can only delay or skip an App Store rating request;
 #   and a malformed listing URL, which only hides the "Rate Huddle" menu item. Nothing queued or
 #   logged depends on either.
-EXPECTED_LIB_SWALLOWS=71
+# 72 with lib/native/socialSignIn.js (+1): re-arming Sign in with Apple for the NEXT tap failed
+#   (its script or init). Nothing is lost: that next tap arms again and reports its own failure.
+EXPECTED_LIB_SWALLOWS=72
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

@@ -173,9 +173,11 @@ export default function LoginPage() {
 
         {!signingUp && (
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)' }}>
-            New household?{' '}
+            {/* "Sign up", the usual partner of "Log in" (2026-11-11). Not "with email": the sign-up
+                page offers Apple and Google too, and the buttons above already sign a new person up. */}
+            New to Huddle?{' '}
             <Link to="/register" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
-              Register
+              Sign up
             </Link>
           </div>
         )}

@@ -62,6 +62,11 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutConfirmModal`'s End tap |
 | `appReviewUrl(storeUrl)` | `null` (so the web menu is unchanged) | The listing (`/me`'s `client.appStoreUrl`) with `?action=write-review`, or `null` while that is unset | `UserMenu`'s "Rate Huddle", opened with `openInBrowser` (the App Store app, not the sheet) |
 
+**Web Apple's popup must open inside the tap** (`socialSignIn.js#webApple`): iPhone Safari blocks a
+popup opened after any `await`, so Apple is armed when its button mounts (`prepareSignIn`) and the
+click calls `AppleID.auth.signIn()` before awaiting anything. Don't put an await back in front of it
+(`socialSignIn.appleTap.test.js`); desktop browsers forgive it, so only an iPhone shows the failure.
+
 **Rating requests use Apple's sheet only, never a screen of ours first** (guideline 5.6.1; an
 "Enjoying Huddle?" step that sends only the happy ones on is review gating). `lib/reviewPrompt.js`
 owns WHEN: 1.5s after the End tap on the 3rd finished workout with a set in it, then every 5th

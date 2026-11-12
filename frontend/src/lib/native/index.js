@@ -17,6 +17,7 @@ export { requestAppReview, appReviewUrl } from './review';
 export {
   availableSignInProviders,
   googleUsesRenderedButton,
+  prepareSignIn,
   renderGoogleButton,
   signInWithProvider,
 } from './socialSignIn';

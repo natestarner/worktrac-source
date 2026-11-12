@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import SectionLabel from '../shared/SectionLabel';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
-import ProviderButtons from '../auth/ProviderButtons';
+import ProviderButtons, { ProviderLogo } from '../auth/ProviderButtons';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
@@ -77,7 +77,10 @@ export default function SignInMethodsSection() {
         {connected.map((c) => (
           <div key={c.provider} style={rowStyle}>
             <div style={{ minWidth: 0 }}>
-              <div style={labelStyle}>{NAMES[c.provider] ?? c.provider}</div>
+              <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <ProviderLogo provider={c.provider} size={18} />
+                <span>{NAMES[c.provider] ?? c.provider}</span>
+              </div>
               <div style={hintStyle}>
                 {onlyWayIn
                   ? 'Your only way to sign in. Set a password before disconnecting it.'

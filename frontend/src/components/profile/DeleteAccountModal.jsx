@@ -154,7 +154,9 @@ export default function DeleteAccountModal({ onClose }) {
               proof, and it is the delete. Not offered until DELETE is typed. */}
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
             {appleConnected
-              ? 'Confirm with Apple. Deleting also disconnects Huddle from your Apple ID.'
+              ? // Apple's sheet asks whether to "continue using Huddle" with the Apple ID -- its own
+                // wording, which we can't change, and which reads backwards mid-delete. Say so first.
+                'Apple will ask whether to continue using Huddle with your Apple ID. Choose Continue: that only confirms it’s you. Huddle then deletes your account and disconnects itself from your Apple ID.'
               : 'Confirm it’s you'}
           </div>
           <div style={{ marginBottom: 16 }}>

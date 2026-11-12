@@ -8,6 +8,7 @@ vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../lib/native', () => ({
   availableSignInProviders: vi.fn(),
   googleUsesRenderedButton: () => false,
+  prepareSignIn: () => Promise.resolve(),
   renderGoogleButton: vi.fn(),
   signInWithProvider: vi.fn(),
 }));
