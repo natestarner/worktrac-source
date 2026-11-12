@@ -195,6 +195,6 @@ public class AuthController {
         // users per client build is how we learn which App Store builds are still in use before
         // anything is removed from the API (docs/azure-read-only-access.md).
         log.info("Session check");
-        return authService.me(currentUser.access());
+        return authService.me(currentUser.access(), currentUser.get().issuedAt());
     }
 }

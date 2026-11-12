@@ -22,6 +22,11 @@ public class MutableClock extends Clock {
         this.zone = zone;
     }
 
+    /** Back to the real time -- for a class whose tests each advance the clock from "now". */
+    public void reset() {
+        instant.set(Instant.now());
+    }
+
     public void advance(Duration duration) {
         instant.updateAndGet(current -> current.plus(duration));
     }
