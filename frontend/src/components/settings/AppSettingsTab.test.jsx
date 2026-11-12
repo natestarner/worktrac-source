@@ -115,6 +115,16 @@ describe('AppSettingsTab tag management', () => {
 
     expect(screen.getByText(/^Huddle · build/)).toBeInTheDocument();
   });
+
+  // HUDDLE is filed with the USPTO. This is the app's one written trademark claim (there is
+  // deliberately no ™ on the sign-in lockup or the header), so it must not quietly disappear.
+  it('carries the trademark notice in About', () => {
+    renderTab();
+
+    expect(
+      screen.getByText('Huddle™ and the Huddle logo are trademarks of Starner Consulting Co.')
+    ).toBeInTheDocument();
+  });
 });
 
 describe('AppSettingsTab rest timer toggle', () => {

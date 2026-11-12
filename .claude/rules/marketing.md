@@ -62,6 +62,13 @@ names it, and the seller name is the legal entity **exactly**, "Co." included. T
 same. Don't shorten it to "Starner Consulting", don't drop it as footer clutter, and give any new
 page the same line. `landing.spec.ts` asserts it on every page.
 
+**Under it, `.site-footer__trademark` carries the copyright and trademark notice** ("Huddle™ and the
+Huddle logo are trademarks of Starner Consulting Co."; HUDDLE is filed with the USPTO, serial
+50214775). That line is the site's ONLY trademark claim: Nate chose no ™ beside the header wordmark
+or in the logo, to keep the brand clean. Give any new page the line, and when the registration
+issues, change ™ to ® here, in Terms §14, and in the six email footers together.
+`landing.spec.ts` asserts it on every page.
+
 ## Unknown URLs answer a real 404, and the structured data is a second copy
 
 - **`404.html` is served WITH the 404 status** (`responseOverrides` rewrites to it and sets no

@@ -144,6 +144,16 @@ test.describe('marketing landing page', () => {
         'Huddle is made by Starner Consulting Co.'
       );
     });
+
+    // HUDDLE is filed with the USPTO (serial 50214775). The footer notice is where the site claims
+    // the name and the logo in writing; there is deliberately no ™ beside the header wordmark, so
+    // a page that loses this line claims nothing anywhere.
+    test(`${path} carries the trademark notice in its footer`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.locator('.site-footer__trademark')).toHaveText(
+        '© 2026 Starner Consulting Co. Huddle™ and the Huddle logo are trademarks of Starner Consulting Co.'
+      );
+    });
   }
 
   test('does not scroll horizontally', async ({ page }) => {
