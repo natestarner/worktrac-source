@@ -10,6 +10,7 @@ import { FIELD_LIMITS } from '../utils/fieldLimits';
 import SocialSignIn from '../components/auth/SocialSignIn';
 import AccountPicker from '../components/auth/AccountPicker';
 import { useUI } from '../context/UIContext';
+import PasswordInput from '../components/shared/PasswordInput';
 
 // Every paid plan a marketing CTA is allowed to name on the way in. marketing/index.html's
 // "Go Plus" button links here as /register?plan=plus, and every CTA on
@@ -247,8 +248,7 @@ export default function RegisterPage() {
         {emailError && <div id="email-error" style={fieldErrorStyle}>Enter your email address.</div>}
 
         <label htmlFor="password" style={labelStyle}>Password</label>
-        <input
-          type="password"
+        <PasswordInput
           id="password"
           name="new-password"
           autoComplete="new-password"

@@ -29,7 +29,7 @@ every string was bold, so the eye had no path through a screen.
 | Tokens | `frontend/src/index.css` `:root` | Every value the UI draws with |
 | Interaction states | `index.css`, `.pressable` + `:focus-visible` | Hover, press, focus, reduced motion |
 | Component classes | `index.css` component layer | `.btn-*`, `.card`, `.input`, `.select-*`, `.seg`, `.chip`, `.icon-btn` |
-| React primitives | `components/shared/` | `Button`, `Card`, `Input`, `Select`, `IconButton`, `SectionLabel`, `EmptyState`, `BackLink` |
+| React primitives | `components/shared/` | `Button`, `Card`, `Input`, `PasswordInput` (every password field: the show / hide eye), `Select`, `IconButton`, `SectionLabel`, `EmptyState`, `BackLink` |
 | Icons | `components/shared/icons.jsx` | Vendored Lucide paths |
 
 ## The brand mark

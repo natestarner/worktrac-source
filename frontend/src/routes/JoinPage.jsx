@@ -8,6 +8,7 @@ import { authCardStyle, authPageStyle, errorBannerStyle, fieldLabelStyle } from 
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
+import PasswordInput from '../components/shared/PasswordInput';
 
 /**
  * Where an invite link lands.
@@ -263,8 +264,7 @@ export default function JoinPage() {
 
             <div style={{ textAlign: 'left', marginBottom: 'var(--space-4)' }}>
               <label htmlFor="password" style={fieldLabelStyle}>Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 id="password"
                 name="password"
                 // current-password when proving one, new-password when setting one: this is what

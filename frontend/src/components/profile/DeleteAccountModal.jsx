@@ -10,6 +10,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { cancelButtonStyle, deleteButtonStyle } from '../shared/ConfirmDialog';
 import ProviderButtons from '../auth/ProviderButtons';
 import { useSignInMethods } from '../../hooks/useSignInMethods';
+import PasswordInput from '../shared/PasswordInput';
 
 const CONFIRMATION_WORD = 'DELETE';
 
@@ -178,8 +179,7 @@ export default function DeleteAccountModal({ onClose }) {
           far is valid for 30 days with no revocation, which is a weak thing to hang an
           irreversible, unrecoverable action on -- a family tablet left signed in is enough. */}
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Enter your password</div>
-      <input
-        type="password"
+      <PasswordInput
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}

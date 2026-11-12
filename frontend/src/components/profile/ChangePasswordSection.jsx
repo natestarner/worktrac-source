@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
-import Input from '../shared/Input';
 import Modal from '../shared/Modal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAuth } from '../../context/AuthContext';
@@ -8,6 +7,7 @@ import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useSignInMethods } from '../../hooks/useSignInMethods';
 import ProviderButtons from '../auth/ProviderButtons';
+import PasswordInput from '../shared/PasswordInput';
 
 /**
  * "Change your password", for whoever is signed in.
@@ -147,9 +147,8 @@ function ChangePasswordModal({ onClose, onChanged, changeOwnPassword }) {
     <Modal title="Change your password" onClose={onClose}>
       <form onSubmit={onSubmit}>
         <label htmlFor="current-password" style={fieldLabelStyle}>Current password</label>
-        <Input
+        <PasswordInput
           id="current-password"
-          type="password"
           autoComplete="current-password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
@@ -158,9 +157,8 @@ function ChangePasswordModal({ onClose, onChanged, changeOwnPassword }) {
         <label htmlFor="new-password" style={{ ...fieldLabelStyle, marginTop: 'var(--space-4)' }}>
           New password
         </label>
-        <Input
+        <PasswordInput
           id="new-password"
-          type="password"
           autoComplete="new-password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
@@ -170,9 +168,8 @@ function ChangePasswordModal({ onClose, onChanged, changeOwnPassword }) {
         <label htmlFor="confirm-password" style={{ ...fieldLabelStyle, marginTop: 'var(--space-4)' }}>
           Confirm new password
         </label>
-        <Input
+        <PasswordInput
           id="confirm-password"
-          type="password"
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
@@ -240,9 +237,8 @@ function SetPasswordModal({ providers, onClose, onSet, setFirstPassword }) {
   return (
     <Modal title="Set a password" onClose={onClose}>
       <label htmlFor="first-password" style={fieldLabelStyle}>New password</label>
-      <Input
+      <PasswordInput
         id="first-password"
-        type="password"
         autoComplete="new-password"
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
@@ -251,9 +247,8 @@ function SetPasswordModal({ providers, onClose, onSet, setFirstPassword }) {
       <label htmlFor="first-password-confirm" style={{ ...fieldLabelStyle, marginTop: 'var(--space-4)' }}>
         Confirm new password
       </label>
-      <Input
+      <PasswordInput
         id="first-password-confirm"
-        type="password"
         autoComplete="new-password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}

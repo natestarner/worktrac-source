@@ -12,6 +12,7 @@ import {
 } from '../components/auth/authStyles';
 import AnimatedLockup from '../components/auth/AnimatedLockup';
 import SocialSignIn from '../components/auth/SocialSignIn';
+import PasswordInput from '../components/shared/PasswordInput';
 
 export default function LoginPage() {
   const { login, chooseAccount } = useAuth();
@@ -134,8 +135,7 @@ export default function LoginPage() {
           <label htmlFor="password" style={fieldLabelStyle}>
             Password
           </label>
-          <input
-            type="password"
+          <PasswordInput
             id="password"
             name="password"
             autoComplete="current-password"
