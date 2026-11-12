@@ -472,8 +472,14 @@ public class AuthService {
         }
     }
 
+    /**
+     * How old a session token must be before {@code /me} hands back a fresh one. A day, so a device
+     * that opens the app many times a day renews once, not on every launch.
+     */
+    static final Duration RENEW_SESSION_AFTER = Duration.ofDays(1);
+
     @Transactional(readOnly = true)
-    public MeResponse me(AccountAccess access) {
+    public MeResponse me(AccountAccess access, Instant tokenIssuedAt) {
         Long accountId = access.accountId();
         User user = userRepository.findById(access.userId())
                 .orElseThrow(() -> new UnauthorizedException("User no longer exists"));
@@ -495,7 +501,36 @@ public class AuthService {
                 MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
                 personService.list(access),
                 households,
-                ClientConfigDto.from(nativeAppProperties));
+                ClientConfigDto.from(nativeAppProperties),
+                renewalFor(user, accountId, tokenIssuedAt));
+    }
+
+    /**
+     * A fresh session token for a token more than {@link #RENEW_SESSION_AFTER} old, else null.
+     *
+     * <p>Sessions used to last exactly 30 days from sign-in, so somebody opening the app every day
+     * was still signed out on day 31. Renewing on {@code /me} -- which the app calls at every
+     * launch, and when it comes back to the foreground after five minutes -- keeps anyone who
+     * opens it at least once every 30 days signed in, as most apps do.
+     *
+     * <p>Safe to mint here because this request already passed full validation
+     * ({@code TokenAuthenticator}: signature, expiry, token version, membership). The new token
+     * carries the user's CURRENT token version and the same household, so it is revoked by exactly
+     * what revokes the old one: a password change, disconnecting a sign-in method, removing the
+     * login. A token with no {@code iat} (none are minted without one) counts as old.
+     *
+     * <p><b>Not for admins.</b> The admin portal reads across every household, so its sessions keep
+     * the fixed 30 days and end with a fresh sign-in.
+     */
+    private String renewalFor(User user, Long accountId, Instant tokenIssuedAt) {
+        if (ROLE_ADMIN.equals(user.getRole())) {
+            return null;
+        }
+        if (tokenIssuedAt != null && tokenIssuedAt.isAfter(clock.instant().minus(RENEW_SESSION_AFTER))) {
+            return null;
+        }
+        return jwtService.generateToken(user.getId(), accountId, user.getEmail(), user.getRole(),
+                user.getTokenVersion());
     }
 
     /**

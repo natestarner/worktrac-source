@@ -125,12 +125,24 @@ function adoptOutboxScope(accountId, userId) {
 // until `data` is in hand, and a failed attempt restores the token it found. The window in which
 // the app holds a token it hasn't verified is now bounded by this function rather than by whether
 // the network cooperates.
+// /me hands back a fresh 30-day session token once the one it was asked with is a day old (the
+// server's renewal, AuthService#renewalFor), so someone who keeps using the app is never signed out
+// at day 30. Adopted ONLY by a caller that has already checked the answer still belongs to the
+// current token -- swapping inside apiMe() would trip those very checks and drop the answer. The
+// token is stripped from what's returned: the auth snapshot and state hold no token, by design.
+function takeRenewal(data, tokenAtCall) {
+  if (!data || typeof data !== 'object') return data;
+  const { renewedToken, ...rest } = data;
+  if (renewedToken && tokenAtCall && getAuthToken() === tokenAtCall) setAuthToken(renewedToken);
+  return rest;
+}
+
 async function verifyNewSession(token) {
   const priorToken = getAuthToken();
   setAuthToken(token);
   let data;
   try {
-    data = await apiMe();
+    data = takeRenewal(await apiMe(), token);
   } catch (error) {
     // A definitive 4xx means api/client.js has already cleared the token and run the unauthorized
     // handler -- putting it back would resurrect a session the server just rejected. Everything
@@ -200,8 +212,9 @@ export function AuthProvider({ children }) {
 
     function attemptMe(nextDelayMs, attempt = 1) {
       apiMe()
-        .then((data) => {
+        .then((answer) => {
           if (isStale()) return;
+          const data = takeRenewal(answer, tokenAtStart);
           // A verified live session -- record the identity so a later cold start with no network
           // can still boot into the app, and mark durable storage so the offline cache isn't
           // evicted.
@@ -284,8 +297,9 @@ export function AuthProvider({ children }) {
       // session, so this apiMe() call can still be in flight when a logout+login happens meanwhile.
       const tokenAtCall = getAuthToken();
       apiMe()
-        .then((data) => {
+        .then((answer) => {
           if (getAuthToken() !== tokenAtCall) return; // a newer login/logout happened meanwhile
+          const data = takeRenewal(answer, tokenAtCall);
           identityConfirmedAtRef.current = Date.now();
           saveAuthSnapshot(data);
           // Spread the previous state first so an in-flight `freshLogin` flag (see login()/
@@ -538,7 +552,8 @@ export function AuthProvider({ children }) {
   // person and after changing the account's default unit in Admin. Keep the offline-boot snapshot
   // in step so a later cold start reflects the latest people/account too.
   const refreshPeople = useCallback(async () => {
-    const data = await apiMe();
+    const tokenAtCall = getAuthToken();
+    const data = takeRenewal(await apiMe(), tokenAtCall);
     identityConfirmedAtRef.current = Date.now();
     saveAuthSnapshot(data);
     setState((s) => ({ ...s, account: data.account, people: data.people }));
