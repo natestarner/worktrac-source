@@ -1026,6 +1026,26 @@ button:not(.pressable):active:not(:disabled) {
     box-shadow var(--dur-base) var(--ease-out);
 }
 
+/* PasswordInput: the show / hide eye sits inside the field's right edge. The field's own right
+   padding is set inline by the component, because two callers set padding inline themselves. */
+.password-field {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  /* Half the 40px .icon-btn, as a margin rather than a transform: .pressable's :active scale is a
+     transform, and the two would fight. */
+  margin-top: -20px;
+}
+
+/* Edge draws its own reveal eye in a password field; one eye is enough. */
+.password-field input::-ms-reveal {
+  display: none;
+}
+
 .input::placeholder {
   color: var(--color-muted);
 }

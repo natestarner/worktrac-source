@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
+import PasswordInput from '../components/shared/PasswordInput';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -137,8 +138,7 @@ export default function ResetPasswordPage() {
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
 
         <label htmlFor="new-password" style={labelStyle}>New password</label>
-        <input
-          type="password"
+        <PasswordInput
           id="new-password"
           name="new-password"
           autoComplete="new-password"
