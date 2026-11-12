@@ -9,8 +9,13 @@ default_platform(:ios)
 # The two app variants. Lower is TestFlight-only and points at the lower backend; it is never
 # submitted for review.
 VARIANTS = {
-  "lower" => { bundle_id: "fitness.huddle.app.lower", display_name: "Huddle Lower", link_domain: "app.dev.huddle.fitness" },
-  "production" => { bundle_id: "fitness.huddle.app", display_name: "Huddle", link_domain: "app.huddle.fitness" },
+  # google_scheme: the REVERSED Google iOS client id for this bundle (Google Cloud project
+  # "Huddle", clients "Huddle iOS lower" / "Huddle iOS production"). Info.plist registers it as a
+  # URL scheme so Google's sign-in sheet can return to the app. Not a secret.
+  "lower" => { bundle_id: "fitness.huddle.app.lower", display_name: "Huddle Lower", link_domain: "app.dev.huddle.fitness",
+               google_scheme: "com.googleusercontent.apps.428334695403-m6cn7lk9h61hm92ltp6ul014cceoehbs" },
+  "production" => { bundle_id: "fitness.huddle.app", display_name: "Huddle", link_domain: "app.huddle.fitness",
+                    google_scheme: "com.googleusercontent.apps.428334695403-4rvt9vdifhuoqv681gufes3qses28j20" },
 }.freeze
 
 def variant(options)
@@ -79,6 +84,8 @@ platform :ios do
         "APP_DISPLAY_NAME=\"#{v[:display_name]}\"",
         # Which web app's links this variant opens (App.entitlements).
         "APP_LINK_DOMAIN=#{v[:link_domain]}",
+        # Google sign-in's return URL scheme for this variant (Info.plist).
+        "GOOGLE_REVERSED_CLIENT_ID=#{v[:google_scheme]}",
         "MARKETING_VERSION=#{ENV.fetch('NATIVE_APP_VERSION')}",
         "CURRENT_PROJECT_VERSION=#{ENV.fetch('NATIVE_BUILD_NUMBER')}",
       ].join(" "),

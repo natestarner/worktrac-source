@@ -22,6 +22,21 @@ Names used below (from the repo):
 
 ## Part A: Google (Google Cloud Console, about 20 minutes)
 
+**Done 2026-11-11** in Google Cloud project **Huddle** (`huddle-514501`), owned by a separate Google
+account rather than Nate's personal one. The consent screen's user support email is the Google Group
+`huddle-support@googlegroups.com`, whose member list only its managers can see, so no personal
+address is shown to anyone signing in. The app is in **Testing** (only listed test users can sign in
+with Google) and has **no logo yet** (adding one starts Google's brand review; do it about a week
+before launch, after verifying `huddle.fitness` in Search Console). Client IDs (not secrets):
+
+| Client | ID |
+|---|---|
+| Huddle web lower | `428334695403-r054kfu523mqkfj3lfatuttcfi7j770i.apps.googleusercontent.com` |
+| Huddle web production | `428334695403-brvpo8hso2k60qf4jaqqdfhlg36e67dh.apps.googleusercontent.com` |
+| Huddle iOS lower | `428334695403-m6cn7lk9h61hm92ltp6ul014cceoehbs.apps.googleusercontent.com` |
+| Huddle iOS production | `428334695403-4rvt9vdifhuoqv681gufes3qses28j20.apps.googleusercontent.com` |
+
+
 1. **Pick or create a project** for Huddle (one project can hold both environments' clients).
 2. **Google Auth Platform → Branding** (the consent screen): app name *Huddle*, support email, the
    Huddle logo, home page `https://huddle.fitness`, privacy policy URL above, terms
@@ -42,6 +57,12 @@ Names used below (from the repo):
    the Huddle name and logo show on the consent screen.
 
 ## Part B: Apple (Apple Developer portal, about 30 minutes; it will ask for your 2FA code)
+
+**Done 2026-11-11.** Both App IDs have Sign In with Apple; Services IDs `fitness.huddle.web.lower` and
+`fitness.huddle.web`; keys `AQQA8YJY69` (lower) and `38GWY77F9V` (production), stored as the
+`APPLE_SIGN_IN_PRIVATE_KEY_LOWER` / `_PROD` GitHub secrets in worktrac-deploy; the
+`DoNotReply@huddle.fitness` sender and `huddle.fitness` registered for Hide My Email (SPF passed).
+
 
 1. **Identifiers → App IDs → `fitness.huddle.app`** → tick *Sign In with Apple* → *Edit*:
    *Enable as a primary App ID*. In the same dialog set the **Server-to-Server Notification
@@ -74,11 +95,11 @@ that PR):
 
 | Variable | Lower | Production |
 |---|---|---|
-| `SOCIAL_SIGN_IN_ENABLED` | `true` once the frontend ships | `false` until launch |
-| `SOCIAL_SIGN_IN_GOOGLE_CLIENT_IDS` | lower web id`,`lower iOS id | prod web id`,`prod iOS id |
+| `SOCIAL_SIGN_IN_ENABLED` | `true` (since 2026-11-11) | `false` until launch |
+| `SOCIAL_SIGN_IN_GOOGLE_CLIENT_IDS` | `428334695403-r054kfu523mqkfj3lfatuttcfi7j770i.apps.googleusercontent.com,428334695403-m6cn7lk9h61hm92ltp6ul014cceoehbs.apps.googleusercontent.com` | `428334695403-brvpo8hso2k60qf4jaqqdfhlg36e67dh.apps.googleusercontent.com,428334695403-4rvt9vdifhuoqv681gufes3qses28j20.apps.googleusercontent.com` |
 | `SOCIAL_SIGN_IN_APPLE_CLIENT_IDS` | `fitness.huddle.app.lower,fitness.huddle.web.lower` | `fitness.huddle.app,fitness.huddle.web` |
 | `APPLE_TEAM_ID` | `R73HV8H48W` | same |
-| `APPLE_SIGN_IN_KEY_ID` | the LOWER key's Key ID (B3) | the production key's Key ID |
+| `APPLE_SIGN_IN_KEY_ID` | `AQQA8YJY69` | `38GWY77F9V` |
 | `APPLE_SIGN_IN_PRIVATE_KEY` 🔑 | the lower .p8's text, as a **secret** | the production .p8's text |
 
 The private key is set by Nate with `gh secret set` (Claude can't run secret commands). Claude
@@ -92,7 +113,7 @@ only when its block is there (`lib/native/socialSignIn.js`):
 ```json
 "socialSignIn": {
   "apple":  { "servicesId": "fitness.huddle.web.lower", "redirectUri": "https://app.dev.huddle.fitness/auth/apple" },
-  "google": { "webClientId": "<lower web client id>" },
+  "google": { "webClientId": "428334695403-r054kfu523mqkfj3lfatuttcfi7j770i.apps.googleusercontent.com" },
   "test": true
 }
 ```
