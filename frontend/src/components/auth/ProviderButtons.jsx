@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   availableSignInProviders,
   googleUsesRenderedButton,
+  prepareSignIn,
   renderGoogleButton,
   signInWithProvider,
 } from '../../lib/native';
@@ -70,6 +71,13 @@ export default function ProviderButtons({
 function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
   const [busy, setBusy] = useState(false);
 
+  // Ready the provider now, so the tap itself opens its sheet with nothing to wait for first
+  // (iOS Safari blocks a popup opened after an await -- see socialSignIn.js#webApple). A failure
+  // here is not shown: the click tries again and reports what it gets.
+  useEffect(() => {
+    prepareSignIn(provider).catch(() => {});
+  }, [provider]);
+
   async function handleClick() {
     setBusy(true);
     try {
@@ -129,6 +137,11 @@ function GoogleRenderedButton({ verb, disabled, onToken, onUnavailable }) {
         display: 'flex',
         justifyContent: 'center',
         minHeight: 44,
+        // Google's iframe document is light-only. When an iframe's color-scheme differs from the
+        // page's, browsers paint an opaque canvas-colour backdrop behind it -- a white box around
+        // the button in dark mode (seen in iOS Safari and Chromium). Matching its scheme keeps it
+        // transparent; the button itself is unchanged.
+        colorScheme: 'light',
         opacity: disabled ? 0.5 : 1,
         pointerEvents: disabled ? 'none' : 'auto',
       }}
@@ -160,6 +173,17 @@ const neutralColors = {
   color: 'var(--color-text)',
   border: '1px solid var(--color-border)',
 };
+
+/**
+ * The provider's own mark, for anywhere a provider is NAMED rather than offered as a button
+ * (Profile's "Sign in with" list). One copy of each logo, shared with the buttons above. The test
+ * provider has none.
+ */
+export function ProviderLogo({ provider, size = 16 }) {
+  if (provider === 'apple') return <AppleLogo size={size} />;
+  if (provider === 'google') return <GoogleLogo size={size} />;
+  return null;
+}
 
 function AppleLogo({ size = 16 }) {
   return (

@@ -149,6 +149,18 @@ the sign-up step.
 - **Web:** Google Identity Services (the button, using the ID-token response) and Apple JS in popup
   mode. Apple refuses `localhost` as a return URL, so local Apple testing on the web uses the test
   provider described below.
+  - **Apple's popup has to open inside the tap.** iPhone Safari blocks a popup opened after an
+    `await`, and the first version loaded Apple's script and hashed the nonce between the click and
+    `AppleID.auth.signIn()`. On lower (2026-11-11) iPhone Safari answered "Sign-in failed" while
+    desktop Chrome, which allows ~5s of grace after a tap, worked. So the button arms Apple when it
+    mounts (`prepareSignIn`: script, a fresh nonce, `init`), the click calls `signIn()` with nothing
+    awaited first, and every attempt re-arms with a new nonce. Pinned by
+    `socialSignIn.appleTap.test.js`. A failure other than a closed popup carries Apple's error code
+    into the message, so a report from a phone says what Apple refused.
+  - **Google's button is an iframe with a light-only document.** On a dark page the browser paints an
+    opaque backdrop behind an iframe whose colour scheme differs, which drew a white box around the
+    button in iPhone Safari's dark mode. Its host sets `color-scheme: light`
+    (`ProviderButtons.googleScheme.test.jsx`).
 - **iOS:** one maintained Capacitor plugin covering both providers (look at
   `@capgo/capacitor-social-login` first; pin an exact version), imported lazily inside the native
   branch as the other plugins are. This needs the **Sign in with Apple entitlement** (the

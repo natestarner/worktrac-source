@@ -71,10 +71,11 @@ export function googleUsesRenderedButton() {
  * @throws an Error with `cancelled: true` when the person closed the sheet -- not an error to show.
  */
 export async function signInWithProvider(provider) {
+  // Web Apple first and with no await before it: see webApple.
+  if (provider === 'apple' && !isNativeApp()) return webApple();
   const nonce = await createNonce();
   if (provider === 'test') return testProvider(nonce);
   if (isNativeApp()) return nativeSignIn(provider, nonce);
-  if (provider === 'apple') return webApple(nonce);
   // Web Google has no imperative entry point -- see renderGoogleButton.
   throw new Error('Google sign-in on the web goes through its own button');
 }
@@ -119,22 +120,65 @@ export function renderGoogleButton(container, { onToken, onError, text = 'contin
   };
 }
 
-async function webApple(nonce) {
-  const { servicesId, redirectUri } = getSocialSignInConfig().apple ?? {};
-  await loadScript(APPLE_SCRIPT);
-  window.AppleID.auth.init({
-    clientId: servicesId,
-    scope: 'name email',
-    redirectURI: redirectUri,
-    nonce: nonce.hashed,
-    usePopup: true,
-  });
+// THE POPUP MUST OPEN INSIDE THE TAP. iOS Safari blocks a window.open that is not part of the
+// user's gesture, and an await (loading Apple's script, hashing the nonce) ends the gesture -- so
+// the old "load, hash, init, then signIn" failed on iPhone with "Sign-in failed" while desktop
+// Chrome, which allows ~5s of grace, worked. So Apple is ARMED ahead of time (script loaded, a
+// fresh nonce hashed, init called) when its button mounts (prepareSignIn), and the click calls
+// AppleID.auth.signIn() synchronously. A nonce is single-use, so every attempt re-arms with a new
+// one. Clicked before arming finished (a slow script), it arms then and tries anyway: fine on
+// desktop browsers, and no worse than before on iOS.
+let appleArmed = null; // the raw + hashed nonce Apple's init currently holds, or null
+let appleArming = null;
+
+/** Readies a provider whose sheet must open within the tap (web Apple). Safe to call repeatedly. */
+export function prepareSignIn(provider) {
+  if (provider !== 'apple' || isNativeApp()) return Promise.resolve();
+  return armApple();
+}
+
+function armApple() {
+  if (appleArmed) return Promise.resolve();
+  if (!appleArming) {
+    appleArming = (async () => {
+      const { servicesId, redirectUri } = getSocialSignInConfig().apple ?? {};
+      await loadScript(APPLE_SCRIPT);
+      const nonce = await createNonce();
+      window.AppleID.auth.init({
+        clientId: servicesId,
+        scope: 'name email',
+        redirectURI: redirectUri,
+        nonce: nonce.hashed,
+        usePopup: true,
+      });
+      appleArmed = nonce;
+    })().finally(() => {
+      appleArming = null;
+    });
+  }
+  return appleArming;
+}
+
+async function webApple() {
+  if (!appleArmed) await armApple();
+  const nonce = appleArmed;
+  appleArmed = null;
+  // Called before any await on the armed path, so Safari counts it as part of the tap.
+  const pending = window.AppleID.auth.signIn();
+  // Arm the next attempt now. A failure here is safe to drop: that next tap arms again itself and
+  // reports whatever it gets.
+  armApple().catch(() => {});
+  const { redirectUri } = getSocialSignInConfig().apple ?? {};
   let response;
   try {
-    response = await window.AppleID.auth.signIn();
+    response = await pending;
   } catch (error) {
-    // Apple's popup reports a closed window as { error: 'popup_closed_by_user' }.
-    throw cancellation(error?.error === 'popup_closed_by_user' || error?.error === 'user_cancelled_authorize', error);
+    // Apple's popup reports a closed window as { error: 'popup_closed_by_user' }. Anything else
+    // carries Apple's own code into the message, so a report from a phone says what happened.
+    const isCancel = error?.error === 'popup_closed_by_user' || error?.error === 'user_cancelled_authorize';
+    const failure = cancellation(isCancel, error);
+    if (!isCancel && error?.error) failure.message = `Sign-in failed (${error.error})`;
+    throw failure;
   }
   return {
     idToken: response.authorization.id_token,
