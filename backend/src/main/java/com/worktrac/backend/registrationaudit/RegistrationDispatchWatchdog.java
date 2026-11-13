@@ -40,6 +40,24 @@ public class RegistrationDispatchWatchdog {
     static final Duration GRACE_PERIOD = Duration.ofMinutes(15);
     static final Duration LOOKBACK_WINDOW = Duration.ofMinutes(60);
 
+    // How long an ACCEPTED-but-unconfirmed send (EMAIL_SEND_UNCONFIRMED) may go without a delivery
+    // report before it is flagged. Reports normally arrive within minutes; during the 2026-11-12
+    // ACS slowdown they took up to ~10 hours, and a grace shorter than that would alert on every
+    // email that was merely late. The lookback is a whole extra day so a watchdog that misses
+    // ticks (a deploy, a scale-in) still reaches every row; these rows are rare, so it costs little.
+    static final Duration DELIVERY_REPORT_GRACE = Duration.ofHours(24);
+    static final Duration DELIVERY_REPORT_LOOKBACK = Duration.ofHours(24);
+
+    // Every Event Grid outcome EmailDeliveryWebhookController records. Any one of them, for the
+    // send's messageId, means ACS told us what happened to it.
+    static final Set<RegistrationEventType> DELIVERY_REPORT_TYPES = Set.of(
+            RegistrationEventType.EMAIL_DELIVERED,
+            RegistrationEventType.EMAIL_BOUNCED,
+            RegistrationEventType.EMAIL_DELIVERY_FAILED,
+            RegistrationEventType.EMAIL_FILTERED_SPAM,
+            RegistrationEventType.EMAIL_SUPPRESSED,
+            RegistrationEventType.EMAIL_QUARANTINED);
+
     /**
      * One row per async email flow this watchdog reconciles.
      *
@@ -113,6 +131,46 @@ public class RegistrationDispatchWatchdog {
                                 + " minutes of " + watched.started() + " at " + event.getCreatedAt(),
                         null);
             }
+        }
+
+        checkForMissingDeliveryReports(now);
+    }
+
+    // The net under EmailService's decision not to resend an accepted-but-unconfirmed send. Such a
+    // send's outcome now rests on its Event Grid delivery report, so a report that never comes --
+    // ACS failing it without reporting, or the Event Grid subscription broken -- must not leave it
+    // looking fine. Same pattern as above: ask the DB whether the outcome ever arrived, whatever
+    // the reason it might not have.
+    void checkForMissingDeliveryReports(Instant now) {
+        Instant windowEnd = now.minus(DELIVERY_REPORT_GRACE);
+        Instant windowStart = windowEnd.minus(DELIVERY_REPORT_LOOKBACK);
+        List<RegistrationEvent> unconfirmed = repository.findByEventTypeAndCreatedAtBetween(
+                RegistrationEventType.EMAIL_SEND_UNCONFIRMED, windowStart, windowEnd);
+
+        for (RegistrationEvent event : unconfirmed) {
+            String messageId = event.getMessageId();
+            boolean reported = messageId != null
+                    && repository.existsByMessageIdAndEventTypeIn(messageId, DELIVERY_REPORT_TYPES);
+            if (reported) {
+                continue;
+            }
+            boolean alreadyFlagged = repository.existsByEmailAndEventTypeInAndCreatedAtGreaterThanEqual(
+                    event.getEmail(), Set.of(RegistrationEventType.EMAIL_DELIVERY_REPORT_MISSING),
+                    event.getCreatedAt());
+            if (alreadyFlagged) {
+                continue;
+            }
+            log.warn("Unconfirmed send to {} (messageId={}) at {} has no delivery report after {}",
+                    event.getEmail(), messageId, event.getCreatedAt(), DELIVERY_REPORT_GRACE);
+            auditService.record(event.getEmail(), RegistrationEventType.EMAIL_DELIVERY_REPORT_MISSING,
+                    messageId != null
+                            ? "ACS accepted this email at " + event.getCreatedAt() + " (messageId " + messageId
+                                    + ") but no delivery report has arrived in "
+                                    + DELIVERY_REPORT_GRACE.toHours() + " hours. Whether it arrived is unknown."
+                            : "ACS accepted this email at " + event.getCreatedAt()
+                                    + " but its status could not be checked, so no delivery report can be"
+                                    + " matched to it. Whether it arrived is unknown.",
+                    null, messageId);
         }
     }
 }

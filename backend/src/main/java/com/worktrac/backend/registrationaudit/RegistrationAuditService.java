@@ -44,7 +44,8 @@ public class RegistrationAuditService {
             RegistrationEventType.EMAIL_DELIVERY_FAILED,
             RegistrationEventType.EMAIL_FILTERED_SPAM,
             RegistrationEventType.EMAIL_SUPPRESSED,
-            RegistrationEventType.EMAIL_QUARANTINED);
+            RegistrationEventType.EMAIL_QUARANTINED,
+            RegistrationEventType.EMAIL_DELIVERY_REPORT_MISSING);
 
     private final RegistrationEventRepository repository;
     private final ApplicationEventPublisher eventPublisher;

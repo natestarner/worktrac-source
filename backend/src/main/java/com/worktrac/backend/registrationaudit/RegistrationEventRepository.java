@@ -32,6 +32,10 @@ public interface RegistrationEventRepository extends JpaRepository<RegistrationE
     // GlobalEmailCap's once-an-hour check for EMAIL_VOLUME_HIGH, shared by every replica.
     boolean existsByEventTypeAndCreatedAtGreaterThanEqual(RegistrationEventType eventType, Instant since);
 
+    // RegistrationDispatchWatchdog's delivery-report check: has ANY delivery report (or the given
+    // types) been recorded for this ACS messageId? message_id is indexed (V44).
+    boolean existsByMessageIdAndEventTypeIn(String messageId, Collection<RegistrationEventType> eventTypes);
+
     boolean existsByEmailAndEventTypeInAndCreatedAtGreaterThanEqual(String email,
                                                                      Collection<RegistrationEventType> eventTypes,
                                                                      Instant since);

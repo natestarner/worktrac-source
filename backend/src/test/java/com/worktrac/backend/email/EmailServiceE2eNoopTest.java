@@ -26,7 +26,7 @@ class EmailServiceE2eNoopTest {
 
     @Test
     void aRecipientMatchingThePatternSkipsTheRealSendAndReturnsASyntheticMessageId() {
-        EmailService emailService = new EmailService(properties("^huddle\\+e2e-.*@starner\\.co$"));
+        EmailService emailService = new EmailService(properties("^huddle\\+e2e-.*@starner\\.co$"), org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
 
         String messageId = emailService.sendVerificationCode("huddle+e2e-123-abc@starner.co", "123456");
 
@@ -35,7 +35,7 @@ class EmailServiceE2eNoopTest {
 
     @Test
     void matchingIsCaseInsensitive() {
-        EmailService emailService = new EmailService(properties("^huddle\\+e2e-.*@starner\\.co$"));
+        EmailService emailService = new EmailService(properties("^huddle\\+e2e-.*@starner\\.co$"), org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
 
         String messageId = emailService.sendVerificationCode("HUDDLE+E2E-123-ABC@STARNER.CO", "123456");
 
@@ -52,7 +52,7 @@ class EmailServiceE2eNoopTest {
 
     @Test
     void theConfiguredPatternCoversBothAnE2eHouseholdAndTheAdminAlertRecipient() {
-        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN));
+        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN), org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
 
         assertTrue(emailService.sendVerificationCode("huddle+e2e-123-abc@starner.co", "123456").startsWith("noop-"));
         assertTrue(emailService.sendAdminAlert(java.util.Set.of("nate+huddleadmin@starner.co"), "subj", "body")
@@ -63,7 +63,7 @@ class EmailServiceE2eNoopTest {
     // for the admin address must not accidentally swallow that one too.
     @Test
     void theCanaryAddressStillFallsOutsideThePattern() {
-        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN));
+        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN), org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
 
         assertTrue(assertThrowsAnything(
                 () -> emailService.sendVerificationCode("huddle+livewiretest-1@starner.co", "123456")));
@@ -71,7 +71,7 @@ class EmailServiceE2eNoopTest {
 
     @Test
     void aBlankPatternMeansNoOpIsNeverEligible() {
-        EmailService emailService = new EmailService(properties(""));
+        EmailService emailService = new EmailService(properties(""), org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
 
         // With no pattern configured (production's real state), send() must fall through to the
         // real path -- proven here by it actually attempting the real ACS call and failing

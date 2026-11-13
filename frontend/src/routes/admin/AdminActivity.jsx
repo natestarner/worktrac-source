@@ -142,6 +142,10 @@ function ActivityLegend() {
         EMAIL_VOLUME_HIGH (email &quot;system&quot;) means sign-up and reset emails crossed the hourly
         warning level, or the hard cap that starts refusing them -- the Detail column says which.
         Check for abuse, or raise the caps and the Azure email quota if it is real traffic.
+        EMAIL_SEND_UNCONFIRMED means ACS accepted an email but had not finished with it after 2
+        minutes, so it was not sent again -- usual during an Azure email slowdown, and its delivery
+        report normally follows (sometimes hours later). EMAIL_DELIVERY_REPORT_MISSING means 24
+        hours passed with no delivery report for it: nobody can say whether it arrived.
       </div>
     </div>
   );

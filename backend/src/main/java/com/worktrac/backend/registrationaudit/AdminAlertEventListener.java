@@ -45,7 +45,9 @@ public class AdminAlertEventListener implements OutboxHandlerProvider {
             RegistrationEventType.EMAIL_DELIVERY_FAILED,
             RegistrationEventType.EMAIL_FILTERED_SPAM,
             RegistrationEventType.EMAIL_SUPPRESSED,
-            RegistrationEventType.EMAIL_QUARANTINED);
+            RegistrationEventType.EMAIL_QUARANTINED,
+            // Under the delivery toggle: it is the absence of a delivery report.
+            RegistrationEventType.EMAIL_DELIVERY_REPORT_MISSING);
 
     private final RegistrationAlertSettingsService settingsService;
     private final AdminProperties adminProperties;

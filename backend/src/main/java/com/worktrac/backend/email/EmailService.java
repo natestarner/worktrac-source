@@ -6,12 +6,16 @@ import com.azure.communication.email.models.EmailMessage;
 import com.azure.communication.email.models.EmailSendResult;
 import com.azure.communication.email.models.EmailSendStatus;
 import com.azure.core.models.ResponseError;
+import com.azure.core.util.polling.LongRunningOperationStatus;
 import com.azure.core.util.polling.PollResponse;
 import com.azure.core.util.polling.SyncPoller;
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.config.EmailProperties;
+import com.worktrac.backend.registrationaudit.RegistrationAuditService;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -34,10 +38,12 @@ public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-    // ACS normally accepts a send in a second or two. See send() for why this is bounded at all.
-    private static final Duration SEND_TIMEOUT = Duration.ofMinutes(2);
+    // ACS normally confirms a send in a second or two. See send() for why this is bounded at all,
+    // and for what happens when it runs out.
+    static final Duration SEND_TIMEOUT = Duration.ofMinutes(2);
 
     private final EmailClient emailClient;
+    private final RegistrationAuditService auditService;
     private final String senderAddress;
     private final String membershipInviteTemplate;
     private final String simpleNoticeTemplate;
@@ -60,10 +66,17 @@ public class EmailService {
     private final String passwordResetSuccessTemplate;
     private final Pattern e2eNoopRecipientPattern;
 
-    public EmailService(EmailProperties properties) {
-        this.emailClient = new EmailClientBuilder()
+    @Autowired
+    public EmailService(EmailProperties properties, RegistrationAuditService auditService) {
+        this(properties, new EmailClientBuilder()
                 .connectionString(properties.getConnectionString())
-                .buildClient();
+                .buildClient(), auditService);
+    }
+
+    // Tests hand in a stubbed EmailClient to drive send()'s three outcomes without a real ACS call.
+    EmailService(EmailProperties properties, EmailClient emailClient, RegistrationAuditService auditService) {
+        this.emailClient = emailClient;
+        this.auditService = auditService;
         this.senderAddress = properties.getSenderAddress();
         this.appUrl = properties.getAppUrl();
         this.appOrigin = originOf(appUrl);
@@ -392,8 +405,8 @@ public class EmailService {
         return send(new String[] {toEmail}, subject, plainText, html);
     }
 
-    // Returns the ACS messageId on success; throws EmailSendException if ACS's own completed
-    // poll result reports anything other than SUCCEEDED. Previously this discarded
+    // Returns the ACS messageId once ACS has accepted the send; throws EmailSendException if ACS's
+    // own completed poll result reports anything other than SUCCEEDED. Previously this discarded
     // response.getValue() entirely (poller.waitForCompletion() then nothing read from the
     // result) -- a non-exception ACS failure (bad sender domain, auth issue, etc.) vanished
     // with zero trace anywhere. This is "send accepted" truth only -- whether the message is
@@ -425,17 +438,73 @@ public class EmailService {
             message.setBodyHtml(html);
         }
 
+        // beginSend POSTs the message and returns only once ACS has ACCEPTED it (202, carrying the
+        // operation id that is also the messageId every delivery report quotes). A failure here --
+        // network, auth, a refused request -- throws, and the outbox retries: nothing was accepted,
+        // so a retry cannot duplicate anything.
         SyncPoller<EmailSendResult, EmailSendResult> poller = emailClient.beginSend(message);
-        // Bounded: the outbox leases a row for app.outbox.claim-duration (5 minutes) while it sends.
-        // An unbounded wait could outlive the lease, letting another replica reclaim the row and send
-        // the email a second time. A timeout throws, and the outbox retries.
-        PollResponse<EmailSendResult> response = poller.waitForCompletion(SEND_TIMEOUT);
+
+        // Then wait for ACS to finish processing it. Bounded: the outbox leases a row for
+        // app.outbox.claim-duration (5 minutes) while it sends, and an unbounded wait could outlive
+        // the lease and let another replica send the email a second time.
+        //
+        // ⚠️ waitUntil, NOT waitForCompletion. waitForCompletion THROWS when the wait runs out, and
+        // the outbox then retried the whole send -- re-POSTing an email ACS had already accepted.
+        // On 2026-11-12 ACS stopped confirming within 2 minutes (it delivered hours later), and
+        // every email went out up to five times, each one also reported as FAILED to the admin.
+        // waitUntil returns the latest status instead, and an accepted email is never resent.
+        // docs/incidents/2026-11-12-acs-slow-confirmation-resent-accepted-email.md
+        PollResponse<EmailSendResult> response;
+        try {
+            response = poller.waitUntil(SEND_TIMEOUT, LongRunningOperationStatus.SUCCESSFULLY_COMPLETED);
+        } catch (RuntimeException e) {
+            // beginSend already returned, so ACS accepted this email: what failed is only ASKING
+            // about it (status polls refused or erroring). Same reasoning as below -- resending
+            // would duplicate it. No messageId survives this path, so the watchdog cannot match a
+            // delivery report to it and alerts once the grace period passes: an honest "could not
+            // confirm" rather than either a duplicate or silence.
+            log.warn("Polling ACS for an accepted send failed; treating it as unconfirmed", e);
+            recordUnconfirmed(toEmails, null, LongRunningOperationStatus.IN_PROGRESS);
+            return null;
+        }
         EmailSendResult result = response.getValue();
 
-        if (result.getStatus() != EmailSendStatus.SUCCEEDED) {
-            throw new EmailSendException(describeFailure(result));
+        if (!response.getStatus().isComplete()) {
+            // Accepted but not yet confirmed. Not a failure, and must not be retried. The rare
+            // case this gives up -- ACS failing it LATER -- is still caught: the delivery report
+            // Event Grid sends for every terminal outcome arrives on EmailDeliveryWebhookController,
+            // and should none arrive at all, RegistrationDispatchWatchdog finds this row and alerts.
+            String messageId = result != null ? result.getId() : null;
+            recordUnconfirmed(toEmails, messageId, response.getStatus());
+            return messageId;
+        }
+
+        // Confirmed within the wait: exactly the behavior this always had. Anything but SUCCEEDED
+        // is the "non-exception ACS failure" (bad sender domain, auth issue, all recipients
+        // suppressed...) that used to vanish with zero trace -- it throws, so it is retried and,
+        // after the last attempt, recorded as FAILED and alerted.
+        if (result == null || result.getStatus() != EmailSendStatus.SUCCEEDED) {
+            throw new EmailSendException(result != null
+                    ? describeFailure(result)
+                    : "ACS send completed with status " + response.getStatus() + " and no result");
         }
         return result.getId();
+    }
+
+    // Isolated like RegistrationEmailEventListener.recordSafely: failing to write this row must
+    // never turn an accepted send into an exception, because an exception makes the outbox resend.
+    private void recordUnconfirmed(String[] toEmails, String messageId, LongRunningOperationStatus status) {
+        String detail = "ACS accepted the send but had not confirmed it after " + SEND_TIMEOUT.toMinutes()
+                + " minutes (status " + status + "). Not resent; its delivery report will follow.";
+        for (String to : toEmails) {
+            log.warn("Email to {} accepted by ACS but unconfirmed after {} (messageId={}); not resending",
+                    to, SEND_TIMEOUT, messageId);
+            try {
+                auditService.record(to, RegistrationEventType.EMAIL_SEND_UNCONFIRMED, detail, null, messageId);
+            } catch (RuntimeException e) {
+                log.error("Failed to record EMAIL_SEND_UNCONFIRMED for {} (messageId={})", to, messageId, e);
+            }
+        }
     }
 
     private boolean isE2eNoopRecipient(String[] toEmails) {
