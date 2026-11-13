@@ -24,7 +24,7 @@ class EmailServiceJoinUrlTest {
         properties.setSenderAddress("DoNotReply@example.com");
         properties.setAppUrl("https://app.dev.huddle.fitness/app/log");
         properties.setCodeExpirationMinutes(15);
-        return new EmailService(properties);
+        return new EmailService(properties, org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationAuditService.class));
     }
 
     @Test

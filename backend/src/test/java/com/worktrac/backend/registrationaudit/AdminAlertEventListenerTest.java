@@ -84,4 +84,24 @@ class AdminAlertEventListenerTest {
                         "ACS send did not succeed"));
         // No assertion beyond "did not throw" -- reaching this line is the test.
     }
+
+    // EMAIL_DELIVERY_REPORT_MISSING is the watchdog's net under EmailService no longer resending an
+    // accepted-but-unconfirmed email. It is worth nothing unless it actually reaches the admin, so
+    // pin that it rides the delivery-failure toggle.
+    @Test
+    void aMissingDeliveryReportEmailsTheAdminUnderTheDeliveryToggle() {
+        RegistrationAlertSettingsService settingsService = mock(RegistrationAlertSettingsService.class);
+        EmailService emailService = mock(EmailService.class);
+        AdminAlertEventListener listener = new AdminAlertEventListener(settingsService, adminProperties(),
+                emailService, mock(RegistrationAuditService.class), mock(Outbox.class));
+        RegistrationAlertSettings settings = new RegistrationAlertSettings();
+        settings.setAlertOnDeliveryFailure(true);
+        when(settingsService.get()).thenReturn(settings);
+
+        OutboxTestSupport.deliver(listener, new RegistrationAlertEvent(
+                RegistrationEventType.EMAIL_DELIVERY_REPORT_MISSING, "lost@example.com", "no report in 24 hours"));
+
+        verify(emailService).sendAdminAlert(any(),
+                contains("EMAIL_DELIVERY_REPORT_MISSING"), contains("lost@example.com"));
+    }
 }

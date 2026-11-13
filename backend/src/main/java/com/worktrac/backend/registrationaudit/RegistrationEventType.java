@@ -78,6 +78,14 @@ public enum RegistrationEventType {
     // cap starts refusing sign-ups.
     EMAIL_VOLUME_HIGH,
 
+    // ACS ACCEPTED a send but had not confirmed it when EmailService stopped waiting, so it was
+    // deliberately not resent (resending an accepted email is what duplicated every email on
+    // 2026-11-12). Recorded by EmailService for EVERY kind of email -- admin and Contact Us alerts
+    // included -- once per recipient, carrying the messageId when there is one. Not alertable: it
+    // is a normal state during an ACS slowdown. What resolves it is a delivery report for the same
+    // messageId; RegistrationDispatchWatchdog records EMAIL_DELIVERY_REPORT_MISSING if none comes.
+    EMAIL_SEND_UNCONFIRMED,
+
     // Level 2: what actually happened to it, reported by Event Grid after the fact.
     EMAIL_DELIVERED,
     EMAIL_BOUNCED,
@@ -97,5 +105,11 @@ public enum RegistrationEventType {
     // opposed to running and failing, which the types above already cover). This is the
     // safety net for failure modes not otherwise anticipated (e.g. the process being killed
     // mid-dispatch) -- see the watchdog's own comment.
-    REGISTRATION_EMAIL_DISPATCH_MISSING
+    REGISTRATION_EMAIL_DISPATCH_MISSING,
+
+    // Recorded by RegistrationDispatchWatchdog: an EMAIL_SEND_UNCONFIRMED with no delivery report
+    // for its messageId after DELIVERY_REPORT_GRACE. Either ACS failed the send without reporting
+    // it, or delivery reports have stopped reaching the webhook (a broken Event Grid subscription)
+    // -- either way, nobody can say whether the email arrived. Alertable.
+    EMAIL_DELIVERY_REPORT_MISSING
 }

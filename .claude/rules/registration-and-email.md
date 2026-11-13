@@ -98,6 +98,20 @@ run" and "the task ran and nothing went wrong" are indistinguishable from the ou
 1. **Send accepted** — `EmailService.send` inspects ACS's `EmailSendResult.getStatus()`/
    `getError()` and throws `EmailSendException` on anything but `SUCCEEDED`; returns the ACS
    `messageId` on success.
+   - **⚠️ Once ACS has ACCEPTED a send, `send` must never throw — throwing is what makes the outbox
+     resend.** `beginSend` returning means ACS took it. If ACS has not confirmed it within
+     `SEND_TIMEOUT` (or its status polls fail), `send` returns the messageId and records
+     `EMAIL_SEND_UNCONFIRMED` instead. Use `waitUntil`, never `waitForCompletion(timeout)`, which
+     throws when the wait runs out: on 2026-11-12 that resent every email up to five times and
+     reported each one FAILED (`docs/incidents/2026-11-12-acs-slow-confirmation-resent-accepted-email.md`).
+     A failure confirmed *within* the wait still throws, unchanged — that is the 2026-08-01
+     guarantee, and `EmailServiceSendOutcomeTest` pins both.
+   - **An unconfirmed send's outcome rests on its delivery report**, so
+     `RegistrationDispatchWatchdog` records the alertable `EMAIL_DELIVERY_REPORT_MISSING` for any
+     `EMAIL_SEND_UNCONFIRMED` with no report for its messageId after 24 hours. That grace must
+     outlast an ACS slowdown (reports took ~10 hours on 2026-11-12), or every late email alerts.
+     The recording lives in `EmailService.send` on purpose: it is the one place every email kind —
+     admin and Contact Us alerts included — passes through.
 2. **Actually delivered** — arrives later out of band via Event Grid
    (`Microsoft.Communication.EmailDeliveryReportReceived`) → `EmailDeliveryWebhookController`,
    correlated by that same `messageId`. Its `permitAll()` route is gated by a shared-secret query
