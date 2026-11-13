@@ -6,6 +6,7 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/registrationaudit/**"
   - "backend/src/main/java/com/worktrac/backend/config/**"
   - "backend/src/main/java/com/worktrac/backend/common/**"
+  - "backend/src/main/resources/templates/email/**"
 ---
 
 # Registration, auth & email-pipeline invariants
@@ -317,6 +318,9 @@ resend cooldown.
 - **Names are HTML-escaped into the invite template.** Person, household and owner names are free
   text the household typed; unescaped, a household name is a script injection into every invitee's
   inbox.
+- **No CSS `transform` in email templates.** Gmail strips it: the success emails' checkmark was two
+  borders of a box rotated 45°, and in Gmail it rendered as an unrotated "L". Draw shapes with a
+  text glyph (`&#10003;`) or a table, never with a transform. `EmailTemplateCssTest` enforces it.
 
 ### ⚠️ The selection token: a credential that is deliberately not a session
 
