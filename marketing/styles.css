@@ -1058,6 +1058,83 @@ img {
 }
 
 /* ============================================================================
+   Shop -- the merch tiles near the bottom of index.html
+   ========================================================================= */
+
+.shop-grid {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1060px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+@media (max-width: 700px) {
+  .shop-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+/* The product photos are shot on pure white, so the tile is white in BOTH schemes: on a dark
+   page the white square is the photo's own background, not a card that forgot dark mode. Its
+   label is pinned dark-on-white for the same reason. */
+.shop-tile {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+  box-shadow: var(--shadow-2), var(--elevation-hairline);
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.shop-tile img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.shop-tile__name {
+  display: block;
+  padding: 0 var(--space-3) var(--space-4);
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: #1c1b19;
+}
+
+@media (hover: hover) {
+  .shop-tile:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-3), var(--elevation-hairline);
+  }
+}
+
+.shop-tile:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.shop-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: clamp(28px, 4vw, 48px);
+  text-align: center;
+}
+
+.shop-cta__note {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* ============================================================================
    Pricing
    ========================================================================= */
 

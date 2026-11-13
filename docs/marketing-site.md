@@ -374,6 +374,25 @@ Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot s
 unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being
 sold.
 
+## The shop section (merch)
+
+Added 2026-11-13. "Wear the huddle" (`#shop` on `index.html`), plus a Shop link in the header and
+footer, sends people to the merch store: a Printful Quick Store at `https://huddle.printful.me`.
+Printful prints, ships and takes payment, so the section is nothing but links out. It is not an
+environment origin (`site-origins.md`), so the URL is written literally, like the App Store's.
+
+- **The six tile photos are the store's own product images**, saved as 640px JPEGs in
+  `marketing/assets/shop/`. They are NOT app screenshots, so the "one script, one household" rule
+  for `assets/shots/` doesn't apply to them. The Front & Back Hoodie tile is a front-and-back
+  composite made from the store's two flat mockups; the source composites for every hoodie colour
+  are in `../logo/v3/logo/printful-ready/front-back-mockups/`.
+- **No prices on the page.** The store is the one place a price lives, so nothing here can drift.
+- **Each tile links to its product** (`/product/<slug>`). A product that is unpublished and
+  republished in Printful gets a new store entry, and its slug may change, so check the tile links
+  after any republish. `landing.spec.ts` asserts the shape of every link, not that the product
+  still exists.
+- **The tiles are white in both colour schemes** because the photos are shot on pure white.
+
 ## What search engines and AI assistants read
 
 Added 2026-10-28, after an SEO review found three gaps:
