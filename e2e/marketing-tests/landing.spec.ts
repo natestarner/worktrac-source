@@ -121,6 +121,26 @@ test.describe('marketing landing page', () => {
     await expect(faq.getByRole('link', { name: 'get Huddle from the App Store' })).toHaveAttribute('href', listing);
   });
 
+  // The merch store is a Printful Quick Store; the section is nothing but links out to it, so the
+  // things that can break are a tile pointing somewhere else and a photo that never loads.
+  test('the shop section shows the merch and links out to the store', async ({ page }) => {
+    await page.goto('/');
+
+    const shop = page.locator('#shop');
+    await expect(shop.getByRole('heading', { level: 2, name: 'Wear the huddle' })).toBeVisible();
+    await expect(shop.getByRole('link', { name: 'Shop all merch' })).toHaveAttribute('href', 'https://huddle.printful.me/');
+    await expect(page.locator('.site-footer').getByRole('link', { name: 'Shop' })).toHaveAttribute('href', 'https://huddle.printful.me/');
+
+    const tiles = shop.locator('.shop-tile');
+    await expect(tiles).toHaveCount(6);
+    for (const tile of await tiles.all()) {
+      await expect(tile).toHaveAttribute('href', /^https:\/\/huddle\.printful\.me\/product\/[a-z0-9-]+$/);
+      const img = tile.locator('img');
+      await img.scrollIntoViewIfNeeded();
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    }
+  });
+
   // Stripe receipts and the App Store listing both name this page as the support URL, and the
   // people who follow it (a charge they don't recognize, a forgotten password) are mostly signed
   // out -- which is why it lives here and not at the app's own /app/help.
