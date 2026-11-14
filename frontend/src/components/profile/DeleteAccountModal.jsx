@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSubscription } from '../../api/billing';
 import { queryKeys } from '../../api/queryKeys';
-import { billingSourceName } from '../../lib/native';
+import {
+  APP_STORE_SUBSCRIPTIONS_URL,
+  billingSourceName,
+  externalLinkProps,
+  manageSubscriptions,
+  storeBillingSource,
+} from '../../lib/native';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { accountVocab } from '../../utils/accountVocab';
@@ -29,6 +35,19 @@ export default function DeleteAccountModal({ onClose }) {
   const subscriptionQuery = useQuery({ queryKey: queryKeys.subscription(), queryFn: getSubscription });
   const storeBilling = subscriptionQuery.data?.billingSource;
   const storeName = storeBilling && storeBilling !== 'STRIPE' ? billingSourceName(storeBilling) : null;
+  // Apple's guidance: tell them billing continues, ask them to cancel first, and give them the way
+  // there -- the store's own sheet when this app sells through that store, Apple's subscriptions page
+  // otherwise (the web, or a Mac where the sheet isn't available).
+  const canManageHere = storeName && storeBilling === storeBillingSource();
+  const [manageUnavailable, setManageUnavailable] = useState(false);
+  async function openStoreManagement() {
+    try {
+      const { result } = await manageSubscriptions();
+      if (result === 'unavailable') setManageUnavailable(true);
+    } catch {
+      setManageUnavailable(true);
+    }
+  }
 
   // ⚠️ On a family account this sentence destroys YOUR OWN data. On a trainer's it destroys OTHER
   // PEOPLE'S -- clients who never agreed to it and cannot get it back. Naming the number is what
@@ -138,9 +157,21 @@ export default function DeleteAccountModal({ onClose }) {
             marginBottom: 16,
           }}
         >
-          <strong>Your subscription keeps running.</strong> It is billed through {storeName}, and
-          deleting your account can&rsquo;t cancel it. Cancel it first in your phone&rsquo;s
-          Settings &rarr; your name &rarr; Subscriptions.
+          <strong>Your subscription keeps running.</strong> Billing continues through {storeName},
+          and deleting your account can&rsquo;t cancel it. Please cancel it before you delete.
+          <div style={{ marginTop: 8 }}>
+            {canManageHere && !manageUnavailable ? (
+              <OfflineDisabledWrap message="Managing your subscription needs a connection.">
+                <Button variant="secondary" onClick={openStoreManagement}>
+                  Manage subscription
+                </Button>
+              </OfflineDisabledWrap>
+            ) : storeBilling === 'APP_STORE' ? (
+              <a {...externalLinkProps(APP_STORE_SUBSCRIPTIONS_URL)}>Manage your App Store subscriptions</a>
+            ) : (
+              <span>Cancel it in your phone&rsquo;s subscription settings.</span>
+            )}
+          </div>
         </div>
       )}
 

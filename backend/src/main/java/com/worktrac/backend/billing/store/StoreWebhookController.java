@@ -58,6 +58,10 @@ public class StoreWebhookController {
             auditService.record(null, BillingEventType.STORE_REJECTED,
                     "notification: " + provider.source() + " did not verify: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        } catch (StoreBillingException e) {
+            // The certificate check could not reach Apple just now: not a forgery, so ask for a retry.
+            log.warn("Could not verify {} notification yet: {}", provider.source(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         if (reference.isEmpty()) {
             return ResponseEntity.ok().build();

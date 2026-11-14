@@ -85,7 +85,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("The App Store doesn't know this product", "UNKNOWN_PRODUCT")
                     return
                 }
-                let result = try await product.purchase(options: [.appAccountToken(token)])
+                let result = try await PurchasesPlugin.purchase(product, token: token, from: self.bridge?.viewController)
                 switch result {
                 case .success(let verification):
                     let reported = await self.held.hold(verification)
@@ -158,7 +158,15 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Apple's own manage-subscription sheet: change plan within the group, switch monthly/yearly,
     /// or cancel. The app never offers any of those itself for an App Store household.
+    ///
+    /// Resolves `{ result: "shown" }`, or `{ result: "unavailable" }` for the iPad app running on a Mac,
+    /// where Apple says to avoid this sheet ("if isiOSAppOnMac is true, avoid showing the user
+    /// interface for this feature"); the app then says where to manage it instead.
     @objc func manageSubscriptions(_ call: CAPPluginCall) {
+        if ProcessInfo.processInfo.isiOSAppOnMac {
+            call.resolve(["result": "unavailable"])
+            return
+        }
         Task { @MainActor in
             guard let scene = self.bridge?.viewController?.view.window?.windowScene else {
                 call.reject("No window to show the App Store sheet in", "NO_WINDOW")
@@ -166,7 +174,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             do {
                 try await AppStore.showManageSubscriptions(in: scene)
-                call.resolve()
+                call.resolve(["result": "shown"])
             } catch {
                 call.reject(error.localizedDescription, "MANAGE_FAILED", error)
             }
@@ -212,6 +220,19 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // MARK: - helpers
+
+    /// Apple: "Use purchase(confirmIn:options:) for apps that use UIKit" -- which a Capacitor app is --
+    /// so the confirmation sheet is tied to the app's own window scene (iOS 17+). iOS 15 and 16 have
+    /// only purchase(options:). Both carry the household token.
+    @MainActor
+    static func purchase(_ product: Product, token: UUID, from viewController: UIViewController?) async throws
+        -> Product.PurchaseResult {
+        let options: Set<Product.PurchaseOption> = [.appAccountToken(token)]
+        if #available(iOS 17.0, *), let scene = viewController?.view.window?.windowScene {
+            return try await product.purchase(confirmIn: scene, options: options)
+        }
+        return try await product.purchase(options: options)
+    }
 
     /// StoreKit's own on-device check is NOT the authority -- our backend verifies the JWS with Apple
     /// -- so an unverified transaction is still reported, and the backend refuses it if it is bad.

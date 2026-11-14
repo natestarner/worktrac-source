@@ -16,6 +16,7 @@ export {
   finish,
   getProducts,
   manageSubscriptions,
+  APP_STORE_SUBSCRIPTIONS_URL,
   onTransaction,
   purchase,
   requestRefund,

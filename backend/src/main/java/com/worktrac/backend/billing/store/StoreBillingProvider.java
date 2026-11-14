@@ -40,7 +40,18 @@ public interface StoreBillingProvider {
      * message about no subscription (Apple's TEST notification). The message's own claims about state
      * are never used: the caller re-fetches with {@link #fetchState}.
      */
-    Optional<StorePurchaseReference> parseNotification(String body) throws StoreVerificationException;
+    Optional<StorePurchaseReference> parseNotification(String body)
+            throws StoreVerificationException, StoreBillingException;
+
+    /**
+     * Subscriptions named by store messages that FAILED to reach us since {@code since} -- the store's
+     * own record of what it could not deliver (Apple: Get Notification History with onlyFailures).
+     * Apple's recommended recovery from an outage, and the only one for its sandbox, which sends each
+     * notification once and never retries. A store that redelivers on its own answers empty.
+     */
+    default java.util.List<StorePurchaseReference> undeliveredSince(java.time.Instant since) throws StoreBillingException {
+        return java.util.List.of();
+    }
 
     /** The store's current truth about one subscription, read now. */
     StoreSubscriptionState fetchState(StorePurchaseReference reference) throws StoreBillingException;

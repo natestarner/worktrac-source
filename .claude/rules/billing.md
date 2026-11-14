@@ -505,6 +505,13 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
   against production; refusing them would make the reviewer's purchase unlock nothing.
 - **Every store endpoint is honest when unconfigured**: 503 to the app, 401 to the store, the
   `StripeProperties` posture. `AppStoreProvider` is the only class importing Apple's library.
+- **A verification that could not reach Apple is TRANSIENT** (online certificate checks are on, as
+  Apple's README sets them): `RETRYABLE_VERIFICATION_FAILURE` becomes a 503, never `STORE_REJECTED`.
+  Recording it as a forgery would let the app finish a real purchase.
+- **Apple's sandbox sends each notification once, with no retries.** `StoreNotificationRecovery`
+  (hourly, locked) reads Apple's failed deliveries (Get Notification History, failures only) in both
+  environments and re-applies them. Don't remove it as redundant with the watchdog: the watchdog
+  only catches a period that has already lapsed. Full Apple checklist: `docs/in-app-purchase-plan.md`.
 
 ## Billing channels in the client
 

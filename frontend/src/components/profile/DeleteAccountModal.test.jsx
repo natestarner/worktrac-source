@@ -156,8 +156,18 @@ describe('DeleteAccountModal, a household paying through an app store', () => {
     getSubscription.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
     render(<DeleteAccountModal onClose={vi.fn()} />);
     expect(await screen.findByText('Your subscription keeps running.')).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent(/billed through the App Store/);
-    expect(screen.getByRole('note')).toHaveTextContent(/Settings/);
+    expect(screen.getByRole('note')).toHaveTextContent(/Billing continues through the App Store/);
+    expect(screen.getByRole('note')).toHaveTextContent(/cancel it before you delete/);
+  });
+
+  // Apple: "notify them that billing will continue through Apple and ask them to cancel their
+  // subscription before continuing", with a way to manage it. On the web that is Apple's own page.
+  it('on the web, links to Apple\u2019s subscriptions page', async () => {
+    getSubscription.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
+    render(<DeleteAccountModal onClose={vi.fn()} />);
+    const link = await screen.findByRole('link', { name: 'Manage your App Store subscriptions' });
+    expect(link).toHaveAttribute('href', 'https://apps.apple.com/account/subscriptions');
+    expect(screen.getByRole('note')).toHaveTextContent(/Billing continues through the App Store/);
   });
 
   it('says nothing for a Stripe household, whose subscription deleting does cancel', async () => {

@@ -350,7 +350,12 @@ export default function BillingTab() {
 
   const handleManageInStore = run(
     async () => {
-      await manageSubscriptions();
+      const { result } = await manageSubscriptions();
+      if (result === 'unavailable') {
+        // The iPad app on a Mac: Apple's sheet isn't available there.
+        showToast('Manage it in the App Store app: your account, then Subscriptions.', { tone: 'info' });
+        return;
+      }
       refreshAfterPlanChange();
     },
     {

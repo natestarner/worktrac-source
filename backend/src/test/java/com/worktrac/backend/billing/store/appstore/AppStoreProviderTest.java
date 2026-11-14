@@ -186,6 +186,18 @@ class AppStoreProviderTest {
                 .isInstanceOf(StoreVerificationException.class);
     }
 
+    // Online revocation checks are on (Apple's README). A check that could not reach Apple is retryable
+    // -- the purchase must stay unfinished and be sent again, never be recorded as a forgery.
+    @Test
+    void anOnlineCheckThatCouldNotCompleteIsRetryableAndAForgeryIsNot() {
+        assertThat(AppStoreProvider.isRetryable(java.util.List.of(
+                com.apple.itunes.storekit.verification.VerificationStatus.INVALID_ENVIRONMENT,
+                com.apple.itunes.storekit.verification.VerificationStatus.RETRYABLE_VERIFICATION_FAILURE))).isTrue();
+        assertThat(AppStoreProvider.isRetryable(java.util.List.of(
+                com.apple.itunes.storekit.verification.VerificationStatus.INVALID_ENVIRONMENT,
+                com.apple.itunes.storekit.verification.VerificationStatus.VERIFICATION_FAILURE))).isFalse();
+    }
+
     @Test
     void anEnvVarCarryingEscapedNewlinesBecomesAPem() {
         AppStoreProperties properties = new AppStoreProperties();

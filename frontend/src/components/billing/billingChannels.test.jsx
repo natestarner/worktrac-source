@@ -46,7 +46,7 @@ vi.mock('../../lib/native', async (importOriginal) => ({
   purchase: vi.fn(),
   restore: vi.fn(),
   finish: vi.fn().mockResolvedValue(undefined),
-  manageSubscriptions: vi.fn().mockResolvedValue(undefined),
+  manageSubscriptions: vi.fn().mockResolvedValue({ result: 'shown' }),
   requestRefund: vi.fn(),
 }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -291,6 +291,16 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Training clients/)).not.toBeInTheDocument();
     expect(createPortalSession).not.toHaveBeenCalled();
+  });
+
+  // Apple: on an iPad app running on a Mac, don't show the manage sheet; say where instead.
+  it('Manage subscription on a Mac says where to manage it instead', async () => {
+    manageSubscriptions.mockResolvedValueOnce({ result: 'unavailable' });
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage subscription' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/App Store app/), expect.anything()));
   });
 
   it("Request a refund opens Apple's own sheet and says Apple will answer", async () => {

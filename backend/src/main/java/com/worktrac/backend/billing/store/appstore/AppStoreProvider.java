@@ -7,6 +7,9 @@ import com.apple.itunes.storekit.model.Environment;
 import com.apple.itunes.storekit.model.JWSRenewalInfoDecodedPayload;
 import com.apple.itunes.storekit.model.JWSTransactionDecodedPayload;
 import com.apple.itunes.storekit.model.LastTransactionsItem;
+import com.apple.itunes.storekit.model.NotificationHistoryRequest;
+import com.apple.itunes.storekit.model.NotificationHistoryResponse;
+import com.apple.itunes.storekit.model.NotificationHistoryResponseItem;
 import com.apple.itunes.storekit.model.NotificationTypeV2;
 import com.apple.itunes.storekit.model.ResponseBodyV2DecodedPayload;
 import com.apple.itunes.storekit.model.Status;
@@ -14,6 +17,7 @@ import com.apple.itunes.storekit.model.StatusResponse;
 import com.apple.itunes.storekit.model.SubscriptionGroupIdentifierItem;
 import com.apple.itunes.storekit.verification.SignedDataVerifier;
 import com.apple.itunes.storekit.verification.VerificationException;
+import com.apple.itunes.storekit.verification.VerificationStatus;
 import com.worktrac.backend.billing.BillingSource;
 import com.worktrac.backend.billing.PlanSku;
 import com.worktrac.backend.billing.SubscriptionStatus;
@@ -105,7 +109,8 @@ public class AppStoreProvider implements StoreBillingProvider {
 
     /** The app sends StoreKit 2's {@code Transaction.jwsRepresentation}. */
     @Override
-    public StorePurchaseReference verifyPurchase(String signedTransaction) throws StoreVerificationException {
+    public StorePurchaseReference verifyPurchase(String signedTransaction)
+            throws StoreVerificationException, StoreBillingException {
         Verified<JWSTransactionDecodedPayload> verified = verifyInEitherEnvironment(
                 signedTransaction, SignedDataVerifier::verifyAndDecodeTransaction);
         JWSTransactionDecodedPayload transaction = verified.payload();
@@ -118,8 +123,13 @@ public class AppStoreProvider implements StoreBillingProvider {
 
     /** Apple's App Store Server Notifications V2: a JSON body {@code {"signedPayload": "..."}}. */
     @Override
-    public Optional<StorePurchaseReference> parseNotification(String body) throws StoreVerificationException {
-        String signedPayload = signedPayloadOf(body);
+    public Optional<StorePurchaseReference> parseNotification(String body)
+            throws StoreVerificationException, StoreBillingException {
+        return parseSignedNotification(signedPayloadOf(body));
+    }
+
+    private Optional<StorePurchaseReference> parseSignedNotification(String signedPayload)
+            throws StoreVerificationException, StoreBillingException {
         Verified<ResponseBodyV2DecodedPayload> verified = verifyInEitherEnvironment(
                 signedPayload, SignedDataVerifier::verifyAndDecodeNotification);
         ResponseBodyV2DecodedPayload notification = verified.payload();
@@ -134,6 +144,9 @@ public class AppStoreProvider implements StoreBillingProvider {
             transaction = verifier(verified.environment())
                     .verifyAndDecodeTransaction(notification.getData().getSignedTransactionInfo());
         } catch (VerificationException e) {
+            if (e.getStatus() == VerificationStatus.RETRYABLE_VERIFICATION_FAILURE) {
+                throw new StoreBillingException("Apple's certificate check could not be completed just now", e);
+            }
             throw new StoreVerificationException("Notification's transaction did not verify: " + e.getStatus(), e);
         }
         return Optional.of(new StorePurchaseReference(BillingSource.APP_STORE,
@@ -167,7 +180,8 @@ public class AppStoreProvider implements StoreBillingProvider {
                     : verifier.verifyAndDecodeRenewalInfo(latest.getSignedRenewalInfo());
             return toState(latest.getStatus(), transaction, renewal, environment, this::skuForProductId);
         } catch (VerificationException e) {
-            // Apple's own API answered with data that does not verify: not something a retry fixes
+            // Apple's own API answered with data that does not verify (or the online certificate check
+            // could not complete): not something a retry fixes
             // quickly, but not the caller's fault either. Transient from their side, loudly logged.
             log.error("App Store status for {} did not verify: {}", reference.subscriptionId(), e.getStatus());
             throw new StoreBillingException("App Store status did not verify: " + e.getStatus(), e);
@@ -234,6 +248,46 @@ public class AppStoreProvider implements StoreBillingProvider {
                 skuLookup.apply(productId).orElse(null), mapped, periodEnd, cancelAtPeriodEnd, environment, token);
     }
 
+    /**
+     * Notifications Apple could not deliver, from Get Notification History with {@code onlyFailures},
+     * in both environments. Apple names this as the way to recover after an outage; it matters most
+     * for the sandbox, where Apple sends each notification once and never retries -- so a lower backend
+     * cold-starting through one would otherwise miss it for good.
+     */
+    @Override
+    public java.util.List<StorePurchaseReference> undeliveredSince(Instant since) throws StoreBillingException {
+        java.util.List<StorePurchaseReference> references = new java.util.ArrayList<>();
+        for (StoreEnvironment environment : StoreEnvironment.values()) {
+            String paginationToken = null;
+            do {
+                NotificationHistoryResponse page;
+                try {
+                    page = client(environment).getNotificationHistory(paginationToken, new NotificationHistoryRequest()
+                            .startDate(since.toEpochMilli())
+                            .endDate(Instant.now().toEpochMilli())
+                            .onlyFailures(true));
+                } catch (APIException e) {
+                    throw new StoreBillingException("Get Notification History answered " + e.getHttpStatusCode()
+                            + " " + e.getApiError() + " (" + environment + ")", e);
+                } catch (IOException e) {
+                    throw new StoreBillingException("Could not reach the App Store Server API", e);
+                }
+                if (page.getNotificationHistory() != null) {
+                    for (NotificationHistoryResponseItem item : page.getNotificationHistory()) {
+                        try {
+                            parseSignedNotification(item.getSignedPayload()).ifPresent(references::add);
+                        } catch (StoreVerificationException e) {
+                            log.warn("Skipping an undeliverable {} notification that does not verify: {}",
+                                    environment, e.getMessage());
+                        }
+                    }
+                }
+                paginationToken = Boolean.TRUE.equals(page.getHasMore()) ? page.getPaginationToken() : null;
+            } while (paginationToken != null);
+        }
+        return references;
+    }
+
     @Override
     public String cancelAndRefund(StorePurchaseReference reference) {
         // Never reached: BillingSource.APP_STORE.weCanCancel() is false, so the overlap rule never picks
@@ -258,20 +312,38 @@ public class AppStoreProvider implements StoreBillingProvider {
 
     // Production first (the common case), then sandbox. The library refuses data whose environment
     // differs from the verifier's, so exactly one can succeed; a bad signature fails both.
-    private <T> Verified<T> verifyInEitherEnvironment(String signed, Decode<T> decode) throws StoreVerificationException {
+    //
+    // A RETRYABLE failure (the online certificate check could not reach Apple) is TRANSIENT, never a
+    // forgery: it becomes a StoreBillingException, so the app keeps the transaction unfinished and
+    // Apple redelivers its notification, instead of the proof being recorded as fake and finished.
+    private <T> Verified<T> verifyInEitherEnvironment(String signed, Decode<T> decode)
+            throws StoreVerificationException, StoreBillingException {
         requireConfigured();
         if (signed == null || signed.isBlank()) {
             throw new StoreVerificationException("Nothing to verify");
         }
-        VerificationException last = null;
+        java.util.List<VerificationException> failures = new java.util.ArrayList<>();
         for (StoreEnvironment environment : StoreEnvironment.values()) {
             try {
                 return new Verified<>(decode.apply(verifier(environment), signed), environment);
             } catch (VerificationException e) {
-                last = e;
+                failures.add(e);
             }
         }
+        if (isRetryable(failures.stream().map(VerificationException::getStatus).toList())) {
+            throw new StoreBillingException("Apple's certificate check could not be completed just now",
+                    failures.getLast());
+        }
+        VerificationException last = failures.getLast();
         throw new StoreVerificationException("Did not verify as an App Store payload: " + last.getStatus(), last);
+    }
+
+    /**
+     * Whether a payload that verified in neither environment may verify on a retry: some environment
+     * failed only because the online check could not complete. Package-private for the test.
+     */
+    static boolean isRetryable(java.util.List<VerificationStatus> statuses) {
+        return statuses.contains(VerificationStatus.RETRYABLE_VERIFICATION_FAILURE);
     }
 
     private static Optional<LastTransactionsItem> findLatest(StatusResponse response, String originalTransactionId) {
@@ -305,11 +377,10 @@ public class AppStoreProvider implements StoreBillingProvider {
                 // Apple requires the app's Apple ID only to verify PRODUCTION data.
                 env == StoreEnvironment.PRODUCTION ? properties.getAppAppleId() : null,
                 appleEnvironment(env),
-                // No online revocation (OCSP) check: every state we write is re-read from Apple's API
-                // over authenticated TLS (fetchState), so the signature here only has to prove WHICH
-                // subscription a payload names, and an extra network dependency on the purchase path
-                // would turn an OCSP hiccup into a purchase that does not land.
-                false));
+                // Online certificate-revocation checks ON, as Apple's own README configures it. A check
+                // that cannot reach Apple is RETRYABLE_VERIFICATION_FAILURE, which verifyInEitherEnvironment
+                // treats as transient (503, retried) -- never as a forged purchase.
+                true));
     }
 
     private synchronized AppStoreServerAPIClient client(StoreEnvironment environment) {

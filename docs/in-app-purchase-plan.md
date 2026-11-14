@@ -242,6 +242,35 @@ is cancelled and refunded.
 - **Admin portal**: show the billing source and environment beside the Stripe ids. (Built.)
 - **Refunds**: "Request a refund" opens Apple's in-app refund sheet for an App Store household. (Built.)
 
+## Checked against Apple's documentation (2026-11-14)
+
+Read from Apple's own pages (Review Guidelines 3.1.1, 3.1.2, 3.1.3, 5.1.1(v); the Developer Program
+License Agreement, Schedule 2 section 3.8; "Auto-renewable subscriptions"; "Offering account deletion
+in your app"; StoreKit's `Transaction.updates`, `finish()`, `purchase`, `AppStore.sync()`,
+`currentEntitlements`, `showManageSubscriptions(in:)`, `beginRefundRequest`; App Store Server
+Notifications "Responding" and "Enabling"; Get All Subscription Statuses; Apple's Java library README).
+
+| Apple says | Where we do it |
+|---|---|
+| Restore mechanism for restorable purchases (3.1.1); `AppStore.sync()` only on an explicit tap | **Restore purchases** button; `restore()` is the only caller of `sync()` |
+| Sign-up screen: name and duration, full renewal price "shown clearly and prominently", what you get, Terms and Privacy links (Schedule 2 3.8(b)) | Billing's store channel: store price per period, benefit list, `LegalLinks`, renewal disclosure. The web's per-month and "Save 39%" lines are dropped there, so the billed amount is the most prominent price |
+| No way to subscribe twice to "variations of the same thing" (3.1.2(b)) | One subscription group; prepare refuses an entitled household; the purchase claim |
+| Make the system manage screen easy to reach; not on an iPad app running on a Mac | **Manage subscription** (`showManageSubscriptions(in:)`); on a Mac it says where to go instead |
+| Start a `Transaction.updates` listener at launch; unfinished transactions arrive there once | `PurchasesPlugin.load()`, registered in `capacitorDidLoad`; plus `unfinished` sweeps |
+| `finish()` after delivering the service | Only after the backend answers 2xx (`lib/storeSync`) |
+| UIKit apps use `purchase(confirmIn:options:)` | iOS 17+; `purchase(options:)` on iOS 15-16 |
+| Refunds: `beginRefundRequest` "from account settings or a help menu" | **Request a refund** on Billing; a granted refund arrives as a notification |
+| Account deletion: say billing continues through Apple, ask them to cancel first, give `showManageSubscriptions` or apps.apple.com/account/subscriptions | Delete screen's notice: **Manage subscription** in the app, Apple's link on the web |
+| Notifications: answer 200-206 for success; 4xx/5xx is retried (production only, 5 times over 72h); **sandbox sends once, never retried**; recover outages with Get Notification History | 200 for anything understood, 401 forged, 503 transient. `StoreNotificationRecovery` reads Apple's failed deliveries hourly in both environments, so a sandbox notice landing on a cold lower backend still applies |
+| Billing grace period: the app must still read the renewal status; fulfil the offer through it (Schedule 2 3.8(c)) | Grace period maps to PAST_DUE, which stays entitled |
+| Verify with Apple's root certificates; online checks on (README); appAppleId for production | `AppleRootCA-G3.cer`; online checks on, with a check that could not reach Apple treated as retryable (503), never as a forgery |
+
+**Choices that differ from a reading of the docs, on purpose:**
+- `CONSUMPTION_REQUEST` (Apple asks for usage data when someone requests a refund) is not answered.
+  Apple: "If not [consented], don't respond", and we don't ask for that consent.
+- The in-app Help page still quotes the web's prices. Allowed on the US storefront (3.1.1(a), 3.1.3),
+  which is the only one the app is on. Revisit if the app is ever offered elsewhere.
+
 ## Phases
 
 ### Phase 0: Nate, in App Store Connect (about an hour, plus Apple's wait)
@@ -257,6 +286,17 @@ is cancelled and refunded.
 - An **In-App Purchase key** (Users and Access, Integrations). Secrets go in with `gh secret set`
   from a paste-ready block.
 - Note Huddle Lower's Apple ID (Huddle's is 6826555272) and create a sandbox tester.
+- **App Store metadata Apple requires for subscriptions:** a link to the Terms of Use (Apple's
+  standard EULA, https://www.apple.com/legal/internet-services/itunes/dev/stdeula/, or a custom EULA
+  in App Information) in the app description, and the Privacy Policy URL. Each subscription needs a
+  display name and description (people see them in Manage subscription) and a review screenshot.
+- **Billing Grace Period:** 16 days, "All Renewals", "Production and Sandbox Environment" (it is set
+  per app, not per product, and takes up to 24 hours).
+- After entering the notification URLs, send Apple's test notification (App Store Server API,
+  Request a Test Notification) and check it arrived (`billing_events` has no row for TEST, but the
+  backend logs no rejection; the status endpoint says whether we answered 200).
+- **iPhone and iPad apps on Mac:** if Huddle is offered there, Manage subscription falls back to
+  telling people to use the App Store app (Apple: don't show the sheet on a Mac).
 
 ### Phase 1: Backend (about 4 to 5 days)
 The migration; the shared core (`StoreBillingProvider`, `StoreSubscriptionState`, the controller,
@@ -284,8 +324,8 @@ backend down mid-purchase (it must land on the next launch). Each ends with exac
 source. Signed data from these runs becomes the Phase 1 fixtures.
 
 ### Phase 4: Submit 1.3.0
-The products are submitted together with the build (Apple requires the first ones to go with a
-binary). Review notes explain: in the app, the App Store; a household billed on the web sees
+The products are submitted together with the build: Apple requires the first subscription group,
+and every subscription in it, to be in the same draft submission as a new app version. Review notes explain: in the app, the App Store; a household billed on the web sees
 "billed on huddle.fitness"; the demo account is Free so the reviewer can buy with their sandbox
 account.
 

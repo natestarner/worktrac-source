@@ -91,11 +91,20 @@ export async function finish(transactionId) {
   await purchasesPlugin().finish({ transactionId });
 }
 
-/** The store's own manage-subscription screen: change plan, switch period, cancel. */
+/**
+ * The store's own manage-subscription screen: change plan, switch period, cancel. Resolves
+ * { result: 'shown' } or { result: 'unavailable' } -- the iPad app running on a Mac, where Apple says
+ * not to show the sheet; the caller says where to manage it instead.
+ */
 export async function manageSubscriptions() {
-  if (!storeSource()) return;
-  await purchasesPlugin().manageSubscriptions();
+  if (!storeSource()) return { result: 'unavailable' };
+  return (await purchasesPlugin().manageSubscriptions()) ?? { result: 'shown' };
 }
+
+// Apple's own page for managing subscriptions, for where its sheet can't be shown: the web, and the
+// iPad app on a Mac. From Apple's account-deletion guidance ("provide this link to let people manage
+// their subscriptions").
+export const APP_STORE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions';
 
 /**
  * The store's own refund-request sheet for this store account's current subscription. Resolves

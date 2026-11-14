@@ -321,6 +321,14 @@ class StoreBillingControllerTest extends AbstractIntegrationTest {
             assertThat(events(BillingEventType.STORE_REJECTED)).hasSize(1);
         }
 
+        // The online certificate check couldn't complete: transient, never recorded as a forgery.
+        @Test
+        void aProofWhoseCertificateCheckCouldNotCompleteIs503() throws Exception {
+            when(appStore.verifyPurchase("jws-ocsp")).thenThrow(new StoreBillingException("OCSP unreachable"));
+            sync(token, "jws-ocsp").andExpect(status().isServiceUnavailable());
+            assertThat(events(BillingEventType.STORE_REJECTED)).isEmpty();
+        }
+
         // Transient: 503, so the app keeps the transaction unfinished and StoreKit hands it back.
         @Test
         void appleUnreachableIs503SoTheAppSendsItAgain() throws Exception {
@@ -376,6 +384,16 @@ class StoreBillingControllerTest extends AbstractIntegrationTest {
         void oneThatDoesNotVerifyIs401() throws Exception {
             when(appStore.parseNotification(anyString())).thenThrow(new StoreVerificationException("forged"));
             notify("{\"signedPayload\":\"x\"}").andExpect(status().isUnauthorized());
+        }
+
+        // Apple's online certificate check couldn't complete: not a forgery, so Apple is asked to retry.
+        @Test
+        void aCertificateCheckThatCouldNotCompleteIs503NotRejected() throws Exception {
+            when(appStore.parseNotification(anyString())).thenThrow(new StoreBillingException("OCSP unreachable"));
+            notify("{\"signedPayload\":\"x\"}").andExpect(status().isServiceUnavailable());
+            assertThat(billingEventRepository.findAll())
+                    .noneMatch(event -> event.getEventType() == BillingEventType.STORE_REJECTED
+                            && event.getDetail().contains("OCSP unreachable"));
         }
 
         @Test
