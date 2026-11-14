@@ -220,7 +220,8 @@ default profile does not make it available to Claude's, or vice versa.
 
 Every replica logs one `health-metrics` line a minute (`config/HealthMetricsLogger`). The
 multi-replica alerts are Log Analytics scheduled-query rules over these lines, in
-`worktrac-deploy`'s `infra/` Bicep. **The keys are an API.** Add new ones at the end, and never
+`worktrac-deploy`'s `infra/monitoring.bicep` (built 2026-11-14; see that repo's `infra/README.md`
+for the full rule list, including the metric alerts for 5xx, restarts, memory and the database). **The keys are an API.** Add new ones at the end, and never
 rename one without changing the alert rules in the same release.
 
 ```
@@ -238,14 +239,15 @@ az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a 
    | order by TimeGenerated desc" -o table
 ```
 
-What each alert asks (prod only; lower scales to zero, so "no line" there is normal):
+What each alert asks (prod only; lower scales to zero, so "no line" there is normal). They email
+`huddle@starner.co` through the `huddle-prod-alerts` action group:
 
 | Alert | Condition |
 |---|---|
 | Email stuck | `max(oldest) > 900` over 15 min. That's past the outbox's ~9.5-minute retry schedule, so something is wrong |
 | Email failed | `max(failed) > 0` over 15 min. A row gave up; its reason is on the row and in the audit trail |
 | Pool saturated | `max(waiting) > 0` in 3 or more of the last 5 minutes, on any replica |
-| Replica silent | no `health-metrics` line from prod for 5 min |
+| Replica silent | no `health-metrics` line from prod for 10 min (10, not 5: a 10-minute log rule costs $1.00/month, a 5-minute one $1.50) |
 
 ## Reading quota activity
 
