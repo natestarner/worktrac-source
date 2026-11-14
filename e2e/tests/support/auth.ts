@@ -109,12 +109,17 @@ export async function setBillingPlan(
   email: string,
   plan: 'FREE' | 'PLUS' | 'PRO',
   clientSeats?: number,
+  // A paying subscription billed by this source instead of a comp (In-App Purchase specs).
+  source?: 'STRIPE' | 'APP_STORE',
 ): Promise<void> {
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
   const params = new URLSearchParams({ email, plan });
   if (clientSeats !== undefined) {
     params.set('clientSeats', String(clientSeats));
+  }
+  if (source !== undefined) {
+    params.set('source', source);
   }
   const response = await request.post(
     `${apiUrl}/api/auth/test/billing-plan?${params.toString()}`,
