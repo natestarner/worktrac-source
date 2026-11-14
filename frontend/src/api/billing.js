@@ -34,10 +34,34 @@ export function createPortalSession({ returnTo } = {}) {
   return apiClient.post(`/api/billing/portal-session${query}`);
 }
 
-// The App Store app's checkout on the US storefront (lib/native/billingChannel.js 'external'):
-// returns { url, sessionId } for Stripe's HOSTED page, which the app opens in the phone's browser.
-// Same symbols as createCheckoutSession, same server-side guards and price mapping. The app keeps
-// `sessionId` and reconciles it through reconcileCheckout when it comes back to the foreground.
-export function createCheckoutLink(interval, { plan, band } = {}) {
-  return apiClient.post('/api/billing/checkout-link', { interval, plan, band });
+// (createCheckoutLink, the US link-out to Stripe's hosted page, is gone from this bundle: In-App
+// Purchase replaced it. The backend keeps POST /api/billing/checkout-link for app builds 1.0-1.2,
+// which still call it -- api-compatibility.md.)
+
+// ---- In-App Purchase (lib/native/purchases.js; docs/in-app-purchase-plan.md) ----
+// `store` is the backend's URL segment for the app's store ('app-store'; later 'google-play'),
+// from purchases.storeSource(). Purchases are Tier-3 like checkout: online-only, never the outbox.
+
+// [{ plan, band, interval, productId }] -- the store product ids this environment sells. The app
+// asks the store for their prices; it never holds a product id or a price of its own.
+export function getStoreProducts(store) {
+  return apiClient.get(`/api/billing/store/${store}/products`);
+}
+
+// May this household buy, and with which household token? Answers { productId, accountToken }, or
+// refuses (409) with a message saying where the plan is billed, or that another device is mid-purchase.
+export function prepareStorePurchase(store, { plan, band = null, interval }) {
+  return apiClient.post(`/api/billing/store/${store}/prepare`, { plan, band, interval });
+}
+
+// The purchase sheet closed without a purchase: let another device start one now.
+export function releaseStorePurchase(store) {
+  return apiClient.post(`/api/billing/store/${store}/release`);
+}
+
+// Sends the store's proofs ({ proof } each) for the backend to verify and apply. 2xx: every proof was
+// handled and may be finished. Anything else: keep them unfinished; the store hands them back.
+// Answers the household's SubscriptionDto.
+export function syncStorePurchases(store, proofs) {
+  return apiClient.post(`/api/billing/store/${store}/sync`, { proofs: proofs.map((p) => p.proof) });
 }

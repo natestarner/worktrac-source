@@ -1233,11 +1233,28 @@ export default function HelpTab() {
         </p>
 
         <h3 className="help-h3">Changing your plan</h3>
+        {/* Two ways to pay, and a plan is managed where it was bought (docs/in-app-purchase-plan.md).
+            Written for both at once rather than branched on the platform: someone reading this on
+            the web may have bought in the app, and the other way round. */}
         <p>
-          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Plus is
-          $3.99 a month or $29 a year. Payments are handled by Stripe. The app never sees
-          your card. <T>Manage billing</T> opens Stripe in a new tab to change a card, download
-          receipts, switch between monthly and yearly, or cancel.
+          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on.
+        </p>
+        <p>
+          <strong>On the web,</strong> Plus is $3.99 a month or $29 a year. Payments are handled by
+          Stripe, and Huddle never sees your card. <T>Manage billing</T> opens Stripe in a new tab to
+          change a card, download receipts, switch between monthly and yearly, or cancel.
+        </p>
+        <p>
+          <strong>In the iPhone and iPad app,</strong> you subscribe through the App Store with your
+          Apple ID, at the price the App Store shows. <T>Manage subscription</T> opens Apple&rsquo;s
+          own screen to switch plans, move between monthly and yearly, or cancel, and refunds come
+          from Apple. <T>Restore purchases</T> brings back a subscription after you reinstall or move
+          to a new device.
+        </p>
+        <p>
+          A plan is changed where it was bought: a plan bought on the web is managed on the web, and
+          one bought in the app is managed in the App Store. Your household is only ever billed in
+          one place at a time.
         </p>
         <p>Changing your plan needs a connection.</p>
       </Section>

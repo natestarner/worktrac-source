@@ -1,10 +1,12 @@
 # In-App Purchase plan
 
-**STATUS (2026-11-14): DESIGN AGREED AND REVIEWED, not started.** Every decision is made (see
-"Decided"). Building waits on Nate's go-ahead; Phase 0 setup in App Store Connect can start now.
-Apple's reply to the 1.2.0 (build 24) appeal is still pending. Deep review on 2026-11-14 closed every
-technical unknown (see "Verified, not assumed"); what is left is only what Nate can see in App Store
-Connect (see "Left for Phase 0").
+**STATUS (2026-11-14): PHASES 1 AND 2 BUILT on branch `feat/iap`, not merged, not deployed.**
+Backend (store-neutral core, Apple provider, V105, overlap rules, watchdog) and app (StoreKit 2
+plugin, `purchases.js`, the store channel on Billing, Restore, delete-screen notice, Help, Terms,
+Privacy, privacy manifest) are written and tested with fakes. **Waiting on Phase 0** (Nate in App
+Store Connect) before Phase 3 can prove it with real sandbox purchases. Apple's reply to the 1.2.0
+appeal is still pending; this ships only if In-App Purchase is required. What the build could not
+prove without Apple is listed under "Not yet proven".
 
 ## Why
 
@@ -310,6 +312,17 @@ account.
   end, which is what lets every store reuse it; `isPayingThroughStripe` reads nothing
   Stripe-specific; the watchdog and `CompGrantService.blockedByStripe` are the only Stripe-only
   paths that need generalising; 1.0 to 1.2 still call `/checkout-link`.
+
+## Not yet proven (needs Phase 0)
+- A real signed sandbox transaction and notification verifying end to end (the unit tests use
+  Apple's payload types, not Apple's signatures). Capture them in Phase 3 as test fixtures.
+- `PurchasesPlugin.swift` on a device: it compiles in `mobile-ci`, but StoreKit's purchase sheet,
+  Ask to Buy and the manage sheet need a sandbox tester on a phone.
+- Configuration in the deploy repo: `APPLE_IAP_BUNDLE_ID`, `APPLE_IAP_APP_APPLE_ID`,
+  `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRODUCT_PREFIX` (env vars) and
+  `APPLE_IAP_PRIVATE_KEY` (secret), per environment, plus the notification URL
+  `/api/webhooks/store/app-store` on each app record.
+- V105's number: renumber at merge time if `main` has taken it.
 
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never

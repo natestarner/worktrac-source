@@ -1,5 +1,7 @@
 import { onlineManager } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithQuery as render } from '../../test/queryWrapper';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DeleteAccountModal from './DeleteAccountModal';
 import ChangePasswordSection from './ChangePasswordSection';
@@ -12,6 +14,8 @@ import { availableSignInProviders, signInWithProvider } from '../../lib/native';
 // login that signs in with Apple or Google.
 vi.mock('../../api/account', () => ({ deleteAccount: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
+// The delete screen asks who bills the household (an App Store subscription needs a warning).
+vi.mock('../../api/billing', () => ({ getSubscription: vi.fn().mockResolvedValue({ plan: 'FREE' }) }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast: vi.fn() }) }));
 vi.mock('../../hooks/useSignInMethods', () => ({ useSignInMethods: vi.fn() }));
@@ -87,7 +91,8 @@ describe('proving it is you with Apple or Google', () => {
       deleteAccount.mockRejectedValue(Object.assign(new Error('Confirm with Apple or Google to delete your account.'), {
         status: 403, code: 'NO_PASSWORD',
       }));
-      const { rerender } = render(<DeleteAccountModal onClose={vi.fn()} />);
+      // rerender through the same client: RTL's rerender doesn't keep render()'s wrapper.
+      const { rerender, queryClient } = render(<DeleteAccountModal onClose={vi.fn()} />);
       fireEvent.change(screen.getByPlaceholderText('DELETE'), { target: { value: 'DELETE' } });
       fireEvent.change(screen.getByPlaceholderText('Your password'), { target: { value: 'guess-guess' } });
       fireEvent.click(screen.getByRole('button', { name: 'Delete account' }));
@@ -95,7 +100,11 @@ describe('proving it is you with Apple or Google', () => {
       expect(await screen.findByText('Confirm with Apple or Google to delete your account.')).toBeInTheDocument();
       // Once the methods load, the provider's button is what is offered.
       useSignInMethods.mockReturnValue(methods(false, ['google']));
-      rerender(<DeleteAccountModal onClose={vi.fn()} />);
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <DeleteAccountModal onClose={vi.fn()} />
+        </QueryClientProvider>,
+      );
       expect(screen.getByRole('button', { name: 'Delete and confirm with Google' })).toBeInTheDocument();
       expect(screen.queryByPlaceholderText('Your password')).not.toBeInTheDocument();
     });

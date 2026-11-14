@@ -5,7 +5,11 @@ import { INTERVAL_ORDER, PRICING } from './planCopy';
 // buttons with aria-pressed would announce as two unrelated toggles, which is not what this is.
 //
 // Yearly is pre-selected by the caller (see planCopy.INTERVAL_ORDER).
-export default function PlanChooser({ value, onChange }) {
+//
+// `prices` (store channel only): ({ plan, interval }) -> the store's own price string. The web's
+// equivalent-per-month and savings lines are dropped there: they are arithmetic on the web prices,
+// and the store's are rounded to its own price points.
+export default function PlanChooser({ value, onChange, prices = null }) {
   return (
     <div
       role="radiogroup"
@@ -13,7 +17,12 @@ export default function PlanChooser({ value, onChange }) {
       style={{ display: 'grid', gap: 'var(--space-2)', marginBottom: 'var(--space-5)' }}
     >
       {INTERVAL_ORDER.map((id) => {
-        const option = PRICING[id];
+        const web = PRICING[id];
+        const storePrice = prices ? prices({ plan: 'PLUS', interval: id }) : null;
+        const option = prices
+          ? { ...web, price: `${storePrice} / ${id === 'YEAR' ? 'year' : 'month'}`, equivalent: null, savings: null }
+          : web;
+        if (prices && !storePrice) return null;
         const selected = value === id;
         return (
           <label

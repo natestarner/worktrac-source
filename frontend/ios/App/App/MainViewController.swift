@@ -10,11 +10,12 @@ import Capacitor
 /// behind a splash forever instead of showing boot-watchdog.js's way out.
 class MainViewController: CAPBridgeViewController {
     /// The app's own plugins (not from npm), registered with the bridge the way Capacitor's docs
-    /// prescribe for local plugins. Today: the App Store storefront lookup the billing channel needs,
-    /// and Apple's rating request (lib/native/review.js).
+    /// prescribe for local plugins. Today: the App Store storefront lookup, Apple's rating request
+    /// (lib/native/review.js) and In-App Purchase (lib/native/purchases.js).
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(StorefrontPlugin())
         bridge?.registerPluginInstance(AppReviewPlugin())
+        bridge?.registerPluginInstance(PurchasesPlugin())
     }
 
     override func viewDidLoad() {

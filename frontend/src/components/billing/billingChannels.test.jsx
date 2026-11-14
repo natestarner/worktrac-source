@@ -10,32 +10,52 @@ import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
-import { openExternal, openInBrowser } from '../../lib/native';
-import { readPendingCheckout } from '../../lib/pendingCheckout';
 import {
-  createCheckoutLink,
+  finish,
+  getProducts,
+  manageSubscriptions,
+  openExternal,
+  purchase,
+  restore,
+} from '../../lib/native';
+import {
   createCheckoutSession,
   createPortalSession,
+  getStoreProducts,
   getSubscription,
+  prepareStorePurchase,
+  releaseStorePurchase,
+  syncStorePurchases,
 } from '../../api/billing';
 
 // Every surface that leads toward a purchase, under each of the three billing channels
-// (lib/native/billingChannel.js). 'embedded' is the web and is covered by each component's own
-// tests unchanged; this file pins what the App Store app may and may not show.
+// (lib/native/billingChannel.js): 'embedded' (the web), 'store' (In-App Purchase in the App Store
+// app) and 'none' (an app with no store). This file pins what each may and may not show.
 vi.mock('../../hooks/useBillingChannel', () => ({ useBillingChannel: vi.fn() }));
 vi.mock('../../lib/native', async (importOriginal) => ({
   ...(await importOriginal()),
   openExternal: vi.fn().mockResolvedValue(undefined),
   openInBrowser: vi.fn().mockResolvedValue(undefined),
+  // The App Store app's store: lib/native/purchases.js, which talks to the StoreKit plugin.
+  storeSource: () => 'app-store',
+  storeBillingSource: () => 'APP_STORE',
+  getProducts: vi.fn(),
+  purchase: vi.fn(),
+  restore: vi.fn(),
+  finish: vi.fn().mockResolvedValue(undefined),
+  manageSubscriptions: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../api/billing', () => ({
   getSubscription: vi.fn(),
   createCheckoutSession: vi.fn(),
-  createCheckoutLink: vi.fn(),
   createPortalSession: vi.fn(),
   reconcileCheckout: vi.fn(),
+  getStoreProducts: vi.fn(),
+  prepareStorePurchase: vi.fn(),
+  releaseStorePurchase: vi.fn().mockResolvedValue(undefined),
+  syncStorePurchases: vi.fn(),
 }));
 vi.mock('./EmbeddedCheckout', () => ({ default: () => <div data-testid="stripe-embedded-checkout" /> }));
 vi.mock('../../api/logins', () => ({ listLogins: vi.fn().mockResolvedValue([]) }));
@@ -52,14 +72,16 @@ function renderBilling(account, subscription = null) {
   );
 }
 
+let showToast;
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   onlineManager.setOnline(true);
-  useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast: vi.fn() });
+  showToast = vi.fn();
+  useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast });
 });
 
-describe("'none' -- the App Store app outside the US storefront", () => {
+describe("'none' -- an app with no store plugin", () => {
   beforeEach(() => useBillingChannel.mockReturnValue('none'));
 
   it('the billing screen shows the plan, and no price, purchase or upgrade of any kind', async () => {
@@ -112,57 +134,154 @@ describe("'none' -- the App Store app outside the US storefront", () => {
   });
 });
 
-describe("'external' -- the App Store app on the US storefront", () => {
-  beforeEach(() => useBillingChannel.mockReturnValue('external'));
+// What the backend sells here, and what the store prices it at -- deliberately not the web's prices,
+// so a test can tell which one the screen is showing.
+const OFFERED = [
+  { plan: 'PLUS', band: null, interval: 'YEAR', productId: 'huddle.plus.year' },
+  { plan: 'PLUS', band: null, interval: 'MONTH', productId: 'huddle.plus.month' },
+  { plan: 'PRO', band: 'STARTER', interval: 'YEAR', productId: 'huddle.pro.starter.year' },
+];
+const STORE_PRICES = [
+  { id: 'huddle.plus.year', displayPrice: '$29.99' },
+  { id: 'huddle.plus.month', displayPrice: '$3.99' },
+  { id: 'huddle.pro.starter.year', displayPrice: '$189.99' },
+];
+const PURCHASED = { result: 'purchased', proof: 'jws.signed.tx', transactionId: '2000000123' };
 
-  it('Upgrade opens Stripe\'s hosted page in the browser, remembering the session to confirm on return', async () => {
-    createCheckoutLink.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs_1', sessionId: 'cs_1' });
+describe("'store' -- In-App Purchase in the App Store app", () => {
+  beforeEach(() => {
+    useBillingChannel.mockReturnValue('store');
+    getStoreProducts.mockResolvedValue(OFFERED);
+    getProducts.mockResolvedValue(STORE_PRICES);
+  });
+
+  it("shows the store's own prices, the renewal terms and Restore purchases", async () => {
+    renderBilling({ id: 1, plan: 'FREE' });
+    expect(await screen.findByText('Yearly: $29.99 / year')).toBeInTheDocument();
+    expect(screen.getByText('Monthly: $3.99 / month')).toBeInTheDocument();
+    // The web's prices and its savings arithmetic are not shown: the store's points differ.
+    expect(screen.queryByText(/\$29 \/ year/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Save 39%/)).not.toBeInTheDocument();
+    expect(screen.getByText('$189.99 / year')).toBeInTheDocument();
+    expect(screen.getByText(/renews automatically unless you cancel it at least 24 hours/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restore purchases' })).toBeInTheDocument();
+    expect(getProducts).toHaveBeenCalledWith(OFFERED.map((p) => p.productId));
+  });
+
+  it('buys through the store with the household token, confirms with the backend, then finishes', async () => {
+    prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.year', accountToken: 'token-1' });
+    purchase.mockResolvedValue(PURCHASED);
+    syncStorePurchases.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
     renderBilling({ id: 1, plan: 'FREE' });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
-    // Safari, not the in-app sheet: closing a sheet never backgrounds the app, so the return that
-    // confirms the payment (useCheckoutResume's visibilitychange) would never fire.
-    await waitFor(() => expect(openInBrowser).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_1'));
-    expect(openExternal).not.toHaveBeenCalled();
-    expect(createCheckoutLink).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null });
+    await waitFor(() => expect(finish).toHaveBeenCalledWith('2000000123'));
+    expect(prepareStorePurchase).toHaveBeenCalledWith('app-store', { plan: 'PLUS', band: null, interval: 'YEAR' });
+    expect(purchase).toHaveBeenCalledWith({ productId: 'huddle.plus.year', accountToken: 'token-1' });
+    expect(syncStorePurchases).toHaveBeenCalledWith('app-store', [PURCHASED]);
+    // Finished only AFTER the backend had it.
+    expect(syncStorePurchases.mock.invocationCallOrder[0]).toBeLessThan(finish.mock.invocationCallOrder[0]);
+    // Never Stripe, in any form.
     expect(createCheckoutSession).not.toHaveBeenCalled();
-    expect(readPendingCheckout()).toBe('cs_1');
-    // Never the embedded form: Apple allows no payment UI inside the app.
     expect(screen.queryByTestId('stripe-embedded-checkout')).not.toBeInTheDocument();
   });
 
-  it('Manage billing opens the Customer Portal outside the app, returning to a page that says to close it', async () => {
-    createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/p/session_1' });
-    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+  // The store's queue is the retry: an unconfirmed purchase is left unfinished and sent again later.
+  it('does not finish a purchase the backend could not confirm', async () => {
+    prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.year', accountToken: 'token-1' });
+    purchase.mockResolvedValue(PURCHASED);
+    syncStorePurchases.mockRejectedValue(new Error('503'));
+    renderBilling({ id: 1, plan: 'FREE' });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
     await waitFor(() =>
-      expect(openExternal).toHaveBeenCalledWith('https://billing.stripe.com/p/session_1', expect.any(Object)),
+      expect(showToast).toHaveBeenCalledWith('Purchase received. Your plan will update shortly.', { tone: 'info' }),
     );
-    // In the sheet, /app/billing would be a signed-out web app; /billing-done says to close the sheet.
-    expect(createPortalSession).toHaveBeenCalledWith({ returnTo: 'app' });
+    expect(finish).not.toHaveBeenCalled();
   });
 
-  // Closing the sheet never backgrounds the app, so nothing else would notice a cancellation or a
-  // plan change made there: the billing screen would keep showing the plan as it was.
-  it('closing the portal refreshes the plan and the subscription', async () => {
-    createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/p/session_1' });
-    const view = renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
-    const { refreshPeople } = useAuth.mock.results.at(-1).value;
+  it('a cancelled sheet releases the purchase claim and confirms nothing', async () => {
+    prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.year', accountToken: 'token-1' });
+    purchase.mockResolvedValue({ result: 'cancelled' });
+    renderBilling({ id: 1, plan: 'FREE' });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
-    await waitFor(() => expect(openExternal).toHaveBeenCalled());
-    const fetchesBefore = getSubscription.mock.calls.length;
-    expect(refreshPeople).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
-    const { onClose } = openExternal.mock.calls[0][1];
-    onClose();
+    await waitFor(() => expect(releaseStorePurchase).toHaveBeenCalledWith('app-store'));
+    expect(syncStorePurchases).not.toHaveBeenCalled();
+  });
 
-    expect(refreshPeople).toHaveBeenCalled();
-    await waitFor(() => expect(getSubscription.mock.calls.length).toBeGreaterThan(fetchesBefore));
-    view.unmount();
+  it('Ask to Buy says it is waiting, and confirms nothing yet', async () => {
+    prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.year', accountToken: 'token-1' });
+    purchase.mockResolvedValue({ result: 'pending' });
+    renderBilling({ id: 1, plan: 'FREE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/Waiting for approval/), expect.anything()));
+    expect(syncStorePurchases).not.toHaveBeenCalled();
+  });
+
+  // The server's refusal is written for people ("billed on huddle.fitness", "another device").
+  it("shows the server's reason when the purchase is refused", async () => {
+    prepareStorePurchase.mockRejectedValue(
+      Object.assign(new Error('A purchase is already in progress on another device.'), { status: 409 }),
+    );
+    renderBilling({ id: 1, plan: 'FREE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('A purchase is already in progress on another device.', { tone: 'error' }),
+    );
+    expect(purchase).not.toHaveBeenCalled();
+  });
+
+  // Fails closed: no prices from the store, nothing to buy.
+  it('offers nothing to buy when the store cannot price the plans', async () => {
+    getProducts.mockRejectedValue(new Error('StoreKit unavailable'));
+    renderBilling({ id: 1, plan: 'FREE' });
+
+    expect(await screen.findByText(/Plans couldn't be loaded from the store/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upgrade to Plus' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+
+  it('Restore purchases re-sends what the store holds and finishes it', async () => {
+    restore.mockResolvedValue([PURCHASED]);
+    syncStorePurchases.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
+    renderBilling({ id: 1, plan: 'FREE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore purchases' }));
+
+    await waitFor(() => expect(finish).toHaveBeenCalledWith('2000000123'));
+    expect(syncStorePurchases).toHaveBeenCalledWith('app-store', [PURCHASED]);
+  });
+
+  it('a household paying through the App Store manages it in the store, and is offered no Pro checkout', async () => {
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage subscription' }));
+
+    await waitFor(() => expect(manageSubscriptions).toHaveBeenCalled());
+    expect(screen.getByText('Billed through the App Store.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Training clients/)).not.toBeInTheDocument();
+    expect(createPortalSession).not.toHaveBeenCalled();
+  });
+
+  // Rule 1: one source per household, and no link out of the app.
+  it('a household paying on the web is told where, with no control and no link', async () => {
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'STRIPE' });
+
+    expect(
+      await screen.findByText('Your plan is billed on huddle.fitness. Sign in there to change it.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage subscription' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /huddle\.fitness/ })).not.toBeInTheDocument();
   });
 });
 
@@ -176,8 +295,7 @@ describe("'embedded' -- the web, unchanged", () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
-    expect(createCheckoutLink).not.toHaveBeenCalled();
-    expect(readPendingCheckout()).toBeNull();
+    expect(prepareStorePurchase).not.toHaveBeenCalled();
   });
 
   it('Manage billing asks for the portal exactly as before, returning to the billing screen', async () => {
@@ -187,6 +305,21 @@ describe("'embedded' -- the web, unchanged", () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
 
     await waitFor(() => expect(openExternal).toHaveBeenCalled());
-    expect(createPortalSession).toHaveBeenCalledWith({ returnTo: undefined });
+    expect(createPortalSession).toHaveBeenCalledWith();
+  });
+
+  // Paying through the App Store, seen on the web: the plan is changed where it is billed.
+  it('a household paying through the App Store is told to manage it on the phone, with no portal', async () => {
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
+
+    expect(await screen.findByText(/Your plan is billed through the App Store/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Training clients/)).not.toBeInTheDocument();
+  });
+
+  it('a Stripe household on the web still sees Manage billing and the Pro upgrade', async () => {
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'STRIPE' });
+    expect(await screen.findByRole('button', { name: 'Manage billing' })).toBeInTheDocument();
+    expect(screen.getByText(/Training clients/)).toBeInTheDocument();
   });
 });

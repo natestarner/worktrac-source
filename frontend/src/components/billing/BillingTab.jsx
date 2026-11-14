@@ -8,11 +8,12 @@ import { listLogins } from '../../api/logins';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import {
-  createCheckoutLink,
   createCheckoutSession,
   createPortalSession,
   getSubscription,
+  prepareStorePurchase,
   reconcileCheckout,
+  releaseStorePurchase,
 } from '../../api/billing';
 import { queryKeys } from '../../api/queryKeys';
 import { refreshHistoryForEveryone } from '../../lib/queryClient';
@@ -30,8 +31,17 @@ import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 import BackLink from '../shared/BackLink';
 import { useGoBack } from '../../hooks/useGoBack';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
-import { openExternal, openInBrowser } from '../../lib/native';
-import { rememberPendingCheckout } from '../../lib/pendingCheckout';
+import {
+  billingSourceName,
+  manageSubscriptions,
+  openExternal,
+  purchase,
+  restore,
+  storeBillingSource,
+  storeSource,
+} from '../../lib/native';
+import { syncAndFinish } from '../../lib/storeSync';
+import { findStoreProduct, useStoreCatalog } from '../../hooks/useStoreCatalog';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -68,10 +78,15 @@ export default function BillingTab() {
   // itself, and a second copy of that answer here is the kind of duplicate the
   // mechanism table exists to prevent.
   const { pending, run } = useGatedMutation();
-  // 'embedded' on the web (everything below is exactly as before), 'external' in the App Store app
-  // on the US storefront (Stripe's hosted page, in the phone's browser), 'none' elsewhere in the
-  // app (the plan, with no price, purchase or portal). lib/native/billingChannel.js has the rules.
+  // 'embedded' on the web (everything below is exactly as before), 'store' in an app with a store
+  // (In-App Purchase, priced and sold by the store), 'none' in an app without one (the plan, with no
+  // price, purchase or portal). lib/native/billingChannel.js has the rules.
   const channel = useBillingChannel();
+  // The store's products and its own price strings. Until they load -- and if they never do -- the
+  // store channel offers nothing to buy: it fails closed, like 'none'.
+  const catalogQuery = useStoreCatalog(channel === 'store');
+  const catalog = catalogQuery.data;
+  const storeCanSell = channel === 'store' && Boolean(findStoreProduct(catalog, { plan: 'PLUS', interval: 'YEAR' }));
 
   const { isOwner } = useAccountAccess();
 
@@ -235,14 +250,8 @@ export default function BillingTab() {
   // that forgets the argument still gets the old, correct behaviour rather than a 400.
   const handleUpgrade = run(
     async ({ plan = 'PLUS', band = null } = {}) => {
-      if (channel === 'external') {
-        // Apple allows a link OUT to a web checkout on the US storefront, never payment UI in the
-        // app. The session id is written down BEFORE the browser opens -- synchronously, so a
-        // backgrounded app iOS kills can't lose it -- and useCheckoutResume confirms it on return.
-        // Safari, not the in-app sheet: only leaving the app makes the return a visibilitychange.
-        const { url, sessionId } = await createCheckoutLink(interval, { plan, band });
-        rememberPendingCheckout(sessionId);
-        await openInBrowser(url);
+      if (channel === 'store') {
+        await buyInStore({ plan, band });
         return;
       }
       const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
@@ -251,6 +260,82 @@ export default function BillingTab() {
     {
       offlineMessage: 'Upgrading needs a connection.',
       errorMessage: "Couldn't start checkout. Try again in a moment.",
+      // The store path's refusals are written for people: "billed on huddle.fitness", "a purchase is
+      // already in progress on another device", or the store's own reason. Off on the web, as before.
+      showServerMessage: channel === 'store',
+    },
+  );
+
+  // In-App Purchase (docs/in-app-purchase-plan.md). The backend says whether this household may buy
+  // and hands over its token; the store takes the payment; the backend verifies the store's proof and
+  // writes the plan; only then is the transaction finished (lib/storeSync).
+  async function buyInStore({ plan, band }) {
+    const store = storeSource();
+    const { productId, accountToken } = await prepareStorePurchase(store, { plan, band, interval });
+    let outcome;
+    try {
+      outcome = await purchase({ productId, accountToken });
+    } catch (error) {
+      releaseStorePurchase(store).catch(() => {});
+      throw error;
+    }
+    if (outcome?.result === 'cancelled') {
+      // Let another device start one now rather than in ten minutes.
+      releaseStorePurchase(store).catch(() => {});
+      return;
+    }
+    if (outcome?.result === 'pending') {
+      // Ask to Buy, or the bank's approval. It arrives later through useStoreTransactions.
+      showToast("Waiting for approval. Your plan will update once it's approved.", { tone: 'info' });
+      return;
+    }
+    let confirmed = null;
+    try {
+      confirmed = await syncAndFinish([outcome]);
+    } catch {
+      // Paid, but not confirmed with us yet. The transaction stays unfinished, so the store hands it
+      // back and useStoreTransactions sends it again: a delay, never a lost payment.
+      showToast('Purchase received. Your plan will update shortly.', { tone: 'info' });
+      return;
+    }
+    refreshAfterPlanChange();
+    if (isPaidPlan(confirmed?.plan)) {
+      setCelebratedPlan(confirmed.plan);
+      setShowCelebration(true);
+    } else {
+      showToast('Purchase received. Your plan will update shortly.', { tone: 'info' });
+    }
+  }
+
+  // Restore Purchases, which Apple requires wherever subscriptions are sold. Re-sends every current
+  // subscription on this store account; each is applied to the household it was bought for, which
+  // may not be this one.
+  const handleRestore = run(
+    async () => {
+      const proofs = await restore();
+      const restored = proofs.length ? await syncAndFinish(proofs) : null;
+      refreshAfterPlanChange();
+      if (!isPaidPlan(restored?.plan)) {
+        showToast(`No subscription to restore for this ${storeAccountName()} and household.`, { tone: 'info' });
+      }
+    },
+    {
+      offlineMessage: 'Restoring purchases needs a connection.',
+      errorMessage: "Couldn't restore purchases. Try again in a moment.",
+      showServerMessage: true,
+    },
+  );
+
+  // The store's own manage screen: change plan, switch monthly/yearly, cancel. It is a sheet over the
+  // app, so its closing is the moment to re-read what it may have changed.
+  const handleManageInStore = run(
+    async () => {
+      await manageSubscriptions();
+      refreshAfterPlanChange();
+    },
+    {
+      offlineMessage: 'Managing your plan needs a connection.',
+      errorMessage: "Couldn't open subscription management. Try again in a moment.",
     },
   );
 
@@ -258,7 +343,7 @@ export default function BillingTab() {
   // ends), who would lose a login, and -- if the plan itself moved -- every person's History window.
   // The portal changes Stripe at once, but our copy updates when its webhook lands, so this can
   // still read the old state for a second or two; any later visit to this screen refetches.
-  function refreshAfterPortal() {
+  function refreshAfterPlanChange() {
     refreshPeople().catch(() => {});
     queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
     queryClient.invalidateQueries({ queryKey: queryKeys.accountLogins() });
@@ -268,9 +353,9 @@ export default function BillingTab() {
 
   const handleManageBilling = run(
     async () => {
-      // 'external' is the App Store app, the only channel that shows the portal in a browser sheet;
-      // there the portal's own "Return to Huddle" must not load the web app inside it.
-      const { url } = await createPortalSession({ returnTo: channel === 'external' ? 'app' : undefined });
+      // Only ever the web now: in the app, a Stripe-billed household is told where its plan lives
+      // and offered no portal (docs/in-app-purchase-plan.md, rule 1).
+      const { url } = await createPortalSession();
       // A NEW TAB, not a navigation. Stripe's Customer Portal is redirect-only (no embedded
       // variant exists), and replacing this document would hand an installed PWA's session to
       // Safari with no reliable way back. openExternal's web branch is exactly that new tab; in
@@ -278,7 +363,7 @@ export default function BillingTab() {
       // the person is back (it never backgrounds the app, so refetch-on-focus never fires).
       // Not awaited past opening: the gated button's spinner is for opening the portal, not for
       // the whole visit.
-      await openExternal(url, { onClose: refreshAfterPortal });
+      await openExternal(url, { onClose: refreshAfterPlanChange });
     },
     {
       offlineMessage: 'Managing your plan needs a connection.',
@@ -320,16 +405,23 @@ export default function BillingTab() {
           vocab={accountVocab(account?.vocab)}
           subscription={subscription}
           pending={pending}
-          onManage={channel === 'none' ? null : handleManageBilling}
           pausableLogins={pausableLogins}
           interval={interval}
           proBand={proBand}
           onProBandChange={setProBand}
-          onUpgrade={channel === 'none' ? null : handleUpgrade}
+          {...paidControls(channel, subscription?.billingSource, {
+            handleManageBilling,
+            handleManageInStore,
+            handleUpgrade,
+          })}
         />
       ) : (
         <FreeSummary
-          canBuy={channel !== 'none'}
+          canBuy={channel === 'embedded' || storeCanSell}
+          unavailableLine={channel === 'store' && !storeCanSell ? catalogUnavailableLine(catalogQuery) : null}
+          prices={channel === 'store' ? storePrices(catalog) : null}
+          storeFinePrint={channel === 'store' ? storeFinePrint() : null}
+          onRestore={channel === 'store' ? handleRestore : null}
           interval={interval}
           proBand={proBand}
           onProBandChange={setProBand}
@@ -354,12 +446,87 @@ export default function BillingTab() {
 //
 // The tier is asked for ONCE, at the top, and everything below reads that answer. Adding a second
 // `plan === 'PRO'` branch further down is the bug this shape exists to prevent -- see billing.md.
+/**
+ * Which controls a PAYING household gets, from two facts: how this copy of Huddle sells
+ * (`channel`), and who is billing the household (`billingSource`, from SubscriptionDto). One
+ * household, one billing source (docs/in-app-purchase-plan.md), so a plan is only ever changed
+ * where it is billed:
+ *
+ *   billed by...          on the web                       in the app (store channel)
+ *   Stripe (or unknown)   Manage billing (Customer Portal)  "billed on huddle.fitness", no link
+ *   this app's store      "billed through the App Store"   Manage subscription (the store's sheet)
+ *   another store         "billed through Google Play"     the same sentence
+ *
+ * `billedElsewhere` is the sentence for the cases with no control. An unknown billingSource (a
+ * server that predates the field, resilience.md axis D) is treated as Stripe -- what every paying
+ * household was before stores existed.
+ */
+function paidControls(channel, billingSource, { handleManageBilling, handleManageInStore, handleUpgrade }) {
+  const source = billingSource ?? 'STRIPE';
+  if (channel === 'none') return { onManage: null, onUpgrade: null, billedElsewhere: null };
+  if (channel === 'store') {
+    if (source === storeBillingSource()) {
+      return {
+        onManage: handleManageInStore,
+        manageLabel: 'Manage subscription',
+        onUpgrade: null,
+        billedElsewhere: null,
+        billedInStore: billingSourceName(source),
+      };
+    }
+    return {
+      onManage: null,
+      onUpgrade: null,
+      billedElsewhere:
+        source === 'STRIPE'
+          ? 'Your plan is billed on huddle.fitness. Sign in there to change it.'
+          : `Your plan is billed through ${billingSourceName(source)}. Change it on a device that uses ${billingSourceName(source)}.`,
+    };
+  }
+  if (source !== 'STRIPE') {
+    return {
+      onManage: null,
+      onUpgrade: null,
+      billedElsewhere: `Your plan is billed through ${billingSourceName(source)}. Change or cancel it in the subscription settings of the phone or tablet you bought it on.`,
+    };
+  }
+  return { onManage: handleManageBilling, onUpgrade: handleUpgrade, billedElsewhere: null };
+}
+
+// What the Free screen says when the store channel has nothing to sell yet. Keyed on the catalog
+// QUERY's state, never on connectivity: a paused fetch (offline, nothing cached) and a failed one
+// both present as "no data", and a spinner over either would never resolve.
+function catalogUnavailableLine(catalogQuery) {
+  if (catalogQuery.isPending && catalogQuery.fetchStatus === 'fetching') return 'Loading plans\u2026';
+  if (catalogQuery.fetchStatus === 'paused') return 'Plans need a connection to load.';
+  return "Plans couldn't be loaded from the store right now. Try again later.";
+}
+
+// The store's own price strings, by plan/band/interval, for the price lines on the Free screen.
+function storePrices(catalog) {
+  return ({ plan, band = null, interval }) => findStoreProduct(catalog, { plan, band, interval })?.displayPrice ?? null;
+}
+
+const STORE_ACCOUNT = { APP_STORE: 'Apple ID', GOOGLE_PLAY: 'Google account' };
+
+function storeAccountName() {
+  return STORE_ACCOUNT[storeBillingSource()] ?? 'store account';
+}
+
+// The auto-renewal disclosure the stores require beside a subscription's price.
+function storeFinePrint() {
+  return `Payment is charged to your ${storeAccountName()}. Your subscription renews automatically unless you cancel it at least 24 hours before the end of the period; manage or cancel it in your ${storeAccountName()}'s subscription settings.`;
+}
+
 function PaidSummary({
   plan,
   vocab,
   subscription,
   pending,
   onManage,
+  manageLabel = 'Manage billing',
+  billedElsewhere = null,
+  billedInStore = null,
   pausableLogins = [],
   interval,
   proBand,
@@ -406,9 +573,13 @@ function PaidSummary({
             lockout -- see SubscriptionService.isPlus for why cutting access mid-dunning is wrong. */}
         {pastDue && (
           <p style={warningLineStyle}>
-            We couldn&rsquo;t take your last payment. Update your card to keep {name}.
+            {billedInStore
+              ? `${billedInStore[0].toUpperCase()}${billedInStore.slice(1)} couldn\u2019t take your last payment. Update your payment method in Settings to keep ${name}.`
+              : <>We couldn&rsquo;t take your last payment. Update your card to keep {name}.</>}
           </p>
         )}
+        {!comped && billedInStore && <p style={mutedLineStyle}>Billed through {billedInStore}.</p>}
+        {!comped && billedElsewhere && <p style={mutedLineStyle}>{billedElsewhere}</p>}
       </div>
 
       <SectionLabel>What {name} includes</SectionLabel>
@@ -447,7 +618,7 @@ function PaidSummary({
               the one place nothing already supplies that gap -- on a narrow phone "Training
               clients?" landed close enough under it to read as part of the same control. */}
           <Button variant="secondary" fullWidth onClick={onManage} disabled={pending} style={{ marginBottom: 'var(--space-6)' }}>
-            Manage billing
+            {manageLabel}
           </Button>
         </OfflineDisabledWrap>
       )}
@@ -541,6 +712,10 @@ function FreeSummary({
   onStartFree,
   proCardRef,
   canBuy = true,
+  unavailableLine = null,
+  prices = null,
+  storeFinePrint = null,
+  onRestore = null,
 }) {
   const planCard = (
     <div style={cardStyle}>
@@ -558,6 +733,7 @@ function FreeSummary({
       <>
         <SectionLabel>Your plan</SectionLabel>
         {planCard}
+        {unavailableLine && <p style={mutedLineStyle}>{unavailableLine}</p>}
         <Button variant="ghost" fullWidth onClick={onStartFree}>
           Back to logging
         </Button>
@@ -572,7 +748,7 @@ function FreeSummary({
 
       <SectionLabel>Upgrade to Plus</SectionLabel>
       <div style={cardStyle}>
-        <PlanChooser value={interval} onChange={onIntervalChange} />
+        <PlanChooser value={interval} onChange={onIntervalChange} prices={prices} />
         <BenefitList />
         {/* The one variant="primary" on this screen. The header's own control is a quiet outlined
             badge labelled "Go Plus" precisely so it does not compete with this, and so the two
@@ -585,6 +761,7 @@ function FreeSummary({
         <p style={finePrintStyle}>
           Cancel any time. Your workouts are never deleted. See <LegalLinks />.
         </p>
+        {storeFinePrint && <p style={finePrintStyle}>{storeFinePrint}</p>}
       </div>
 
       <ProUpgradeCard
@@ -594,7 +771,16 @@ function FreeSummary({
         pending={pending}
         onUpgrade={onUpgrade}
         cardRef={proCardRef}
+        prices={prices}
       />
+
+      {onRestore && (
+        <OfflineDisabledWrap message="Restoring purchases needs a connection.">
+          <Button variant="ghost" fullWidth onClick={onRestore} disabled={pending}>
+            Restore purchases
+          </Button>
+        </OfflineDisabledWrap>
+      )}
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
           straight here, and Free is permanent -- deferring costs them nothing. */}
@@ -624,11 +810,26 @@ function FreeSummary({
  * "nothing to look at here" on a card meant to be noticed, where the accent fill every other
  * primary action carries reads as "look here".
  */
-function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, cardRef, ctaVariant = 'secondary' }) {
-  const selected = PRO_BANDS.find((b) => b.id === band) ?? PRO_BANDS[0];
+function ProUpgradeCard({
+  interval,
+  band,
+  onBandChange,
+  pending,
+  onUpgrade,
+  cardRef,
+  ctaVariant = 'secondary',
+  prices = null,
+}) {
+  // In the store channel, only the bands the store actually offers.
+  const bands = prices ? PRO_BANDS.filter((b) => prices({ plan: 'PRO', band: b.id, interval })) : PRO_BANDS;
+  const selected = bands.find((b) => b.id === band) ?? bands[0];
+  if (!selected) return null;
   // The interval chosen above drives this price too, so the two cards can never quote different
-  // billing periods on one screen.
-  const price = interval === 'YEAR' ? selected.year : selected.month;
+  // billing periods on one screen. In the store channel it is the store's own price string.
+  const webPrice = interval === 'YEAR' ? selected.year : selected.month;
+  const price = prices
+    ? `${prices({ plan: 'PRO', band: selected.id, interval })} / ${interval === 'YEAR' ? 'year' : 'month'}`
+    : webPrice;
 
   return (
     <>
@@ -653,7 +854,7 @@ function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, card
           onChange={(event) => onBandChange(event.target.value)}
           style={bandSelectStyle}
         >
-          {PRO_BANDS.map((option) => (
+          {bands.map((option) => (
             <option key={option.id} value={option.id}>
               {option.name} &mdash; {option.label}
             </option>

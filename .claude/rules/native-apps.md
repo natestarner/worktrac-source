@@ -59,6 +59,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `appReturnUrl(hostname, search)` | the same on both: a pure function | `<bundle id>://checkout-complete…` for the app claiming that host, or `null` | `CheckoutCompletePage`'s "Return to the Huddle app" |
 | `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
 | `availableSignInProviders()` / `signInWithProvider(p)` / `renderGoogleButton(el, …)` / `googleUsesRenderedButton()` (`socialSignIn.js`) | Google Identity Services' own rendered button; Apple's JS in popup mode; both scripts lazy. Nothing offered without a `socialSignIn` block in config.json | `@capgo/capacitor-social-login`: Apple's and Google's native sheets (Google refuses web sign-in inside a WebView). `useProperTokenExchange` returns Apple's one-time code UNEXCHANGED, which the backend needs to revoke on account deletion | `SocialSignIn.jsx` (Login, Register), `ProviderButtons.jsx` (Profile's Sign in with, Set a password, Delete account), `HelpTab` (copy only) |
+| `purchases.js`: `storeSource()`, `getProducts`, `purchase`, `restore`, `unfinishedTransactions`, `finish`, `manageSubscriptions`, `onTransaction` | `storeSource()` is null, so the channel is `embedded` and nothing here runs; each call answers safely anyway | `PurchasesPlugin.swift` (StoreKit 2). The signed JWS goes to the backend unopened; `finish` only after a 2xx | `BillingTab`, `lib/storeSync.js`, `hooks/useStoreTransactions`, `hooks/useStoreCatalog` |
 | `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutConfirmModal`'s End tap |
 | `appReviewUrl(storeUrl)` | `null` (so the web menu is unchanged) | The listing (`/me`'s `client.appStoreUrl`) with `?action=write-review`, or `null` while that is unset | `UserMenu`'s "Rate Huddle", opened with `openInBrowser` (the App Store app, not the sheet) |
 
@@ -88,12 +89,12 @@ that schedules notifications is never clobbered by the rest timer's cancel-on-re
 If anyone asks for a switch, it is a per-device App Settings toggle, not per person.
 
 **Billing channels** (`lib/native/billingChannel.js`, read through `hooks/useBillingChannel`):
-`'embedded'` on the web (today's checkout, unchanged), `'external'` in the app on the **US App Store
-storefront** (Stripe's hosted page in the phone's browser), `'none'` anywhere else in the app (no
-price, purchase, upgrade link or portal). The storefront comes from the app's own StoreKit plugin
-(`ios/App/App/StorefrontPlugin.swift`, registered in `MainViewController.capacitorDidLoad`), never
-from region, language or IP. **It fails closed**: the app starts at `'none'` and an unreadable
-storefront stays there. Full rules: `billing.md`, "Selling in the App Store app".
+`'embedded'` on the web, `'store'` in an app with a store plugin (In-App Purchase), `'none'` in an
+app without one. **`lib/native/purchases.js` is the only place the app talks to a store**, with the
+same calls on every platform; iOS implements them in `ios/App/App/PurchasesPlugin.swift` (StoreKit
+2, registered in `MainViewController.capacitorDidLoad`). Android adds its own plugin and one line in
+`storeSource()`. `StorefrontPlugin.swift` is no longer read by billing. Full rules: `billing.md`,
+"Billing channels in the client"; design: `docs/in-app-purchase-plan.md`.
 
 - Never enable `CapacitorHttp` (it patches `fetch`, changing abort/timeout/CORS semantics on one
   platform only; `api/client.js` is the one HTTP path) and never add `@capacitor/network` (a second

@@ -5,7 +5,7 @@ import { appReturnUrl } from '../lib/native';
 // (POST /api/billing/checkout-link). The URL is also a universal link, but iOS doesn't follow one
 // that arrives as a redirect, so this usually opens in Safari. All it can usefully do is send the
 // person back: "Return to the Huddle app" reopens it through its URL scheme (appReturnUrl), and the
-// app confirms the payment itself when it returns to the foreground (hooks/useCheckoutResume.js).
+// app confirms the payment itself when it returns to the foreground (the removed hooks/useCheckoutResume.js; this page now serves only app builds 1.0-1.2, which still link out).
 // The Stripe webhook applies it regardless.
 //
 // Public and stateless on purpose. This browser is usually signed out of Huddle, and nothing here

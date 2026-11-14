@@ -11,6 +11,18 @@ export {
   cancelRestNotifications,
 } from './notifications';
 export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
+export {
+  billingSourceName,
+  finish,
+  getProducts,
+  manageSubscriptions,
+  onTransaction,
+  purchase,
+  restore,
+  storeBillingSource,
+  storeSource,
+  unfinishedTransactions,
+} from './purchases';
 export { appPathForUrl, appReturnUrl, listenForAppLinks } from './appLinks';
 export { keepFocusedFieldVisible } from './keyboard';
 export { requestAppReview, appReviewUrl } from './review';

@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getSubscription } from '../../api/billing';
+import { queryKeys } from '../../api/queryKeys';
+import { billingSourceName } from '../../lib/native';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { accountVocab } from '../../utils/accountVocab';
@@ -17,6 +21,14 @@ const CONFIRMATION_WORD = 'DELETE';
 export default function DeleteAccountModal({ onClose }) {
   const { account, people, logout } = useAuth();
   const vocab = accountVocab(account?.vocab);
+
+  // Deleting the account cancels a Stripe subscription for them, but nobody but the subscriber can
+  // cancel one bought through an app store -- Apple requires the app to say so before it is too late
+  // (docs/in-app-purchase-plan.md). Read from the same query the billing screen uses; while it is
+  // unanswered the notice is simply absent, never a spinner over a delete.
+  const subscriptionQuery = useQuery({ queryKey: queryKeys.subscription(), queryFn: getSubscription });
+  const storeBilling = subscriptionQuery.data?.billingSource;
+  const storeName = storeBilling && storeBilling !== 'STRIPE' ? billingSourceName(storeBilling) : null;
 
   // ⚠️ On a family account this sentence destroys YOUR OWN data. On a trainer's it destroys OTHER
   // PEOPLE'S -- clients who never agreed to it and cannot get it back. Naming the number is what
@@ -114,6 +126,23 @@ export default function DeleteAccountModal({ onClose }) {
           </OfflineDisabledWrap>
         </div>
       </div>
+
+      {storeName && (
+        <div
+          role="note"
+          style={{
+            background: 'var(--color-highlight-bg)',
+            borderRadius: 'var(--radius-md)',
+            padding: '10px 14px',
+            fontSize: 13,
+            marginBottom: 16,
+          }}
+        >
+          <strong>Your subscription keeps running.</strong> It is billed through {storeName}, and
+          deleting your account can&rsquo;t cancel it. Cancel it first in your phone&rsquo;s
+          Settings &rarr; your name &rarr; Subscriptions.
+        </div>
+      )}
 
       {error && (
         <div

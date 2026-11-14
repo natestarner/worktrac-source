@@ -474,54 +474,69 @@ full reasoning; don't move it back in front of the deletes.
 - **"Plus" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.
 
-## Selling in the App Store app: three billing channels
+## Who bills a household: Stripe on the web, the app's store in the app, never both
 
-`hooks/useBillingChannel` answers `'embedded' | 'external' | 'none'` (`lib/native/billingChannel.js`):
+Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out to Stripe under
+3.1.1 (2026-11-14), so **in the app the only way to pay is the app's store** (In-App Purchase).
+
+- **`subscriptions.billing_source`** (V105): `STRIPE`, `APP_STORE`, `GOOGLE_PLAY`. A store is just
+  a second writer of the SAME row, so every gate, screen and feature check keeps reading
+  `entitledPlan` and never learns stores exist. `SubscriptionService.billingSource()` treats a row
+  with a Stripe id and no source as STRIPE.
+- **`isPayingThroughStripe` is now `isPaying`** -- it never read anything Stripe-specific. An App
+  Store grace period maps to PAST_DUE, billing retry / expiry / revocation to CANCELED
+  (`AppStoreProvider.toState`), so the four-case derivation is unchanged.
+- **⚠️ One source at a time, and the one we CAN'T cancel wins.** `BillingSource.weCanCancel()`
+  (Stripe and Google yes, Apple no) is the whole rule, in `SubscriptionService.resolveOverlap`, the
+  same for every pair. The loser is cancelled and its latest payment refunded in full through the
+  outbox (`BillingOverlapHandler`), and the owner is emailed once (deduped at delivery on the
+  billing_events unique index). Two Apple IDs: nothing can be undone, so the current one is kept,
+  an ERROR is logged for the alerts and the owner is told which to cancel.
+  - `applyStripeState` **never writes over a paying store row** -- a late webhook for an old,
+    cancelled Stripe subscription would otherwise put CANCELED over a paying App Store household.
+- **Store messages are re-fetched, never applied** (`StoreBillingService.apply`), the Stripe rule.
+  Attribution is by the store's subscription id, then by the household token signed into the
+  purchase (`store_account_token`, Apple's `appAccountToken`), **never by whoever is signed in**.
+  A purchase naming no household is `STORE_UNMATCHED`, not applied.
+- **Prepare refuses every entitled household** (Stripe, comp, or already this store: they change
+  plan in the store's own manage sheet), and claims the household for 10 minutes
+  (`claimStorePurchase`, one conditional UPDATE) so two devices on two Apple IDs can't both buy.
+- **Both store environments are accepted everywhere.** App Review and TestFlight buy in SANDBOX
+  against production; refusing them would make the reviewer's purchase unlock nothing.
+- **Every store endpoint is honest when unconfigured**: 503 to the app, 401 to the store, the
+  `StripeProperties` posture. `AppStoreProvider` is the only class importing Apple's library.
+
+## Billing channels in the client
+
+`hooks/useBillingChannel` answers `'embedded' | 'store' | 'none'` (`lib/native/billingChannel.js`):
 
 | Channel | Where | What the upgrade surfaces do |
 |---|---|---|
-| `embedded` | The web, any browser or installed PWA | Exactly what this file describes everywhere else. Unchanged |
-| `external` | The App Store app, **US storefront** | "Upgrade" calls `POST /api/billing/checkout-link` and opens Stripe's HOSTED page in the phone's browser; the Customer Portal opens in the in-app browser sheet with `returnTo=app` (its "Return to Huddle" lands on `/billing-done`, not a signed-out web app), and closing the sheet refreshes the plan (`native-apps.md`) |
-| `none` | The App Store app anywhere else, or storefront unknown | **No** price, purchase button, "Go Plus" badge, "See Plus" link, "Unlock with Plus", "Unlock full history", portal or Pro upgrade. The billing screen shows the plan only |
+| `embedded` | The web, any browser or installed PWA | Exactly what this file describes everywhere else |
+| `store` | An app with a store plugin (iOS today) | `BillingTab` sells through `lib/native/purchases.js`: prepare, the store's sheet, `sync`, then `finish` |
+| `none` | An app with no store plugin (Android, until it has one) | **No** price, purchase button, "Go Plus" badge, "See Plus" link, portal or Pro upgrade |
 
 - **The gate lives INSIDE the surfaces** (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,
-  `HistoryWindowModal`), never at their call sites, so "one way to ask for an upgrade" is also one
-  place that decides whether asking is allowed. A new upgrade surface must read the channel too, and
-  `billingChannels.test.jsx` is where its `none` case belongs.
-- **It fails closed.** The app renders `none` until StoreKit says `USA`. A purchase button shown to a
-  non-US account is an App Review rejection; a missing one costs a US household a second.
+  `HistoryWindowModal`), never at their call sites; the others only ask "is it `none`?".
+  `billingChannels.test.jsx` is where each channel's case belongs.
+- **The store prices; we never do.** `useStoreCatalog` asks our backend which product ids this
+  environment sells and the store for their `displayPrice`. **It fails closed**: no catalog, nothing
+  to buy (a line says why). The web's savings arithmetic is not shown in the store channel.
+- **A transaction is finished only after the backend answered 2xx** (`lib/storeSync.syncAndFinish`).
+  The store's own unfinished queue is the retry mechanism: `useStoreTransactions` (in `AppShell`)
+  sweeps it on mount, on return to the app and on reconnect, and listens for renewals and Ask to Buy
+  approvals. Never the durable outbox, which must not hold a payment.
+- **Who manages a paying household's plan** follows `SubscriptionDto.billingSource`
+  (`BillingTab.paidControls`): Stripe on the web gets "Manage billing"; the app's own store gets
+  "Manage subscription" (the store's sheet); anything else gets one sentence saying where, **with no
+  link** -- a link out of the app is the thing 3.1.1 rejected.
 - **On `none` the factual sentence stays; only the way to buy goes.** `PlusUpsell` keeps its text
-  ("Your full history has 47 more workouts") and drops "See Plus". Hiding the sentence too would make
-  a clamped screen look complete, the bug "The window must SAY it is clamping" exists to prevent.
-- **`/checkout-link` is the SAME purchase as `/checkout-session`.** Both go through
-  `BillingController.prepareCheckout` (rate limit, already-paying refusal, `PlanSku` mapping,
-  per-tier "do we sell it here", customer reuse); only the Stripe page differs. Its landing page
-  (`/checkout-complete`) is derived from `app.stripe.return-url`'s origin, so it needs **no new
-  setting** in the three places billing config lives.
-- **The app finishes the purchase on return, through the existing reconcile.** It writes the session
-  id synchronously before leaving (`lib/pendingCheckout.js`); `useCheckoutResume` reconciles it each
-  time the app comes back, and only when the result is a paid plan opens `/app/billing?checkout=<id>`
-  so `BillingTab`'s own reconcile and `PlusCelebration` run exactly as after a web checkout. An unpaid
-  result never celebrates and keeps the note (they may only have switched apps); a 4xx forgets it; it
-  expires after a day. The webhook and the watchdog apply the purchase regardless.
-- **The app's upgrade funnel is in `billing_events`, so keep its two details' shape.** A link opened
-  is `CHECKOUT_STARTED` with `hosted session=<id>`; a payment the app (or the web) confirmed is
-  `CHECKOUT_RECONCILED` with `session=<id>`. Joining them is the evidence for "would In-App Purchase
-  earn more despite Apple's cut?" A purchase the app never came back for is still applied by the
-  webhook, just not counted here, so treat the ratio as a floor. Count DISTINCT: a paid return is
-  reconciled twice (`useCheckoutResume`, then `BillingTab` on `?checkout=`), so it has two rows.
-  ```sql
-  SELECT COUNT(DISTINCT s.id) AS links_opened,
-         COUNT(DISTINCT CASE WHEN r.id IS NOT NULL THEN s.id END) AS confirmed_paid
-  FROM billing_events s
-  LEFT JOIN billing_events r ON r.event_type = 'CHECKOUT_RECONCILED'
-       AND r.detail LIKE '%session=' + SUBSTRING(s.detail, CHARINDEX('session=', s.detail) + 8, 255)
-  WHERE s.event_type = 'CHECKOUT_STARTED' AND s.detail LIKE '% hosted session=%'
-    AND s.created_at > DATEADD(DAY, -90, GETDATE());
-  ```
-- **⚠️ Verify before every App Store submission** that the US link-out rules still stand: as of
-  2026-10 Apple takes no commission on linked purchases while the district court sets a rate, and a
-  fee may arrive. Outside the US, selling would need In-App Purchase, which is deferred.
+  and drops "See Plus".
+- **Kept for old app builds:** `POST /api/billing/checkout-link`, `/checkout-complete` and the
+  `checkout-complete` scheme link. 1.0-1.2 still call them; delete them once
+  `NATIVE_MIN_SUPPORTED_BUILD` reaches the first build with In-App Purchase (`api-compatibility.md`).
+- **Deleting an account can't cancel a store subscription.** The delete screen says so;
+  `STORE_LEFT_RUNNING_ON_DELETION` records it.
 
 ## ⚠️ A plan decides what a SCREEN shows — and, separately, what a LOGIN can do
 
