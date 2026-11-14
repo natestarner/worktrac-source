@@ -1,148 +1,318 @@
 # In-App Purchase plan
 
-**STATUS (2026-11-14): DESIGN AGREED, not started.** All decisions made (see "Decided"). Building
-waits on Nate's go-ahead; Phase 0 setup in App Store Connect can start now. Apple's reply to the
-1.2.0 (build 24) appeal is still pending. If Apple accepts the appeal, this is still the long-term fix, but it
-stops being urgent.
+**STATUS (2026-11-14): DESIGN AGREED AND REVIEWED, not started.** Every decision is made (see
+"Decided"). Building waits on Nate's go-ahead; Phase 0 setup in App Store Connect can start now.
+Apple's reply to the 1.2.0 (build 24) appeal is still pending. Deep review on 2026-11-14 closed every
+technical unknown (see "Verified, not assumed"); what is left is only what Nate can see in App Store
+Connect (see "Left for Phase 0").
 
 ## Why
 
 App Review rejected 1.2.0 under guideline 3.1.1. The app lets people use Plus and Pro bought on the
-web (Stripe), and those plans can't also be bought in the app through Apple. The reviewer saw the
-US link-out working exactly as designed and rejected it anyway. Apple's reading: a US app *may*
-link out, but anything you can use in the app must *also* be for sale through In-App Purchase
-(3.1.3(b), which has no US exception).
+web (Stripe), and those plans can't also be bought in the app through Apple. The reviewer's
+screenshot shows they saw the US link-out Billing screen working exactly as designed, and rejected
+it anyway. Apple's reading: a US app *may* link out, but anything you can use in the app must *also*
+be for sale through In-App Purchase (3.1.3(b), which has no US exception).
 
 ## The design in one paragraph
 
-**The app sells through Apple. The web sells through Stripe. A household is billed by exactly one
-of them at a time.** Apple becomes a second writer of the household's existing `subscription` row
-(plan, status, interval, band, period end), plus a new `billing_source` column (`STRIPE` or
-`APPLE`). Everything downstream already derives what a household gets from that row
-(`SubscriptionService.entitledPlan`, `BillingPlan.features()`), so no gate, screen or feature check
-needs to know Apple exists. A household that pays Apple has Plus on the web, on every device and
-for every member, the same as a Stripe household.
+**In an app, you pay the app's store. On the web, you pay Stripe. A household is billed by exactly
+one of them at a time.** Every store is just another writer of the household's existing
+`subscription` row (plan, status, interval, band, period end), tagged with a `billing_source`
+(`STRIPE`, `APP_STORE`, `GOOGLE_PLAY`). Everything downstream already derives what a household gets
+from that row (`SubscriptionService.entitledPlan`, `BillingPlan.features()`), so no gate, screen or
+feature check needs to know which store, or that stores exist. A household that pays Apple has Plus
+on the web, on every device and for every member, exactly like a Stripe household.
 
-## Simplicity decisions (each one trades a little money or reach for less to build)
+## Decided
 
-| Decision | Simple choice | What it costs |
+| Decision | Choice | What it costs |
 |---|---|---|
-| How to talk to Apple | **Directly**: a small StoreKit 2 plugin of our own in the app (like the existing Storefront and review-prompt plugins), and Apple's official `app-store-server-library` on the backend. No RevenueCat. | About a day or two more to build than a vendor SDK. In exchange: no vendor holding purchase data, no privacy-policy change, no fee, no third service that can be down. Android (Google Play) will be its own piece of work when it comes. |
-| What to sell | **All ten SKUs** (Plus monthly/yearly, four Pro bands x two intervals) in **one subscription group** | Apple takes 15% on Pro bought in the app. Pro buyers can still choose the web. One group means Apple handles Plus to Pro and band changes itself, prorated, and guarantees one Apple subscription per person. |
-| The US link-out | **Remove it from the app.** The app has one way to buy: Apple. | US buyers in the app pay through Apple (15%) instead of Stripe. Deletes the hosted-checkout, pending-checkout and resume code from the app path. |
-| Prices | Nearest Apple price point to each web price (e.g. $29/yr becomes $29.99) | Pennies. Not raising Apple prices to cover the 15% keeps one price story; we can revisit. |
-| Family Sharing | **Off** on every product | Nothing. Huddle already shares across the household by itself. |
-| Free trials / offers | **None** | Nothing new to build. |
-| Outside the US | Stays US-only | Nothing now; IAP makes other countries possible later. |
+| How to talk to Apple | **Directly**: our own small StoreKit 2 plugin in the app, Apple's official Java library (`com.apple.itunes.storekit:app-store-server-library`) on the backend. No RevenueCat. | A day or two more than a vendor SDK. No vendor holding purchase data, no fee, no third service that can be down. |
+| Ways to pay in the app | **One: the app's store.** The US link-out to Stripe is removed from the app. | US buyers in the app pay through Apple (15%) instead of Stripe. |
+| What to sell | **All ten SKUs**, Plus and every Pro band, in **one subscription group**. | Apple's 15% on Pro bought in the app; Pro buyers can still choose the web. |
+| Prices | Same as the web, rounded to Apple's nearest price point (e.g. $29/yr becomes $29.99). | Pennies. The app shows the store's own price string, so our code never holds an Apple price. |
+| Family Sharing, free trials, offers, promoted purchases | **All off.** | Nothing. Huddle already shares across the household. Off also guarantees every purchase starts inside our app (see rule 4). |
+| Android | **Designed in now, built later.** Every shared piece is store-neutral; Android adds only its own provider and plugin (see "Android later"). | Nothing extra now beyond naming things "store" instead of "Apple". |
 
 ## No overlapping subscriptions: how it's guaranteed
 
-Nobody should ever pay Stripe and Apple at once. Four rules, in order of how often they matter:
+Nobody should ever pay two places at once. We can cancel and refund **Stripe** (and Google), but we
+**cannot cancel an Apple subscription**: only the person can. So the design never lets a second
+subscription start, and when a race slips through anyway, the one we can't cancel is the one that
+stays.
 
-1. **Each side refuses to sell to a household the other side is billing.**
-   - Web checkout already refuses any household that's entitled (`BillingController.prepareCheckout`,
-     "This account already has a paid plan."). An Apple household is entitled, so this works with
-     no change. Its Billing tab says "Your plan is billed through the App Store" with instructions
-     to manage it in iPhone Settings, and shows no Stripe buttons.
-   - The app asks the backend before opening Apple's purchase sheet
-     (`POST /api/billing/apple/prepare`). A Stripe-billed or comped household is refused. Its
-     Billing tab says "Your plan is billed on huddle.fitness" with a manage link (allowed in the US)
-     and shows no Apple buttons.
-   - "Still billed" includes cancelled-but-paid-through, Stripe past-due and Apple's grace and
-     billing-retry periods. Switching sides means cancelling and waiting for the period to end.
-2. **Changing plans stays on the same side.** An Apple household changes tier or band through
-   Apple (same subscription group, so Apple prorates). A Stripe household uses the Customer Portal
-   as today.
-3. **Safety net for a race** (buying on the web and in the app within seconds of each other). We
-   can cancel and refund Stripe; we can't cancel Apple. So if an Apple purchase lands on a household
-   with a live Stripe subscription, the backend **cancels the Stripe subscription immediately with
-   a prorated refund**, records it in `billing_events`, and emails the owner. Apple wins, always.
-4. **An Apple purchase belongs to the household that made it.** Every purchase carries StoreKit's
-   `appAccountToken`, a random per-household UUID the backend hands out in `/apple/prepare` (new
-   column). Apple stamps it into the signed transaction, so the backend knows which household paid
-   without any Apple ID mapping. A transaction stamped for a different household is never applied
-   here, so Restore Purchases re-syncs this household and never moves a subscription to whichever
-   household is signed in.
+1. **Each side refuses to sell to a household someone else is billing.**
+   - Web checkout already refuses any entitled household (`BillingController.prepareCheckout`:
+     "This account already has a paid plan."). A store-billed household is entitled, so this needs
+     no change. Its Billing tab says "Your plan is billed through the App Store" and how to manage
+     it on the device; no Stripe buttons.
+   - The app asks the backend before opening the store's purchase sheet
+     (`POST /api/billing/store/{source}/prepare`). A household that is entitled through anything
+     else (Stripe, a comp, a different store) is refused. Its Billing tab says "Your plan is billed
+     on huddle.fitness. Sign in there to change it." in plain text, **with no link**: no link means
+     no storefront rules to obey, in the US or anywhere else.
+   - "Still billed" includes cancelled-but-paid-through, Stripe past-due and the store's grace
+     period. Switching sides means cancelling and waiting for the paid period to end.
+   - Only a login with `MANAGE_BILLING` (the owner) may prepare a purchase, exactly as for Stripe.
+2. **Only one purchase at a time per household.** `prepare` atomically claims the household for 10
+   minutes (`store_purchase_started_at`, a conditional `UPDATE`). A second device asking meanwhile is
+   told "A purchase is already in progress on another device." The claim clears when the purchase
+   is confirmed, when the person cancels the sheet (the app calls `release`), or after 10 minutes.
+   This is what stops two parents' iPhones, on two Apple IDs, both buying in the same minute: the one
+   overlap we could never undo.
+3. **Changing plans stays on the same side.** An App Store household upgrades, changes band or
+   switches monthly/yearly by buying another product in the same subscription group: Apple replaces
+   the old one (upgrades immediately and prorated, downgrades at renewal). Never two subscriptions.
+   A Stripe household uses the Customer Portal as today.
+4. **Every store purchase is stamped with the household that made it.** `prepare` returns the
+   household's `store_account_token` (a random UUID, created once per household). The app passes it
+   to StoreKit as `appAccountToken`; Apple signs it into the transaction and keeps it on every
+   renewal. The backend finds the household by the subscription id it already knows first, then by
+   that token; it never trusts "whoever is signed in". Restore Purchases therefore re-syncs the right
+   household and can never move a subscription to whichever household is signed in on that phone.
+   If a transaction ever arrives with no token (only possible for a purchase started outside the
+   app, which rule "promoted purchases off" prevents), it is not applied: it is logged to
+   `billing_events`, and Apple's Set App Account Token endpoint can stamp it once someone checks.
+5. **Safety net when both are live anyway** (e.g. a web checkout opened before an Apple purchase
+   and finished after it, or an Ask to Buy request a parent approves days after subscribing on the
+   web). The single writer applies one rule: **a subscription we can't cancel beats one we can.**
+   The cancellable one (Stripe today, Google later) is cancelled immediately and its most recent
+   payment refunded in full, the owner is emailed, and `billing_events` records it. Refunding the
+   whole latest payment, not a prorated slice, is the simple choice: at most one period's money.
+   Two Apple subscriptions on different Apple IDs can't both be cancelled by us; rule 2 makes that
+   all but impossible, and if it happens anyway an ops alert fires and the owner is emailed which
+   one to cancel in Settings.
 
-**Deleting an account** with an Apple subscription can't cancel it (only the person can). The
-delete flow tells them to cancel in iPhone Settings, as Apple requires, and the backend logs it.
+**Deleting an account** cancels Stripe as today. An App Store subscription can't be cancelled by us,
+so the delete screen tells the person to cancel it in Settings, as Apple requires, and
+`billing_events` records that it was left running.
+
+**Late or out-of-order messages can't do damage.** Every store message only says *which*
+subscription changed; the backend then asks the store for that subscription's current state and
+writes that. A message about a subscription that is no longer the household's current one can only
+be applied if it is a paying state, and then rule 5 decides.
+
+## How Apple's states map onto the row we already have
+
+Turn on **Billing Grace Period (16 days)** in App Store Connect. Then the mapping reuses the Stripe
+semantics `isEntitled` already implements, with no new status:
+
+| Apple says | `status` | `current_period_end` | `cancel_at_period_end` | Entitled? |
+|---|---|---|---|---|
+| Active, auto-renew on | `ACTIVE` | expires date | false | yes |
+| Active, auto-renew off | `ACTIVE` | expires date | true | yes, until it ends |
+| In billing grace period | `PAST_DUE` | grace period end | false | yes (like Stripe retrying a card) |
+| Billing retry after grace | `CANCELED` | expires date (past) | false | no, until Apple recovers it |
+| Expired | `CANCELED` | expires date | false | no |
+| Revoked (refund) | `CANCELED` | revocation date | false | no, immediately |
+
+The tier and seats come from the product id (product id -> `PlanSku`). An unknown product id keeps
+the tier the row already had, the same rule `applyPurchasedTier` uses for an unknown Stripe price.
+An `ACTIVE` or `PAST_DUE` row whose end date has passed is re-checked with the store by the existing
+hourly reconciliation watchdog, which now asks the row's own provider instead of always Stripe.
+
+## Architecture
+
+### Backend: one shared core, one provider per store
+
+```
+billing/store/
+  StoreBillingProvider        interface: what every store must do (below)
+  StoreSubscriptionState      record: source, subscription id, product id, sku, status, interval,
+                              period end, cancelAtPeriodEnd, environment, account token
+  StoreBillingController      /api/billing/store/{source}/prepare | release | sync
+                              /api/webhooks/store/{source}       (no auth: the provider verifies)
+  appstore/AppStoreProvider   the ONLY class that imports com.apple.itunes.storekit.*
+  (later) googleplay/GooglePlayProvider
+```
+
+`StoreBillingProvider`:
+- `source()`: `APP_STORE`, later `GOOGLE_PLAY`.
+- `verifyPurchase(proof)`: turns what the app sends after a purchase or restore into a verified
+  subscription reference (Apple: the transaction's signed JWS; Google: the purchase token).
+- `parseNotification(headers, body)`: verifies a store message and says which subscription changed
+  (Apple: signed notification V2; Google: Pub/Sub push with its OIDC token).
+- `fetchState(reference)`: the store's current truth for that subscription (Apple: Get All
+  Subscription Statuses; Google: `subscriptionsv2.get`).
+- `canCancel()` / `cancelAndRefund(reference)`: Apple `false`; Google `true`. Used by rule 5 and by
+  account deletion.
+- `acknowledge(reference)`: Apple nothing; Google acknowledges within its 3-day window.
+
+Shared, store-neutral pieces:
+- **`SubscriptionService.applyStoreState`**, the single writer for store rows, beside
+  `applyStripeState`. It writes the same columns, publishes the same `AccountPlanChangedEvent` and
+  `PlusUpgradedEvent` (so member logins unpause and the welcome email sends exactly as for Stripe),
+  and applies rule 5. `applyStripeState` gains rule 5's mirror: a Stripe subscription that turns up
+  while a store is billing the household is cancelled and refunded instead of written.
+- `isPayingThroughStripe` becomes **`isPaying`**: it only ever read `status` and
+  `current_period_end`, which every source writes. `CompGrantService.blockedByStripe` becomes
+  "billed by anyone" so a comp still can't be stacked on a paying household.
+- **Product ids derive from `PlanSku`**: `<prefix>` + the SKU in lower case with dots, e.g.
+  `huddle.plus.year`, `huddle.pro.studio.month`. The prefix is per environment
+  (`huddle.` for Huddle, `huddle.lower.` for Huddle Lower), so ids are unique however Apple or Google
+  scopes them and no per-product config exists to drift. Both stores accept lower case, digits and
+  dots.
+- **Both store environments are accepted everywhere.** TestFlight and App Review purchases are
+  sandbox purchases, even against the production app and backend, and App Review must see Plus
+  unlock or it rejects the build. The backend verifies each message with the verifier for the
+  environment it names, stores `store_environment`, and the admin view shows it. A sandbox
+  subscription renews every few minutes for about an hour and then expires, so a reviewer's Plus
+  goes away by itself.
+- Configuration: Apple's In-App Purchase key (`.p8`), key id, issuer id, bundle id and the app's
+  Apple ID per environment, in the same three places billing config lives today. Apple's root
+  certificate (`AppleRootCA-G3.cer`, valid to 2039) is bundled in resources.
+
+Migration (one file): on `subscriptions`, add `billing_source NVARCHAR(20) NULL`,
+`store_account_token UNIQUEIDENTIFIER NULL` (unique where not null), `store_subscription_id
+NVARCHAR(512) NULL` (indexed; 512 because Google tokens are long), `store_product_id NVARCHAR(100)
+NULL`, `store_environment NVARCHAR(20) NULL`, `store_purchase_started_at DATETIME2 NULL`. Backfill
+`billing_source = 'STRIPE'` where `stripe_subscription_id IS NOT NULL`. New `BillingEventType`s:
+`STORE_PURCHASE_STARTED`, `STORE_APPLIED`, `STORE_REJECTED`, `STORE_UNMATCHED`,
+`OVERLAP_STRIPE_REFUNDED`, `OVERLAP_UNCANCELLABLE`, `STORE_LEFT_RUNNING_ON_DELETION`.
+
+### App: one JavaScript interface, one plugin per platform
+
+`lib/native/purchases.js` is the only place the app talks to a store, with the same five calls on
+every platform:
+- `getProducts(productIds)`: the store's own title, price string and period for each.
+- `purchase({ productId, accountToken })`: resolves `purchased` (with a proof), `pending` (Ask to
+  Buy or bank approval, which finishes later) or `cancelled`.
+- `restore()`: proofs for every current subscription.
+- `manageSubscriptions()`: opens the store's own manage/cancel screen.
+- `finish(proof)` and a `transaction` listener: purchases that complete while the app is closed,
+  renewals, and pending ones that are approved later.
+
+iOS implements it as a `Purchases` Capacitor plugin (`ios/App/App/PurchasesPlugin.swift`, next to
+`StorefrontPlugin.swift`; StoreKit 2, which the iOS 15 deployment target already supports). A
+transaction is `finish()`ed **only after the backend accepted it**, so if our backend is down or the
+app dies mid-purchase, StoreKit hands the same transaction back on next launch and the app sends it
+again: that is the "queue and retry" the resilience contract asks for, and it is the store's own
+queue, not a second outbox.
+
+`billingChannel` becomes `embedded` (web), `store` (an app whose platform has a purchases plugin)
+or `none` (an app without one, or whose products could not be loaded: no buy button, fails closed
+as today). The store's display name comes from one map (`App Store` / `Google Play`), used both for
+the buy screen and for "billed through ..." from `SubscriptionDto.billingSource`.
+
+Purchasing stays a Tier-3, online-only action (`OfflineDisabledWrap`, `useGatedMutation`), as checkout
+is today. After a purchase the app shows "Confirming your purchase..." until `sync` answers, and
+re-syncs whenever it returns to the foreground.
+
+**Removed from the app path**: the `external` channel, the storefront check in billing, and the
+hosted-checkout hand-off (`pendingCheckout`, `useCheckoutResume`). **Kept for now**:
+`POST /api/billing/checkout-link` and `/checkout-complete`, because 1.0 to 1.2 installs still use
+them. They are deleted in a follow-up once `NATIVE_MIN_SUPPORTED_BUILD` reaches the first build with
+In-App Purchase.
+
+## Android later: what it adds, and what it doesn't touch
+
+When Android comes, it adds:
+- `GooglePlayProvider` (verify, notifications through Cloud Pub/Sub push, `subscriptionsv2.get`,
+  acknowledge, cancel and refund), its credentials and config.
+- An Android `Purchases` plugin with the same five calls (Play Billing Library; the household
+  token goes in `setObfuscatedAccountId`, which takes up to 64 characters, so the UUID fits).
+- Products in Play Console with the same ids.
+- A row in the Help page and the Terms.
+
+It does **not** change the shared core, the migration, the controller, the conflict rules, the
+billing screens or `purchases.js`. Because Google subscriptions *can* be cancelled by us, rule 5
+already says what happens if a household somehow has Apple and Google at once: Apple stays, Google
+is cancelled and refunded.
+
+## Everything else this touches
+
+- **Help page** (`HelpTab.jsx`, "Changing your plan"): today it says payments are handled by
+  Stripe. It will say: on the web, Stripe; in the app, the App Store, managed in Settings. Pinned by
+  a test, per `.claude/rules/user-facing-help.md`.
+- **Terms** (`marketing/terms.html`): the "Buying from the iPhone or iPad app" item currently says
+  the app opens Stripe in Safari and to ask *us* for refunds. Rewrite: bought in the app means bought
+  from Apple, under Apple's terms; cancel and refund through Apple. **Privacy** (`privacy.html`):
+  add that in-app purchases go through Apple and we keep a transaction id and status.
+- **App Store listing**: the App Privacy label gains "Purchases: Purchase History" (linked to the
+  user, App Functionality); `PrivacyInfo.xcprivacy` gets the same. The description links Apple's
+  standard Terms of Use (EULA); the buy screen shows price, period, and Terms and Privacy links, as
+  Apple requires.
+- **Docs**: `.claude/rules/billing.md` ("Selling in the App Store app" is rewritten),
+  `docs/architecture/billing.md`, `native-apps.md`, and the resilience register's "Billing channel"
+  row (now `embedded` / `store` / `none`, plus the store's own transaction queue as the
+  retry mechanism).
+- **Admin portal**: show the billing source and environment beside the Stripe ids.
 
 ## Phases
 
 ### Phase 0: Nate, in App Store Connect (about an hour, plus Apple's wait)
-- Sign the **Paid Applications Agreement** and add bank and tax details (IAP is blocked until this
-  is active; Apple can take a day or more).
+- Sign the **Paid Applications Agreement**, add bank and tax details. In-App Purchase can't even be
+  tested until this is active; Apple can take a day or more.
 - Enroll in the **App Store Small Business Program** (15% instead of 30%).
-- Create one subscription group and the ten products (ids like `huddle.plus.year`,
-  `huddle.pro.studio.month`), Family Sharing off, prices at the nearest points.
-- Create a sandbox tester.
-- Create an **In-App Purchase API key** (Users and Access, Integrations) for the App Store Server
-  API. Secrets go in with `gh secret set` (paste-ready block from Claude): the `.p8` key, its key
-  id, the issuer id.
-- Set **App Store Server Notifications (Version 2)** URLs: production to `api.huddle.fitness`,
-  sandbox to lower's `api.dev.huddle.fitness`.
+- For **each** app record, Huddle and Huddle Lower: one subscription group "Huddle"; the ten
+  products with the prefixed ids (Claude supplies the exact list), ranked Pro Unlimited, Practice,
+  Studio, Starter, then Plus; Family Sharing off; prices at the nearest points; Billing Grace Period
+  on, 16 days; promoted purchases off.
+- App Store Server Notifications, Version 2, both URLs on each app record pointing at **its own**
+  backend: Huddle at `api.huddle.fitness`, Huddle Lower at `api.dev.huddle.fitness`.
+- An **In-App Purchase key** (Users and Access, Integrations). Secrets go in with `gh secret set`
+  from a paste-ready block.
+- Note Huddle Lower's Apple ID (Huddle's is 6826555272) and create a sandbox tester.
 
 ### Phase 1: Backend (about 4 to 5 days)
-- Migration: `billing_source`, `app_account_token` (the household's random UUID),
-  `apple_original_transaction_id`, `apple_product_id`.
-- `AppleBillingService`, the only class that imports Apple's `app-store-server-library`, like
-  `StripeService` for Stripe. It verifies Apple's signed data against Apple's root certificates
-  (bundled) and calls the App Store Server API.
-- `POST /api/billing/apple/notifications`: Apple's server notifications. Each one is verified, then
-  used only to know *which* subscription changed; the service **pulls** that subscription's current
-  status from Apple (Get All Subscription Statuses) and writes the row. Duplicate, late or
-  out-of-order notifications therefore can't corrupt it, the same way the Stripe watchdog
-  re-reads Stripe. Product id maps to `PlanSku`.
-- `POST /api/billing/apple/prepare` (the refusal in rule 1; returns the `appAccountToken`) and
-  `POST /api/billing/apple/sync` (the app sends the signed transaction right after a purchase or
-  restore; the backend verifies it and pulls status, so the plan updates without waiting for
-  Apple's notification).
-- Refunds and revocations (`REFUND`, `REVOKE`) end the plan immediately; expiry, grace period and
-  billing retry map onto the existing statuses so `entitledPlan` treats them like Stripe's
-  canceled-until-period-end and past-due.
-- The race safety net (rule 3), reusing `StripeSubscriptionCanceller`.
-- `billing_events` rows for Apple purchases, renewals, expiries, refunds and safety-net cancels.
-- The reconciliation watchdog checks Apple households too.
-- Tests for every case in the overlap section.
+The migration; the shared core (`StoreBillingProvider`, `StoreSubscriptionState`, the controller,
+`applyStoreState` with the conflict rules, `isPaying`, the watchdog asking the row's own provider,
+deletion); `AppStoreProvider`; config; the new event types. Tests: every row of the overlap rules
+and the state mapping against a fake provider; `AppStoreProvider` against signed sandbox data
+captured in Phase 3 (Apple-signed, so it verifies offline with the bundled root certificate); the
+controller's refusals (Stripe-paying, comped, another device mid-purchase, a member without
+`MANAGE_BILLING`).
 
 ### Phase 2: App and web (about 4 days)
-- A `Purchases` StoreKit 2 plugin (`ios/App/App/`, next to `StorefrontPlugin.swift`): load the
-  ten products, `purchase(productId, appAccountToken)`, a `Transaction.updates` listener started at
-  launch (renewals and purchases that finish while the app is closed or after Ask to Buy / SCA),
-  `finish()` each transaction only after `/apple/sync` succeeds, `AppStore.sync()` for Restore, and
-  Apple's manage-subscriptions sheet for changing or cancelling.
-- `billingChannel` becomes `embedded` (web) or `apple` (App Store app). `external` goes away.
-- App Billing tab: the same plan cards, buying through Apple. Plus a **Restore Purchases** button
-  and the price, period and Terms/Privacy links Apple requires.
-- The two "billed elsewhere" states on both sides (rule 1).
-- Purchases need a connection, like checkout today (`useGatedMutation`). After a purchase the app
-  shows "Confirming your purchase..." until `/apple/sync` answers, and re-syncs when it comes back
-  to the foreground.
-- Account deletion wording for Apple households.
-- Unit tests, web e2e for the Apple-billed household (seeded), and the parity rules from
-  `.claude/rules/resilience.md`.
+`PurchasesPlugin.swift` and `purchases.js`; the `store` channel through the five upgrade surfaces
+that already read the channel (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,
+`HistoryWindowModal`); Restore Purchases; the two "billed elsewhere" states; deletion wording; Help,
+Terms, Privacy. Tests: unit tests with the plugin mocked; a web e2e and parity test for a seeded
+App Store household (it sees "billed through the App Store" and the web checkout refuses it); a
+StoreKit configuration file so the simulator lists all ten products with no network, and a Maestro
+flow that opens Billing and finds the store's prices.
 
 ### Phase 3: Prove it on lower (about 2 days)
-A StoreKit configuration file lets the simulator buy all ten products with no network, for fast
-local checks. Then a TestFlight build of Huddle Lower with sandbox purchases: buy Plus, upgrade to Pro, change band,
-cancel and let it expire (sandbox renews monthly in 5 minutes), refund, restore on a second device,
-and the race between web and app. Each must land in exactly one billing source.
+TestFlight build of Huddle Lower against `api.dev.huddle.fitness`, sandbox tester: buy Plus; upgrade
+to Pro; change band; switch to yearly; cancel and let it expire; refund (sandbox); restore on a
+second device; Ask to Buy; web checkout and app purchase racing; a second device during a purchase;
+backend down mid-purchase (it must land on the next launch). Each ends with exactly one billing
+source. Signed data from these runs becomes the Phase 1 fixtures.
 
 ### Phase 4: Submit 1.3.0
-The first products must be submitted together with the build. Update the review notes, and add the
-standard Apple subscription terms (EULA) link to the listing. The privacy policy needs no new
-vendor; check that it says purchases in the app go through Apple.
+The products are submitted together with the build (Apple requires the first ones to go with a
+binary). Review notes explain: in the app, the App Store; a household billed on the web sees
+"billed on huddle.fitness"; the demo account is Free so the reviewer can buy with their sandbox
+account.
 
 **Total: about 2 weeks of build and test, plus Apple's agreement and review waits.**
 
-## Decided
-- **Apple directly, no RevenueCat** (Nate, 2026-11-14).
-- **One way to pay in the app: Apple.** The US link-out to Stripe is removed from the app, along
-  with its hosted-checkout, pending-checkout and resume code on the app path (Nate, 2026-11-14).
-  The web keeps Stripe unchanged. A Stripe-billed household still gets a manage link on huddle.fitness
-  from the app's Billing tab, but no way to start a new web purchase from the app.
-- **Pro is sold in the app too**: all ten SKUs, one subscription group (Nate, 2026-11-14).
-- **Same prices as the web, rounded to Apple's nearest price point** (e.g. $29/yr becomes $29.99),
-  not raised to cover Apple's 15% (Nate, 2026-11-14).
+## Verified, not assumed (2026-11-14)
 
-No decisions are open. **Do not start building until Nate says go.**
+- **Apple's Java library 5.2.0** resolves cleanly in our Spring Boot 4.1.2 / Java 25 build (it uses
+  Jackson 2, OkHttp 4.12 and java-jwt, which sit beside our Jackson 3 without conflict). Run on Java
+  25.0.3, it signed a request with an ES256 key and reached Apple's sandbox API (401 with a fake key,
+  as expected), and its verifier loaded Apple's root certificate and rejected junk.
+- **The library has everything the plan uses**: `SignedDataVerifier.verifyAndDecodeNotification` /
+  `verifyAndDecodeTransaction`, `AppStoreServerAPIClient.getAllSubscriptionStatuses`,
+  `setAppAccountToken` and `getTransactionInfo`; statuses `ACTIVE`, `EXPIRED`, `BILLING_RETRY`,
+  `BILLING_GRACE_PERIOD`, `REVOKED`; `getAppAccountToken()` is a `UUID` on both the transaction and
+  the renewal info. It needs the app's Apple ID for production verification (we have it).
+- **TestFlight purchases run in sandbox**; a missing sandbox notification URL sends both
+  environments to the production URL. Hence "both environments accepted everywhere".
+- **Huddle Lower is a separate app** (`fitness.huddle.app.lower`), so it needs its own products and
+  notification URLs; the id prefix keeps every id unique.
+- **Google Play**: `setObfuscatedAccountId` takes up to 64 characters and comes back as
+  `externalAccountIdentifiers.obfuscatedExternalAccountId`; subscriptions can be revoked with a full
+  or prorated refund server-side; new purchases must be acknowledged within 3 days.
+- **Our code**: billing has one row per account and derives entitlement from status and period
+  end, which is what lets every store reuse it; `isPayingThroughStripe` reads nothing
+  Stripe-specific; the watchdog and `CompGrantService.blockedByStripe` are the only Stripe-only
+  paths that need generalising; 1.0 to 1.2 still call `/checkout-link`.
+
+## Left for Phase 0 (only visible in App Store Connect)
+- The exact price points Nate picks (the code shows whatever the store returns, so this never
+  touches code).
+- Huddle Lower's Apple ID.
+- Whether the Paid Applications Agreement is already in place (likely not, for a free app).
