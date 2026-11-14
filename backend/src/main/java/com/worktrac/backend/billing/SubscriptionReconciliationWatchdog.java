@@ -1,6 +1,11 @@
 package com.worktrac.backend.billing;
 
 import com.stripe.exception.StripeException;
+import com.worktrac.backend.billing.store.StoreBillingException;
+import com.worktrac.backend.billing.store.StoreBillingProvider;
+import com.worktrac.backend.billing.store.StoreBillingProviders;
+import com.worktrac.backend.billing.store.StoreBillingService;
+import com.worktrac.backend.billing.store.StorePurchaseReference;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,14 +50,20 @@ public class SubscriptionReconciliationWatchdog {
     private final SubscriptionService subscriptionService;
     private final StripeService stripeService;
     private final BillingAuditService auditService;
+    private final StoreBillingProviders storeProviders;
+    private final StoreBillingService storeBillingService;
     private final Clock clock;
 
     public SubscriptionReconciliationWatchdog(SubscriptionService subscriptionService,
                                                StripeService stripeService,
-                                               BillingAuditService auditService, Clock clock) {
+                                               BillingAuditService auditService,
+                                               StoreBillingProviders storeProviders,
+                                               StoreBillingService storeBillingService, Clock clock) {
         this.subscriptionService = subscriptionService;
         this.stripeService = stripeService;
         this.auditService = auditService;
+        this.storeProviders = storeProviders;
+        this.storeBillingService = storeBillingService;
         this.clock = clock;
     }
 
@@ -63,9 +74,8 @@ public class SubscriptionReconciliationWatchdog {
     @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT5M")
     @SchedulerLock(name = "subscriptionReconciliationWatchdog", lockAtLeastFor = "PT55M", lockAtMostFor = "PT59M")
     public void reconcileLapsedSubscriptions() {
-        if (!stripeService.isConfigured()) {
-            return;
-        }
+        // No early return when Stripe is unconfigured any more: a row is asked about by ITS OWN
+        // source (reconcileOne), and an environment can sell through a store without Stripe.
         Instant cutoff = clock.instant().minus(LAPSE_GRACE);
         List<Subscription> lapsed = subscriptionService.findLapsedButStillEntitled(cutoff);
         for (Subscription subscription : lapsed) {
@@ -77,6 +87,14 @@ public class SubscriptionReconciliationWatchdog {
     // abort the sweep for every household after it.
     @Transactional
     public void reconcileOne(Subscription subscription) {
+        BillingSource source = subscriptionService.billingSource(subscription);
+        if (source != null && source.isStore()) {
+            reconcileStore(subscription, source);
+            return;
+        }
+        if (!stripeService.isConfigured()) {
+            return;
+        }
         Long accountId = subscription.getAccount().getId();
         String stripeSubscriptionId = subscription.getStripeSubscriptionId();
         if (stripeSubscriptionId == null) {
@@ -106,6 +124,40 @@ public class SubscriptionReconciliationWatchdog {
             auditService.record(accountId, BillingEventType.RECONCILE_DRIFT_CORRECTED,
                     "FAILED to verify against Stripe: " + e.getMessage());
             log.error("Could not reconcile subscription for account {}", accountId, e);
+        }
+    }
+
+    // The store half: ask the row's own store, through the same path its notifications and the app's
+    // sync take, so the watchdog can never disagree with them about what a store state means. The
+    // usual case is an App Store renewal whose notification never arrived.
+    private void reconcileStore(Subscription subscription, BillingSource source) {
+        Long accountId = subscription.getAccount().getId();
+        StoreBillingProvider provider = storeProviders.forSource(source)
+                .filter(StoreBillingProvider::isConfigured)
+                .orElse(null);
+        if (provider == null || subscription.getStoreSubscriptionId() == null) {
+            auditService.record(accountId, BillingEventType.RECONCILE_DRIFT_CORRECTED,
+                    "FAILED to verify lapsed " + source + " subscription: "
+                            + (provider == null ? "store not configured here" : "no store subscription id"));
+            return;
+        }
+        SubscriptionStatus before = subscription.getStatus();
+        try {
+            storeBillingService.apply(provider, new StorePurchaseReference(source,
+                    subscription.getStoreSubscriptionId(), subscription.getStoreEnvironment(),
+                    subscription.getStoreAccountToken(), subscription.getStoreProductId()), "watchdog");
+            SubscriptionStatus after = subscriptionService.findByAccountId(accountId)
+                    .map(Subscription::getStatus).orElse(before);
+            if (after != before) {
+                auditService.record(accountId, BillingEventType.RECONCILE_DRIFT_CORRECTED,
+                        "Local status was " + before + ", " + source + " says " + after
+                                + " -- a store notification was missed");
+                log.warn("Corrected {} billing drift for account {}: {} -> {}", source, accountId, before, after);
+            }
+        } catch (StoreBillingException e) {
+            auditService.record(accountId, BillingEventType.RECONCILE_DRIFT_CORRECTED,
+                    "FAILED to verify against " + source + ": " + e.getMessage());
+            log.error("Could not reconcile {} subscription for account {}", source, accountId, e);
         }
     }
 }

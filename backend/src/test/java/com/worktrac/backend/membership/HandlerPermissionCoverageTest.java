@@ -39,6 +39,7 @@ class HandlerPermissionCoverageTest {
     //                                     Google, before any session exists. The provider's ID
     //                                     token is the credential (IdTokenVerifier checks it).
     //   StripeWebhookController        -- permitAll, authenticated by Stripe's signature.
+    //   StoreWebhookController         -- permitAll, authenticated by the app store's signature.
     //   AppleNotificationController    -- permitAll, authenticated by Apple's signed JWT.
     //   EmailDeliveryWebhookController -- permitAll, authenticated by a shared-secret query param.
     //   AdminController                -- /api/admin/** is hasRole("ADMIN") at the filter chain,
@@ -53,6 +54,7 @@ class HandlerPermissionCoverageTest {
             "AuthController",
             "SocialSignInController",
             "StripeWebhookController",
+            "StoreWebhookController",
             "AppleNotificationController",
             "EmailDeliveryWebhookController",
             "AdminController",

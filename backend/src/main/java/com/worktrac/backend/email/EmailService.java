@@ -364,6 +364,21 @@ public class EmailService {
         };
     }
 
+    /**
+     * A plain billing notice to a household's owner: a heading, a short body, and a button into the
+     * app. Used for the In-App Purchase overlap notices (BillingOverlapHandler), whose copy is about
+     * a refund or a duplicate subscription rather than a welcome.
+     */
+    public String sendBillingNotice(String toEmail, String heading, String body) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml(heading))
+                .replace("{{BODY}}", escapeHtml(body))
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+        return send(toEmail, heading, body + " Open Huddle: " + appUrl, html);
+    }
+
     public String sendPasswordResetSuccess(String toEmail) {
         String html = passwordResetSuccessTemplate.replace("{{LOGO_URL}}", logoUrl);
 

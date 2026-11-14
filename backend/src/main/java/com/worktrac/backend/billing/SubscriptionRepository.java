@@ -37,6 +37,27 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
             nativeQuery = true)
     int claimPlusWelcome(Long id, Instant now);
 
+    // Store attribution, in the order applyStoreState's callers use: the store's own subscription id
+    // first (a household that already has it), then the token signed into the purchase. Never "who is
+    // signed in": a phone signed into one household can hold an Apple ID paying for another.
+    List<Subscription> findByStoreSubscriptionId(String storeSubscriptionId);
+
+    Optional<Subscription> findByStoreAccountToken(java.util.UUID storeAccountToken);
+
+    // The one-purchase-at-a-time claim: 1 if this caller now holds it, 0 if another device does.
+    // ONE CONDITIONAL STATEMENT, for the reason claimPlusWelcome is one: two devices asking in the same
+    // second each read the column as free before either writes. A claim older than `staleBefore` is
+    // abandoned (the app died mid-purchase) and may be taken over.
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE subscriptions SET store_purchase_started_at = :now WHERE id = :id"
+            + " AND (store_purchase_started_at IS NULL OR store_purchase_started_at < :staleBefore)",
+            nativeQuery = true)
+    int claimStorePurchase(Long id, Instant now, Instant staleBefore);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE subscriptions SET store_purchase_started_at = NULL WHERE id = :id", nativeQuery = true)
+    int releaseStorePurchase(Long id);
+
     // Bulk, not entity-at-a-time: AccountDeletionService and TestDataCleanupService both need this
     // and the latter deletes whole cohorts. The FK to accounts is NO ACTION (see V56), so these
     // rows must go before the accounts they point at.

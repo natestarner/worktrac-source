@@ -62,9 +62,9 @@ public record AdminAccountDto(
          * reason the Accounts tab can hide a control the server would refuse rather than turning a
          * 409 into a toast ({@code .claude/rules/member-access.md}).
          *
-         * <p>False means a live Stripe subscription is paying for this household, so comping it
-         * would leave them charged for a plan they were just given. Shared with
-         * {@code CompGrantService.blockedByStripe} rather than mirrored -- one definition, two
+         * <p>False means a live subscription (Stripe or an app store) is paying for this household,
+         * so comping it would leave them charged for a plan they were just given. Shared with
+         * {@code CompGrantService.blockedByBilling} rather than mirrored -- one definition, two
          * readers.
          */
         boolean compGrantable,

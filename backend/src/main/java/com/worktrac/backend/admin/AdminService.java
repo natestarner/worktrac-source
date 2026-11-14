@@ -169,7 +169,7 @@ public class AdminService {
                         // The server's own answer to "would granting a comp succeed here", so the
                         // client never re-derives it. Shared with CompGrantService rather than
                         // mirrored. A missing subscription row is grantable -- getOrCreate makes one.
-                        !compGrantService.blockedByStripe(subscriptionByAccount.get(account.getId())),
+                        !compGrantService.blockedByBilling(subscriptionByAccount.get(account.getId())),
                         subscriptionField(subscriptionByAccount, account, Subscription::getClientSeats, null),
                         subscriptionField(subscriptionByAccount, account, Subscription::getStripeCustomerId, null)))
                 .toList();

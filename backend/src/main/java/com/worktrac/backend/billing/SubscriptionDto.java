@@ -27,9 +27,15 @@ public record SubscriptionDto(
         Integer clientSeats,
         // How many clients are actually on the roster right now -- the "12" in "12 of 15". Null for
         // every household tier, same as clientSeats: they have no seats to count usage against.
-        Integer clientCount) {
+        Integer clientCount,
+        // Who is billing this household right now -- STRIPE, APP_STORE or GOOGLE_PLAY -- or null when
+        // nobody is (Free, a lapsed row, a comp). It decides where a person changes or cancels their
+        // plan: the web's Customer Portal, or the phone's own subscription settings. Additive: a
+        // client that predates it ignores it (api-compatibility.md).
+        BillingSource billingSource) {
 
-    public static SubscriptionDto from(Subscription subscription, BillingPlan entitledPlan, Integer clientCount) {
+    public static SubscriptionDto from(Subscription subscription, BillingPlan entitledPlan, Integer clientCount,
+                                       BillingSource billingSource) {
         return new SubscriptionDto(
                 entitledPlan,
                 subscription.getStatus(),
@@ -41,13 +47,14 @@ public record SubscriptionDto(
                 // it bought, and reporting those seats would tell a Free account it has a roster
                 // allowance it is not paying for.
                 entitledPlan == BillingPlan.FREE ? null : subscription.getClientSeats(),
-                entitledPlan == BillingPlan.FREE ? null : clientCount);
+                entitledPlan == BillingPlan.FREE ? null : clientCount,
+                billingSource);
     }
 
     // A household with no subscription row. Should be unreachable (registration creates one and
     // V56 backfilled the rest), but a billing screen that 500s because billing has no opinion yet
     // is strictly worse than one that correctly says "Free".
     public static SubscriptionDto free() {
-        return new SubscriptionDto(BillingPlan.FREE, SubscriptionStatus.FREE, null, null, false, false, null, null);
+        return new SubscriptionDto(BillingPlan.FREE, SubscriptionStatus.FREE, null, null, false, false, null, null, null);
     }
 }

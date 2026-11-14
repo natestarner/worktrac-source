@@ -89,39 +89,65 @@ public class SubscriptionService {
         if (subscription == null) {
             return false;
         }
-        // Cases 1-3 are Stripe's; case 4 is the comp. Split into a NAMED sub-question rather than
-        // left inline because one caller genuinely needs the Stripe half on its own -- see
-        // isPayingThroughStripe. The disjunction below is the same expression it always was.
-        return subscription.isComped() || isPayingThroughStripe(subscription);
+        // Cases 1-3 are the paying ones; case 4 is the comp. Split into a NAMED sub-question rather
+        // than left inline because callers genuinely need the paying half on its own -- see
+        // isPaying. The disjunction below is the same expression it always was.
+        return subscription.isComped() || isPaying(subscription);
     }
 
     /**
-     * The STRIPE half of {@link #isEntitled} — cases 1-3, with the comp deliberately excluded.
+     * The PAYING half of {@link #isEntitled} — cases 1-3, with the comp deliberately excluded.
+     *
+     * <p>Source-neutral: it reads only {@code status} and {@code current_period_end}, which Stripe
+     * and every app store write the same way (an App Store grace period is PAST_DUE, exactly like
+     * Stripe retrying a card). It was {@code isPayingThroughStripe} before stores existed, and
+     * never read anything Stripe-specific.
      *
      * <p>⚠️ This is not a second derivation and must never become one. It exists because
-     * {@code CompGrantService} has to ask "is this household paying us through Stripe <i>right
-     * now</i>?" while deciding whether a comp may be granted, and {@code isEntitled} cannot answer
-     * that: it returns true for an already-comped row, so a household holding a comp AND a long-
-     * lapsed Stripe subscription would look like a paying customer and be refused a perfectly
-     * legitimate change to its own grant.
-     *
-     * <p>Every case still lives in exactly one place — {@code isEntitled} is now literally
-     * {@code comped || isPayingThroughStripe}. Do not inline the status comparisons at a call site;
-     * that is the drift this class exists to prevent.
+     * {@code CompGrantService} has to ask "is this household paying <i>right now</i>?" while deciding
+     * whether a comp may be granted, and {@code isEntitled} cannot answer that: it returns true for
+     * an already-comped row. The overlap rule (applyStoreState) asks the same question.
      */
-    public boolean isPayingThroughStripe(Subscription subscription) {
+    public boolean isPaying(Subscription subscription) {
         if (subscription == null) {
             return false;
         }
-        if (ENTITLED_OUTRIGHT.contains(subscription.getStatus())) {
+        return isPaying(subscription.getStatus(), subscription.getCurrentPeriodEnd());
+    }
+
+    // The one place the status comparison is written, so a store state can be asked the same
+    // question before it has been written to a row.
+    private boolean isPaying(SubscriptionStatus status, Instant currentPeriodEnd) {
+        if (ENTITLED_OUTRIGHT.contains(status)) {
             return true;
         }
         // Cancelled, but paid through the end of the period they bought. This is also what makes
         // expiry work with no webhook: once now passes currentPeriodEnd, this stops being true on
         // its own.
-        return subscription.getStatus() == SubscriptionStatus.CANCELED
-                && subscription.getCurrentPeriodEnd() != null
-                && subscription.getCurrentPeriodEnd().isAfter(clock.instant());
+        return status == SubscriptionStatus.CANCELED
+                && currentPeriodEnd != null
+                && currentPeriodEnd.isAfter(clock.instant());
+    }
+
+    /**
+     * Who is billing this row. A row Stripe billed before {@code billing_source} existed is STRIPE
+     * (V105 backfilled those, and this covers any row written between the migration and the deploy).
+     */
+    public BillingSource billingSource(Subscription subscription) {
+        if (subscription == null) {
+            return null;
+        }
+        if (subscription.getBillingSource() != null) {
+            return subscription.getBillingSource();
+        }
+        return subscription.getStripeSubscriptionId() != null ? BillingSource.STRIPE : null;
+    }
+
+    // The subscription id the current source knows this row by -- what the overlap rule cancels.
+    private String currentSubscriptionId(Subscription subscription, BillingSource source) {
+        return source == BillingSource.STRIPE
+                ? subscription.getStripeSubscriptionId()
+                : subscription.getStoreSubscriptionId();
     }
 
     // How far back a household may SEE. Plus sees everything (null floor); Free sees the trailing
@@ -199,12 +225,19 @@ public class SubscriptionService {
      * two cannot be written independently without drifting.
      */
     private void applyPurchasedTier(Subscription subscription, boolean entitled) {
+        applyPurchasedTier(subscription, entitled,
+                stripeProperties.skuForPriceId(subscription.getStripePriceId()));
+    }
+
+    // The same rule for a store: the tier comes from the PRODUCT, and an unrecognised product keeps
+    // the tier the row already had (a product created in App Store Connect but missing from this
+    // environment's prefix is a config gap, not evidence about what was bought).
+    private void applyPurchasedTier(Subscription subscription, boolean entitled, Optional<PlanSku> sku) {
         if (!entitled) {
             subscription.setPlan(BillingPlan.FREE);
             subscription.setClientSeats(null);
             return;
         }
-        Optional<PlanSku> sku = stripeProperties.skuForPriceId(subscription.getStripePriceId());
         if (sku.isEmpty()) {
             return;
         }
@@ -264,7 +297,10 @@ public class SubscriptionService {
                     // but skipping both queries for the common (non-Pro) case keeps them off this
                     // endpoint's cost.
                     Integer clientCount = plan == BillingPlan.PRO ? currentClientCount(accountId) : null;
-                    return SubscriptionDto.from(subscription, plan, clientCount);
+                    // Who to manage it with, only while someone is actually paying: a lapsed App Store
+                    // row must not tell a Free household to go to Settings to change a plan it lacks.
+                    BillingSource source = isPaying(subscription) ? billingSource(subscription) : null;
+                    return SubscriptionDto.from(subscription, plan, clientCount, source);
                 })
                 .orElseGet(SubscriptionDto::free);
     }
@@ -309,6 +345,19 @@ public class SubscriptionService {
     // irrelevant and lets a missed event self-heal on the next one.
     @Transactional
     public Subscription applyStripeState(Subscription subscription, StripeSubscriptionState state) {
+        // ⚠️ A STORE THAT IS BILLING THIS HOUSEHOLD OWNS THE ROW. Stripe must never write over it --
+        // an old, cancelled Stripe subscription's late webhook would otherwise put CANCELED over a
+        // paying App Store household. If the Stripe state is itself PAYING, two sources are billing
+        // at once (a web checkout opened before an App Store purchase and finished after it): the
+        // overlap rule applies, and Stripe -- the one we can cancel -- is cancelled and refunded.
+        BillingSource current = billingSource(subscription);
+        if (current != null && current.isStore() && isPaying(subscription)) {
+            if (isPaying(state.status(), state.currentPeriodEnd()) && state.stripeSubscriptionId() != null) {
+                resolveOverlap(subscription, current, BillingSource.STRIPE, state.stripeSubscriptionId(), null);
+            }
+            return subscription;
+        }
+
         // Captured before anything below mutates the row -- the whole basis for firstUpgrade further
         // down. AccountPlanChangedEvent (below) deliberately skips this comparison because getting
         // it wrong fails silently; this one is worth it anyway because a welcome email's failure
@@ -316,6 +365,9 @@ public class SubscriptionService {
         // PlusWelcomeSentAt is what keeps a wrong comparison here from ever double-sending.
         boolean wasEntitled = isEntitled(subscription);
 
+        if (state.stripeSubscriptionId() != null) {
+            subscription.setBillingSource(BillingSource.STRIPE);
+        }
         subscription.setStripeSubscriptionId(state.stripeSubscriptionId());
         subscription.setStripePriceId(state.stripePriceId());
         subscription.setStatus(state.status());
@@ -335,6 +387,13 @@ public class SubscriptionService {
         // subscription on the very next webhook.
         boolean nowEntitled = isEntitled(subscription);
         applyPurchasedTier(subscription, nowEntitled);
+        return finishWrite(subscription, wasEntitled, nowEntitled);
+    }
+
+    // What every source's write ends with: the timestamp, the once-ever welcome email, and the
+    // plan-changed event. ONE copy, so a store purchase unpauses member logins and welcomes a new
+    // subscriber exactly as a Stripe checkout does.
+    private Subscription finishWrite(Subscription subscription, boolean wasEntitled, boolean nowEntitled) {
         subscription.setUpdatedAt(clock.instant());
 
         // The welcome email fires at most once per account, ever -- the null check is what makes
@@ -370,6 +429,121 @@ public class SubscriptionService {
         }
 
         return saved;
+    }
+
+    /** What {@link #applyStoreState} did, for the caller's audit row. */
+    public enum StoreApplyOutcome {
+        /** The store's state was written to the row. */
+        APPLIED,
+        /** A non-paying state about a subscription that is not the household's current one. Nothing to do. */
+        IGNORED_NOT_CURRENT,
+        /** Two sources were paying; the cancellable one was (or is being) cancelled and refunded. */
+        OVERLAP_RESOLVED,
+        /** Two sources we cannot cancel were paying. The current one was kept, and people were told. */
+        OVERLAP_UNCANCELLABLE
+    }
+
+    /**
+     * THE single writer for store rows, beside {@link #applyStripeState}: Apple today, Google Play
+     * later, through this one method. Callers pass the store's state read just now
+     * ({@code StoreBillingProvider.fetchState}), never a delivered message.
+     *
+     * <p>A HOUSEHOLD IS BILLED BY EXACTLY ONE SOURCE. The state is written when it is about the
+     * subscription already billing this row, or when nothing is paying for the row. Otherwise
+     * something else is paying, and:
+     * <ul>
+     *   <li>a non-paying state (an old, lapsed subscription) is ignored;</li>
+     *   <li>a paying one is an OVERLAP, and the subscription we can cancel loses: it is cancelled and
+     *       its latest payment refunded in full ({@link BillingOverlapEvent}). If neither can be
+     *       cancelled by us (two Apple IDs), the current one is kept and the owner and ops are told.</li>
+     * </ul>
+     * Docs: docs/in-app-purchase-plan.md, "No overlapping subscriptions".
+     */
+    @Transactional
+    public StoreApplyOutcome applyStoreState(Subscription subscription,
+                                             com.worktrac.backend.billing.store.StoreSubscriptionState state) {
+        BillingSource current = billingSource(subscription);
+        boolean sameSubscription = current == state.source()
+                && state.subscriptionId().equals(subscription.getStoreSubscriptionId());
+        boolean incomingPaying = isPaying(state.status(), state.currentPeriodEnd());
+
+        if (!sameSubscription && isPaying(subscription)) {
+            if (!incomingPaying) {
+                return StoreApplyOutcome.IGNORED_NOT_CURRENT;
+            }
+            return resolveOverlap(subscription, current, state.source(), state.subscriptionId(), state);
+        }
+        if (!sameSubscription && !incomingPaying) {
+            // Nothing is paying and this one isn't either: an expired subscription from before, or
+            // the second Apple ID's lapsed one. Writing it would only churn the row (and, for a
+            // CANCELED Stripe row, swap one "not paying" for another), so leave the row alone.
+            return StoreApplyOutcome.IGNORED_NOT_CURRENT;
+        }
+
+        writeStoreState(subscription, state);
+        return StoreApplyOutcome.APPLIED;
+    }
+
+    private void writeStoreState(Subscription subscription,
+                                 com.worktrac.backend.billing.store.StoreSubscriptionState state) {
+        boolean wasEntitled = isEntitled(subscription);
+
+        subscription.setBillingSource(state.source());
+        subscription.setStoreSubscriptionId(state.subscriptionId());
+        subscription.setStoreProductId(state.productId());
+        subscription.setStoreEnvironment(state.environment());
+        // The token is the household's own, created by prepare. Only adopted when the row has none
+        // (a purchase restored onto a row that predates tokens); never replaced, or two households
+        // could end up claiming one token.
+        if (subscription.getStoreAccountToken() == null && state.accountToken() != null) {
+            subscription.setStoreAccountToken(state.accountToken());
+        }
+        subscription.setStatus(state.status());
+        if (state.billingInterval() != null) {
+            subscription.setBillingInterval(state.billingInterval());
+        }
+        subscription.setCurrentPeriodEnd(state.currentPeriodEnd());
+        subscription.setCancelAtPeriodEnd(state.cancelAtPeriodEnd());
+
+        boolean nowEntitled = isEntitled(subscription);
+        applyPurchasedTier(subscription, nowEntitled, Optional.ofNullable(state.sku()));
+        if (isPaying(subscription)) {
+            // The purchase this household was waiting on has landed: let the next one start.
+            subscriptionRepository.releaseStorePurchase(subscription.getId());
+        }
+        finishWrite(subscription, wasEntitled, nowEntitled);
+    }
+
+    /**
+     * Two sources paying for one household. Decides which stays by ONE rule, the same for every pair
+     * of sources: the subscription we cannot cancel beats one we can. When both or neither can be
+     * cancelled, the one already billing the row stays -- never flip-flop a working household.
+     *
+     * @param incomingState the incoming store state, written if it wins; null when the incoming
+     *                      side is Stripe, which never wins (it is always cancellable)
+     */
+    private StoreApplyOutcome resolveOverlap(Subscription subscription, BillingSource current,
+                                             BillingSource incoming, String incomingSubscriptionId,
+                                             com.worktrac.backend.billing.store.StoreSubscriptionState incomingState) {
+        Long accountId = subscription.getAccount().getId();
+        String currentId = currentSubscriptionId(subscription, current);
+
+        if (!current.weCanCancel() && !incoming.weCanCancel()) {
+            events.publishEvent(BillingOverlapEvent.uncancellable(accountId, current, currentId,
+                    incoming, incomingSubscriptionId));
+            return StoreApplyOutcome.OVERLAP_UNCANCELLABLE;
+        }
+
+        boolean incomingWins = !incoming.weCanCancel() && current.weCanCancel() && incomingState != null;
+        if (incomingWins) {
+            events.publishEvent(BillingOverlapEvent.refund(accountId, current, currentId,
+                    subscription.getStoreEnvironment(), incoming));
+            writeStoreState(subscription, incomingState);
+        } else {
+            events.publishEvent(BillingOverlapEvent.refund(accountId, incoming, incomingSubscriptionId,
+                    incomingState == null ? null : incomingState.environment(), current));
+        }
+        return StoreApplyOutcome.OVERLAP_RESOLVED;
     }
 
     // Used by the reconciliation watchdog to find subscriptions whose paid period has lapsed while

@@ -121,10 +121,13 @@ public class CompGrantService {
         // household with a live subscription would leave them paying full price for a plan they had
         // just been given -- the worst possible outcome of a well-meant action, and invisible until
         // the next invoice. Refused outright, with the remedy named, rather than warned about.
-        if (blockedByStripe(subscription)) {
-            throw new ConflictException(
-                    "This household is paying through Stripe. Cancel the subscription in Stripe first,"
-                            + " otherwise they would keep being charged for a plan you just gave them.");
+        if (blockedByBilling(subscription)) {
+            throw new ConflictException(subscriptionService.billingSource(subscription) == BillingSource.STRIPE
+                    ? "This household is paying through Stripe. Cancel the subscription in Stripe first,"
+                            + " otherwise they would keep being charged for a plan you just gave them."
+                    : "This household is paying through " + subscriptionService.billingSource(subscription)
+                            + ". Only they can cancel that, in their phone's subscription settings; until they"
+                            + " do, a comp would leave them paying for a plan you just gave them.");
         }
 
         subscription.setComped(true);
@@ -184,7 +187,7 @@ public class CompGrantService {
         // would cut off somebody who is actually paying. Mirrors applyPurchasedTier's !entitled
         // branch -- billing_plan is a cache, and leaving it reading PLUS after the grant is gone
         // strands it.
-        if (!subscriptionService.isPayingThroughStripe(subscription)) {
+        if (!subscriptionService.isPaying(subscription)) {
             subscription.setPlan(BillingPlan.FREE);
             subscription.setClientSeats(null);
         }
@@ -205,15 +208,18 @@ public class CompGrantService {
      * ({@code .claude/rules/member-access.md}). Deliberately shared rather than mirrored -- both
      * callers are in this JVM, so there is no reason to keep two copies in step by hand.
      *
-     * <p>Asks {@code isPayingThroughStripe}, never {@code isEntitled}: the latter is true for an
-     * already-comped row, which would make every comped household permanently un-editable.
-     * Requiring a subscription id as well keeps a hand-edited or half-migrated row (a status with no
-     * Stripe object behind it) from latching the control off forever.
+     * <p>Any source counts -- Stripe or an app store. An App Store subscription keeps charging just as
+     * surely, and is worse: nobody but the subscriber can cancel it.
+     *
+     * <p>Asks {@code isPaying}, never {@code isEntitled}: the latter is true for an already-comped row,
+     * which would make every comped household permanently un-editable. Requiring a billing source as
+     * well keeps a hand-edited or half-migrated row (a status with nothing behind it) from latching the
+     * control off forever.
      */
-    public boolean blockedByStripe(Subscription subscription) {
+    public boolean blockedByBilling(Subscription subscription) {
         return subscription != null
-                && subscription.getStripeSubscriptionId() != null
-                && subscriptionService.isPayingThroughStripe(subscription);
+                && subscriptionService.billingSource(subscription) != null
+                && subscriptionService.isPaying(subscription);
     }
 
     private Account requireAccount(Long accountId) {

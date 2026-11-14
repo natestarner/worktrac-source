@@ -61,6 +61,11 @@
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
              SDK bump cannot silently change request/response shapes. -->
         <stripe-java.version>34.1.0</stripe-java.version>
+        <!-- Apple's official App Store Server Library: verifies StoreKit's signed transactions and
+             notifications, and calls the App Store Server API. Only AppStoreProvider imports it
+             (docs/in-app-purchase-plan.md). Brings Jackson 2, which sits beside our Jackson 3
+             under its own package names. -->
+        <app-store-server-library.version>5.2.0</app-store-server-library.version>
     </properties>
 
     <dependencies>
@@ -72,6 +77,11 @@
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
             <version>${stripe-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.apple.itunes.storekit</groupId>
+            <artifactId>app-store-server-library</artifactId>
+            <version>${app-store-server-library.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
