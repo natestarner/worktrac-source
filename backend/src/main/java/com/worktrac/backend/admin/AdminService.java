@@ -171,7 +171,10 @@ public class AdminService {
                         // mirrored. A missing subscription row is grantable -- getOrCreate makes one.
                         !compGrantService.blockedByBilling(subscriptionByAccount.get(account.getId())),
                         subscriptionField(subscriptionByAccount, account, Subscription::getClientSeats, null),
-                        subscriptionField(subscriptionByAccount, account, Subscription::getStripeCustomerId, null)))
+                        subscriptionField(subscriptionByAccount, account, Subscription::getStripeCustomerId, null),
+                        subscriptionService.billingSource(subscriptionByAccount.get(account.getId())),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getStoreEnvironment, null),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getStoreSubscriptionId, null)))
                 .toList();
     }
 

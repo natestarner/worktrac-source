@@ -87,6 +87,9 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.worktrac.backend.billing.SubscriptionRepository subscriptionRepository;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static String adminToken;
@@ -454,5 +457,49 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
         return mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
+    }
+
+    // In-App Purchase: support must see at a glance whether a household pays Stripe or Apple, and
+    // whether an App Store subscription is a real one or App Review's sandbox purchase. A comp is
+    // refused for it (only the subscriber can cancel an App Store subscription), and the grantable
+    // flag says so before the admin tries.
+    @Test
+    @Order(13)
+    void anAppStoreHouseholdShowsItsSourceEnvironmentAndCannotBeComped() throws Exception {
+        String email = uniqueEmail("app-store");
+        com.fasterxml.jackson.databind.JsonNode registration = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache,
+                email, "Apple");
+        long accountId = registration.get("account").get("id").asLong();
+        var subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
+        subscription.setBillingSource(com.worktrac.backend.billing.BillingSource.APP_STORE);
+        subscription.setStoreSubscriptionId("2000000999");
+        subscription.setStoreEnvironment(com.worktrac.backend.billing.store.StoreEnvironment.SANDBOX);
+        subscription.setStatus(com.worktrac.backend.billing.SubscriptionStatus.ACTIVE);
+        subscription.setPlan(com.worktrac.backend.billing.BillingPlan.PLUS);
+        subscription.setCurrentPeriodEnd(java.time.Instant.now().plusSeconds(3600));
+        subscriptionRepository.save(subscription);
+
+        com.fasterxml.jackson.databind.JsonNode accounts = objectMapper.readTree(mockMvc.perform(get("/api/admin/accounts")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        com.fasterxml.jackson.databind.JsonNode row = null;
+        for (com.fasterxml.jackson.databind.JsonNode candidate : accounts) {
+            if (candidate.get("id").asLong() == accountId) {
+                row = candidate;
+            }
+        }
+        assertTrue(row != null, "the household is listed");
+        assertEquals("APP_STORE", row.get("billingSource").asText());
+        assertEquals("SANDBOX", row.get("storeEnvironment").asText());
+        assertEquals("2000000999", row.get("storeSubscriptionId").asText());
+        assertEquals("PLUS", row.get("plan").asText());
+        assertFalse(row.get("compGrantable").asBoolean());
+
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("plan", "PRO", "band", "STARTER"))))
+                .andExpect(status().isConflict());
     }
 }

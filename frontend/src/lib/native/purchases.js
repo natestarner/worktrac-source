@@ -98,6 +98,16 @@ export async function manageSubscriptions() {
 }
 
 /**
+ * The store's own refund-request sheet for this store account's current subscription. Resolves
+ * { result: 'requested' | 'cancelled' | 'none' } ('none': this store account holds no subscription
+ * here). The store decides; a granted refund reaches our backend as the store's own notification.
+ */
+export async function requestRefund() {
+  if (!storeSource()) return { result: 'none' };
+  return purchasesPlugin().requestRefund();
+}
+
+/**
  * Transactions that arrive with no purchase screen open: renewals, Ask to Buy approvals, a purchase
  * on another device. Returns an unsubscribe function. No-op on the web.
  */

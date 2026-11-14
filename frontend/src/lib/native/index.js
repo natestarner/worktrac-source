@@ -18,6 +18,7 @@ export {
   manageSubscriptions,
   onTransaction,
   purchase,
+  requestRefund,
   restore,
   storeBillingSource,
   storeSource,

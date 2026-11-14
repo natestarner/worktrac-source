@@ -36,6 +36,7 @@ import {
   manageSubscriptions,
   openExternal,
   purchase,
+  requestRefund,
   restore,
   storeBillingSource,
   storeSource,
@@ -328,6 +329,25 @@ export default function BillingTab() {
 
   // The store's own manage screen: change plan, switch monthly/yearly, cancel. It is a sheet over the
   // app, so its closing is the moment to re-read what it may have changed.
+  // The store's own refund-request sheet. Only Apple offers one in the app; it decides, and emails
+  // the person. A granted refund ends the plan through the store's notification, so nothing here
+  // changes the plan.
+  const handleRequestRefund = run(
+    async () => {
+      const { result } = await requestRefund();
+      if (result === 'requested') {
+        // Only Apple offers this sheet (paidControls), so it is Apple that answers.
+        showToast('Request sent. Apple will email you its decision.', { tone: 'info' });
+      } else if (result === 'none') {
+        showToast(`This ${storeAccountName()} has no Huddle subscription to refund. Try the device that bought it.`, { tone: 'info' });
+      }
+    },
+    {
+      offlineMessage: 'Requesting a refund needs a connection.',
+      errorMessage: "Couldn't open the refund request. Try again in a moment.",
+    },
+  );
+
   const handleManageInStore = run(
     async () => {
       await manageSubscriptions();
@@ -412,6 +432,7 @@ export default function BillingTab() {
           {...paidControls(channel, subscription?.billingSource, {
             handleManageBilling,
             handleManageInStore,
+            handleRequestRefund,
             handleUpgrade,
           })}
         />
@@ -461,7 +482,7 @@ export default function BillingTab() {
  * server that predates the field, resilience.md axis D) is treated as Stripe -- what every paying
  * household was before stores existed.
  */
-function paidControls(channel, billingSource, { handleManageBilling, handleManageInStore, handleUpgrade }) {
+function paidControls(channel, billingSource, { handleManageBilling, handleManageInStore, handleRequestRefund, handleUpgrade }) {
   const source = billingSource ?? 'STRIPE';
   if (channel === 'none') return { onManage: null, onUpgrade: null, billedElsewhere: null };
   if (channel === 'store') {
@@ -469,6 +490,8 @@ function paidControls(channel, billingSource, { handleManageBilling, handleManag
       return {
         onManage: handleManageInStore,
         manageLabel: 'Manage subscription',
+        // Apple's in-app refund sheet. Google Play has none (refunds are requested on its site).
+        onRequestRefund: source === 'APP_STORE' ? handleRequestRefund : null,
         onUpgrade: null,
         billedElsewhere: null,
         billedInStore: billingSourceName(source),
@@ -527,6 +550,7 @@ function PaidSummary({
   manageLabel = 'Manage billing',
   billedElsewhere = null,
   billedInStore = null,
+  onRequestRefund = null,
   pausableLogins = [],
   interval,
   proBand,
@@ -619,6 +643,14 @@ function PaidSummary({
               clients?" landed close enough under it to read as part of the same control. */}
           <Button variant="secondary" fullWidth onClick={onManage} disabled={pending} style={{ marginBottom: 'var(--space-6)' }}>
             {manageLabel}
+          </Button>
+        </OfflineDisabledWrap>
+      )}
+
+      {!comped && onRequestRefund && (
+        <OfflineDisabledWrap message="Requesting a refund needs a connection.">
+          <Button variant="ghost" fullWidth onClick={onRequestRefund} disabled={pending} style={{ marginBottom: 'var(--space-6)' }}>
+            Request a refund
           </Button>
         </OfflineDisabledWrap>
       )}

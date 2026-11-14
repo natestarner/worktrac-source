@@ -535,6 +535,12 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
 - **Kept for old app builds:** `POST /api/billing/checkout-link`, `/checkout-complete` and the
   `checkout-complete` scheme link. 1.0-1.2 still call them; delete them once
   `NATIVE_MIN_SUPPORTED_BUILD` reaches the first build with In-App Purchase (`api-compatibility.md`).
+- **Refunds for a store purchase are the store's.** "Request a refund" (App Store households only)
+  opens Apple's own sheet (`purchases.requestRefund`); nothing on our side changes the plan, which
+  ends when Apple's REVOKED notification arrives.
+- **The admin portal shows who bills each household** (`AdminAccountDto.billingSource`,
+  `storeEnvironment`, `storeSubscriptionId`): "App Store (sandbox)" on production is App Review or
+  TestFlight, never a customer. A comp is refused for any paying source.
 - **Deleting an account can't cancel a store subscription.** The delete screen says so;
   `STORE_LEFT_RUNNING_ON_DELETION` records it.
 

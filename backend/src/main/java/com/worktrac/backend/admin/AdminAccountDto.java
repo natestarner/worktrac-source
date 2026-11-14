@@ -80,5 +80,18 @@ public record AdminAccountDto(
          * have traced back to this screen.
          */
         Integer clientSeats,
-        String stripeCustomerId) {
+        String stripeCustomerId,
+        /**
+         * Who bills this household: STRIPE, APP_STORE or GOOGLE_PLAY, or null when nothing ever has.
+         * The first thing support needs when someone writes in about a charge -- it says whether to
+         * look in Stripe or tell them to go to Apple (docs/in-app-purchase-plan.md).
+         */
+        com.worktrac.backend.billing.BillingSource billingSource,
+        /**
+         * PRODUCTION or SANDBOX for a store subscription. A SANDBOX one on production is App Review or
+         * TestFlight, and expires by itself; never a real customer.
+         */
+        com.worktrac.backend.billing.store.StoreEnvironment storeEnvironment,
+        /** The store's id for the subscription (Apple: originalTransactionId), for finding it in App Store Connect. */
+        String storeSubscriptionId) {
 }

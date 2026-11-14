@@ -106,6 +106,27 @@ describe('AdminAccounts plan grants', () => {
     expect(button.getAttribute('title')).toMatch(/stripe/i);
   });
 
+  // In-App Purchase: only the subscriber can cancel an App Store subscription, so the reason says
+  // that rather than sending the admin to Stripe, and the billing column says where it is billed --
+  // and that a sandbox one is App Review's, not a customer's.
+  it('says an App Store household is billed through the App Store, sandbox included, and why it cannot be comped', async () => {
+    await renderWith(account({
+      plan: 'PLUS',
+      subscriptionStatus: 'ACTIVE',
+      currentPeriodEnd: '2026-12-14T00:00:00Z',
+      compGrantable: false,
+      billingSource: 'APP_STORE',
+      storeEnvironment: 'SANDBOX',
+      storeSubscriptionId: '2000000999',
+    }));
+
+    expect(screen.getByText('App Store (sandbox)')).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Change plan' });
+    expect(button).toBeDisabled();
+    expect(button.getAttribute('title')).toMatch(/App Store/);
+    expect(button.getAttribute('title')).not.toMatch(/stripe/i);
+  });
+
   // ...but a comped household with a Stripe row beside it must still be reachable, or the grant
   // could never be taken back.
   it('still opens for a comped household even when a grant would be refused', async () => {

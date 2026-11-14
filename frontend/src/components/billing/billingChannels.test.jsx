@@ -6,6 +6,8 @@ import BillingTab from './BillingTab';
 import PlanBadge from './PlanBadge';
 import PlusUpsell from '../shared/PlusUpsell';
 import HistoryWindowModal from '../shared/HistoryWindowModal';
+import LoginsSection from '../profile/LoginsSection';
+import { listLogins } from '../../api/logins';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
@@ -16,6 +18,7 @@ import {
   manageSubscriptions,
   openExternal,
   purchase,
+  requestRefund,
   restore,
 } from '../../lib/native';
 import {
@@ -44,6 +47,7 @@ vi.mock('../../lib/native', async (importOriginal) => ({
   restore: vi.fn(),
   finish: vi.fn().mockResolvedValue(undefined),
   manageSubscriptions: vi.fn().mockResolvedValue(undefined),
+  requestRefund: vi.fn(),
 }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -61,6 +65,12 @@ vi.mock('./EmbeddedCheckout', () => ({ default: () => <div data-testid="stripe-e
 vi.mock('../../api/logins', () => ({ listLogins: vi.fn().mockResolvedValue([]) }));
 
 const OWNER = { accountRole: 'OWNER', personId: 1, status: 'ACTIVE' };
+
+// A person with no login yet: on Free, the row is where a household meets "logins are part of Plus".
+const LOGIN_ROWS = [
+  { personId: 1, personName: 'Nate', status: 'ACTIVE', email: 'nate@example.com', isSelf: true },
+  { personId: 2, personName: 'Sam', status: 'NONE', email: null, isSelf: false },
+];
 
 function renderBilling(account, subscription = null) {
   useAuth.mockReturnValue({ account, refreshPeople: vi.fn().mockResolvedValue(), membership: OWNER });
@@ -131,6 +141,17 @@ describe("'none' -- an app with no store plugin", () => {
     );
     expect(screen.queryByRole('button', { name: 'Unlock full history' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'How Free and Plus differ' })).toBeInTheDocument();
+  });
+
+  it('the logins list says a login is part of Plus, and links nowhere', async () => {
+    listLogins.mockResolvedValue(LOGIN_ROWS);
+    renderWithQuery(
+      <MemoryRouter>
+        <LoginsSection plan="FREE" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Part of Plus')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Unlock with Plus' })).not.toBeInTheDocument();
   });
 });
 
@@ -272,6 +293,28 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     expect(createPortalSession).not.toHaveBeenCalled();
   });
 
+  it("Request a refund opens Apple's own sheet and says Apple will answer", async () => {
+    requestRefund.mockResolvedValue({ result: 'requested' });
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Request a refund' }));
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Request sent. Apple will email you its decision.', { tone: 'info' }),
+    );
+    // Nothing about the plan changes here: a granted refund arrives as Apple's notification.
+    expect(syncStorePurchases).not.toHaveBeenCalled();
+  });
+
+  it('Request a refund on an Apple ID that holds no subscription says to use the device that bought it', async () => {
+    requestRefund.mockResolvedValue({ result: 'none' });
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Request a refund' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/device that bought it/), expect.anything()));
+  });
+
   // Rule 1: one source per household, and no link out of the app.
   it('a household paying on the web is told where, with no control and no link', async () => {
     renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'STRIPE' });
@@ -282,6 +325,64 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage subscription' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /huddle\.fitness/ })).not.toBeInTheDocument();
+  });
+
+  // Every other upgrade surface leads to the billing screen exactly as on the web: in the store
+  // channel there IS somewhere to buy, so nothing is hidden. Each surface only asks "is it 'none'?".
+  it('the header offers "Go Plus" to a Free household, leading to Billing', () => {
+    useAuth.mockReturnValue({ account: { plan: 'FREE' } });
+    rtlRender(
+      <MemoryRouter>
+        <PlanBadge />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: 'Go Plus' })).toHaveAttribute('href', '/app/billing');
+  });
+
+  it('an upsell keeps its sentence and its "See Plus" link', () => {
+    rtlRender(
+      <MemoryRouter>
+        <PlusUpsell plan="FREE">Your full history has 47 more workouts.</PlusUpsell>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Your full history has 47 more workouts.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See Plus' })).toBeInTheDocument();
+  });
+
+  it('the history explainer offers "Unlock full history"', () => {
+    rtlRender(
+      <MemoryRouter>
+        <HistoryWindowModal
+          historyWindow={{ windowStart: '2026-07-23T00:00:00Z', hiddenSessions: 3, earliestHiddenAt: '2026-01-01T00:00:00Z' }}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('button', { name: 'Unlock full history' })).toBeInTheDocument();
+  });
+
+  it('the logins list offers "Unlock with Plus", leading to Billing', async () => {
+    listLogins.mockResolvedValue(LOGIN_ROWS);
+    renderWithQuery(
+      <MemoryRouter>
+        <LoginsSection plan="FREE" />
+      </MemoryRouter>,
+    );
+    const link = await screen.findByRole('link', { name: 'Unlock with Plus' });
+    expect(link).toHaveAttribute('href', '/app/billing');
+    expect(screen.queryByText('Part of Plus')).not.toBeInTheDocument();
+  });
+
+  // A trainer at the band's ceiling in the App Store app: Billing sends them to the store's own
+  // sheet, which lists every plan in the subscription group, rather than to a checkout of ours.
+  it('a Pro household paying through the App Store changes band in the store, not here', async () => {
+    renderBilling(
+      { id: 1, plan: 'PRO' },
+      { plan: 'PRO', status: 'ACTIVE', billingSource: 'APP_STORE', clientSeats: 5, clientCount: 5 },
+    );
+    expect(await screen.findByRole('button', { name: 'Manage subscription' })).toBeInTheDocument();
+    expect(screen.getByText(/^Starter: 5 of 5 /)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subscribe to Pro' })).not.toBeInTheDocument();
   });
 });
 

@@ -1247,8 +1247,8 @@ export default function HelpTab() {
         <p>
           <strong>In the iPhone and iPad app,</strong> you subscribe through the App Store with your
           Apple ID, at the price the App Store shows. <T>Manage subscription</T> opens Apple&rsquo;s
-          own screen to switch plans, move between monthly and yearly, or cancel, and refunds come
-          from Apple. <T>Restore purchases</T> brings back a subscription after you reinstall or move
+          own screen to switch plans, move between monthly and yearly, or cancel. Refunds come from
+          Apple: <T>Request a refund</T> opens Apple&rsquo;s own request. <T>Restore purchases</T> brings back a subscription after you reinstall or move
           to a new device.
         </p>
         <p>

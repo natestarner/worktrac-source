@@ -26,7 +26,8 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unfinished", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "finish", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "manageSubscriptions", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "manageSubscriptions", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestRefund", returnType: CAPPluginReturnPromise)
     ]
 
     private let held = HeldTransactions()
@@ -168,6 +169,44 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve()
             } catch {
                 call.reject(error.localizedDescription, "MANAGE_FAILED", error)
+            }
+        }
+    }
+
+    /// Apple's own refund-request sheet for this Apple ID's current subscription ->
+    /// `{ result: "requested" }`, `{ result: "cancelled" }`, or `{ result: "none" }` when this Apple ID
+    /// holds no subscription here (it was bought on another Apple ID, or on the web). Apple decides
+    /// and emails the person; a granted refund reaches our backend as a REVOKED notification.
+    @objc func requestRefund(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            var current: Transaction?
+            for await result in Transaction.currentEntitlements {
+                let transaction = PurchasesPlugin.transaction(of: result)
+                if transaction.productType == .autoRenewable {
+                    current = transaction
+                    break
+                }
+            }
+            guard let transaction = current else {
+                call.resolve(["result": "none"])
+                return
+            }
+            guard let scene = self.bridge?.viewController?.view.window?.windowScene else {
+                call.reject("No window to show the App Store sheet in", "NO_WINDOW")
+                return
+            }
+            do {
+                let status = try await Transaction.beginRefundRequest(for: transaction.id, in: scene)
+                switch status {
+                case .success:
+                    call.resolve(["result": "requested"])
+                case .userCancelled:
+                    call.resolve(["result": "cancelled"])
+                @unknown default:
+                    call.resolve(["result": "cancelled"])
+                }
+            } catch {
+                call.reject(error.localizedDescription, "REFUND_FAILED", error)
             }
         }
     }

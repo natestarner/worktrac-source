@@ -239,7 +239,8 @@ is cancelled and refunded.
   `docs/architecture/billing.md`, `native-apps.md`, and the resilience register's "Billing channel"
   row (now `embedded` / `store` / `none`, plus the store's own transaction queue as the
   retry mechanism).
-- **Admin portal**: show the billing source and environment beside the Stripe ids.
+- **Admin portal**: show the billing source and environment beside the Stripe ids. (Built.)
+- **Refunds**: "Request a refund" opens Apple's in-app refund sheet for an App Store household. (Built.)
 
 ## Phases
 
