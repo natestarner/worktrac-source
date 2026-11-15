@@ -365,6 +365,17 @@ account.
   `/api/webhooks/store/app-store` on each app record.
 - V105's number: renumber at merge time if `main` has taken it.
 
+## Phase 0 progress (2026-11-14)
+- Paid Apps Agreement signed; bank account (PNC, Starner Consulting Co.) and W-9 submitted. Agreement
+  **Processing**, bank account **Processing**, W-9 **Active**.
+- Small Business Program enrollment submitted (no associated developer accounts).
+- In-App Purchase key "Huddle server" created and downloaded (team-wide, covers both apps):
+  Key ID `N93N6MMUBY`, Issuer ID `e1d9d530-bf88-4df8-8666-3f3e052555c5` (`APPLE_IAP_KEY_ID`,
+  `APPLE_IAP_ISSUER_ID`; neither is secret). The `.p8` is in Nate's safe storage and goes into the
+  deploy repo only as the `APPLE_IAP_PRIVATE_KEY` secret.
+- Still to do: Huddle Lower's Apple ID; Billing Grace Period (both apps); subscriptions (Huddle Lower
+  first).
+
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never
   touches code).
