@@ -281,7 +281,9 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   it twice changes nothing); the serialising promise chain's own rejection (each caller still gets
 #   its own run's rejection); and removing a store listener during teardown. Nothing is lost by any:
 #   an unfinished transaction stays in the store's queue until a later sync finishes it.
-EXPECTED_LIB_SWALLOWS=76
+# 77 with lib/native/purchases.js#onPurchaseIntent (+1): removing the App Store purchase-request
+#   listener during teardown failed. Nothing is lost: the plugin keeps an undelivered request.
+EXPECTED_LIB_SWALLOWS=77
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

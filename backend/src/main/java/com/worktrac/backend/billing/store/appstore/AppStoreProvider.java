@@ -288,6 +288,24 @@ public class AppStoreProvider implements StoreBillingProvider {
         return references;
     }
 
+    /** Apple's Set App Account Token, on the subscription's original transaction. */
+    @Override
+    public void stampAccountToken(StorePurchaseReference reference, java.util.UUID accountToken)
+            throws StoreBillingException {
+        StoreEnvironment environment = reference.environment() == null
+                ? StoreEnvironment.PRODUCTION
+                : reference.environment();
+        try {
+            client(environment).setAppAccountToken(reference.subscriptionId(),
+                    new com.apple.itunes.storekit.model.UpdateAppAccountTokenRequest(accountToken));
+        } catch (APIException e) {
+            throw new StoreBillingException("Set App Account Token answered " + e.getHttpStatusCode() + " "
+                    + e.getApiError() + " for " + reference.subscriptionId(), e);
+        } catch (IOException e) {
+            throw new StoreBillingException("Could not reach the App Store Server API", e);
+        }
+    }
+
     @Override
     public String cancelAndRefund(StorePurchaseReference reference) {
         // Never reached: BillingSource.APP_STORE.weCanCancel() is false, so the overlap rule never picks

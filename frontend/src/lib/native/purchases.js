@@ -117,6 +117,19 @@ export async function requestRefund() {
 }
 
 /**
+ * Purchases started OUTSIDE the app -- "subscribe" tapped on the App Store page. The callback gets
+ * { productId }; the app completes the purchase through its own flow (Apple's PurchaseIntent).
+ * Returns an unsubscribe function. No-op on the web.
+ */
+export function onPurchaseIntent(callback) {
+  if (!storeSource()) return () => {};
+  const handle = purchasesPlugin().addListener('purchaseIntent', callback);
+  return () => {
+    Promise.resolve(handle).then((h) => h?.remove?.()).catch(() => {});
+  };
+}
+
+/**
  * Transactions that arrive with no purchase screen open: renewals, Ask to Buy approvals, a purchase
  * on another device. Returns an unsubscribe function. No-op on the web.
  */

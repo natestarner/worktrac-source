@@ -32,6 +32,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private let held = HeldTransactions()
     private var updatesTask: Task<Void, Never>?
+    private var intentsTask: Task<Void, Never>?
 
     /// Starts listening as soon as the plugin loads, as Apple asks: renewals, Ask to Buy approvals and
     /// purchases made on another device arrive here, often while no purchase screen is open. Events are
@@ -44,10 +45,25 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.notifyListeners("transaction", data: reported.asDictionary(), retainUntilConsumed: true)
             }
         }
+        // Purchases started OUTSIDE the app -- "subscribe" on Huddle's App Store page -- arrive here
+        // (iOS 16.4+). Apple: the purchase is completed in the app. The app takes the person to Plan &
+        // billing and buys through its own flow, so the purchase carries the household token; this is
+        // what lets Streamlined Purchasing be turned off in App Store Connect. Retained until the app's
+        // listener attaches, which happens only once someone is signed in.
+        if #available(iOS 16.4, *) {
+            intentsTask = Task.detached { [weak self] in
+                for await intent in PurchaseIntent.intents {
+                    guard let self = self else { return }
+                    self.notifyListeners("purchaseIntent", data: ["productId": intent.product.id],
+                                         retainUntilConsumed: true)
+                }
+            }
+        }
     }
 
     deinit {
         updatesTask?.cancel()
+        intentsTask?.cancel()
     }
 
     /// `{ productIds: [String] }` -> `{ products: [{ id, displayName, displayPrice, periodUnit, periodValue }] }`.

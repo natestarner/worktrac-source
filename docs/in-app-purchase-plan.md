@@ -323,6 +323,13 @@ second device; Ask to Buy; web checkout and app purchase racing; a second device
 backend down mid-purchase (it must land on the next launch). Each ends with exactly one billing
 source. Signed data from these runs becomes the Phase 1 fixtures.
 
+### After 1.3.0 is approved
+- **Turn Streamlined Purchasing off** on Huddle (Monetization → Subscriptions → Streamlined
+  Purchasing → Edit). It is on by default and Apple only allows turning it off once an approved build
+  uses `PurchaseIntent`, which 1.3.0 does. Off, "subscribe" on the App Store page opens the app and
+  completes there with the household's token. Until then the backend adopts a token-less purchase
+  reported by a household's owner (billing.md).
+
 ### Phase 4: Submit 1.3.0
 The products are submitted together with the build: Apple requires the first subscription group,
 and every subscription in it, to be in the same draft submission as a new app version. Review notes explain: in the app, the App Store; a household billed on the web sees
@@ -376,7 +383,10 @@ account.
 - Huddle Lower's Apple ID: `6826555225` (`APPLE_IAP_APP_APPLE_ID` on lower; Huddle's is `6826555272`).
   Its License Agreement is already "Apple's Standard License Agreement" (the EULA); the app
   description still needs a link to it in 1.3.0's metadata.
-- Still to do: Billing Grace Period (both apps); subscriptions (Huddle Lower first).
+- Billing Grace Period: on for Huddle Lower (16 days, all renewals, production and sandbox).
+  Streamlined Purchasing is ON and can't be turned off yet (see "After 1.3.0 is approved").
+- Billing Grace Period on for Huddle too (same settings).
+- Still to do (after Apple's answer): subscriptions (Huddle Lower first), notification URLs, secrets.
 
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never

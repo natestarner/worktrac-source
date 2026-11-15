@@ -508,6 +508,14 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
 - **A verification that could not reach Apple is TRANSIENT** (online certificate checks are on, as
   Apple's README sets them): `RETRYABLE_VERIFICATION_FAILURE` becomes a 503, never `STORE_REJECTED`.
   Recording it as a forgery would let the app finish a real purchase.
+- **A purchase started outside the app carries no household token.** App Store Connect's
+  "Streamlined Purchasing" is ON by default and can only be turned off once an approved build uses
+  `PurchaseIntent`. Two halves: the app receives Apple's purchase intents (`PurchasesPlugin`,
+  `useStoreTransactions` → `/app/billing?buy=<productId>`) and completes them through the ordinary
+  flow, so they carry the token; and until it's off, the app's sync lets a signed-in OWNER adopt a
+  purchase that names no household at all into a household nobody pays for, then stamps the token
+  at Apple (`StoreBillingService.apply`'s claimant). A notification never adopts, and nothing ever
+  adopts into an entitled household.
 - **Apple's sandbox sends each notification once, with no retries.** `StoreNotificationRecovery`
   (hourly, locked) reads Apple's failed deliveries (Get Notification History, failures only) in both
   environments and re-applies them. Don't remove it as redundant with the watchdog: the watchdog

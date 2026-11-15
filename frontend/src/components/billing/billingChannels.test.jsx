@@ -72,11 +72,11 @@ const LOGIN_ROWS = [
   { personId: 2, personName: 'Sam', status: 'NONE', email: null, isSelf: false },
 ];
 
-function renderBilling(account, subscription = null) {
+function renderBilling(account, subscription = null, path = '/app/billing') {
   useAuth.mockReturnValue({ account, refreshPeople: vi.fn().mockResolvedValue(), membership: OWNER });
   getSubscription.mockResolvedValue(subscription);
   return renderWithQuery(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <BillingTab />
     </MemoryRouter>
   );
@@ -323,6 +323,27 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Request a refund' }));
 
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/device that bought it/), expect.anything()));
+  });
+
+  // "Subscribe" on the App Store page (Apple's PurchaseIntent) lands here as ?buy=<productId> and is
+  // completed through the ordinary flow, so it carries the household token.
+  it('completes a purchase started on the App Store page, for the product chosen there', async () => {
+    prepareStorePurchase.mockResolvedValue({ productId: 'huddle.pro.starter.year', accountToken: 'token-1' });
+    purchase.mockResolvedValue(PURCHASED);
+    syncStorePurchases.mockResolvedValue({ plan: 'PRO', billingSource: 'APP_STORE' });
+    renderBilling({ id: 1, plan: 'FREE' }, null, '/app/billing?buy=huddle.pro.starter.year');
+
+    await waitFor(() => expect(finish).toHaveBeenCalledWith('2000000123'));
+    expect(prepareStorePurchase).toHaveBeenCalledWith('app-store', { plan: 'PRO', band: 'STARTER', interval: 'YEAR' });
+    expect(purchase).toHaveBeenCalledWith({ productId: 'huddle.pro.starter.year', accountToken: 'token-1' });
+    expect(prepareStorePurchase).toHaveBeenCalledTimes(1);
+  });
+
+  it('a product the store does not offer here says so and buys nothing', async () => {
+    renderBilling({ id: 1, plan: 'FREE' }, null, '/app/billing?buy=huddle.team.year');
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith("That plan isn't available here right now.", expect.anything()));
+    expect(prepareStorePurchase).not.toHaveBeenCalled();
   });
 
   // Rule 1: one source per household, and no link out of the app.

@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useOnlineStatus } from './useOnlineStatus';
 import { queryKeys } from '../api/queryKeys';
 import { refreshHistoryForEveryone } from '../lib/queryClient';
-import { onTransaction, storeSource, unfinishedTransactions } from '../lib/native';
+import { useNavigate } from 'react-router-dom';
+import { onPurchaseIntent, onTransaction, storeSource, unfinishedTransactions } from '../lib/native';
 import { syncAndFinish } from '../lib/storeSync';
 
 // Store transactions that arrive with no purchase screen open: a renewal, an Ask to Buy request a
@@ -26,6 +27,9 @@ export function useStoreTransactions() {
   const queryClient = useQueryClient();
   const online = useOnlineStatus();
   const refreshRef = useRef(null);
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
   // Whatever a store transaction could have changed: the plan (/me, which every badge reads), the
   // billing screen's wording, and every person's History window.
@@ -35,6 +39,18 @@ export function useStoreTransactions() {
     refreshHistoryForEveryone(queryClient);
     queryClient.invalidateQueries({ queryKey: queryKeys.historyWindowForEveryone() });
   };
+
+  // "Subscribe" tapped on the App Store page (Apple's PurchaseIntent). Only ever delivered here, after
+  // sign-in, because this hook lives in AppShell; the plugin holds an earlier one until then. Billing
+  // completes it through the ordinary purchase flow, so it carries the household token. Navigates
+  // through a ref and subscribes once: under <BrowserRouter> `navigate` changes on every pathname
+  // change, and re-subscribing would re-deliver the retained intent (native-apps.md, AppLinkRouter).
+  useEffect(() => {
+    if (!storeSource()) return undefined;
+    return onPurchaseIntent(({ productId } = {}) => {
+      if (productId) navigateRef.current(`/app/billing?buy=${encodeURIComponent(productId)}`);
+    });
+  }, []);
 
   useEffect(() => {
     if (!storeSource()) return undefined;

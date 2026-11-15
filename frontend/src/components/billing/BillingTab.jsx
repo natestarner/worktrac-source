@@ -208,6 +208,32 @@ export default function BillingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutParam]);
 
+  // "Subscribe" tapped on the App Store page arrives as /app/billing?buy=<productId>
+  // (useStoreTransactions, from Apple's PurchaseIntent). Apple: the purchase is completed in the app,
+  // so once the store's catalog says which plan that product is, this runs the ordinary purchase --
+  // prepare, the store's sheet, sync, finish -- and the purchase carries the household token. The
+  // person already chose it on the App Store, so it starts by itself; every refusal (already billed,
+  // another device mid-purchase, a member's login) is the server's own message, as for a tap here.
+  const buyParam = searchParams.get('buy');
+  const boughtRef = useRef(null);
+  useEffect(() => {
+    if (!buyParam || channel !== 'store' || boughtRef.current === buyParam) return;
+    if (catalogQuery.isPending) return;
+    boughtRef.current = buyParam;
+    const next = new URLSearchParams(searchParams);
+    next.delete('buy');
+    setSearchParams(next, { replace: true });
+    const product = (catalog ?? []).find((p) => p.productId === buyParam);
+    if (!product) {
+      showToast("That plan isn't available here right now.", { tone: 'info' });
+      return;
+    }
+    setInterval(product.interval);
+    if (product.band) setProBand(product.band);
+    handleUpgrade({ plan: product.plan, band: product.band ?? null, interval: product.interval });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyParam, channel, catalogQuery.isPending]);
+
   // Someone who arrived from marketing's ?plan=pro CTAs (RegisterPage -> ConfirmEmailPage) lands
   // here with ?intent=pro. This screen leads with Plus and keeps the Pro card deliberately quieter
   // and below it -- right for the families who are most of this screen's readers, wrong for a
@@ -250,12 +276,12 @@ export default function BillingTab() {
   // so while Pro was fully buyable over the API, every button on this screen sold Plus. A caller
   // that forgets the argument still gets the old, correct behaviour rather than a 400.
   const handleUpgrade = run(
-    async ({ plan = 'PLUS', band = null } = {}) => {
+    async ({ plan = 'PLUS', band = null, interval: chosen = interval } = {}) => {
       if (channel === 'store') {
-        await buyInStore({ plan, band });
+        await buyInStore({ plan, band, interval: chosen });
         return;
       }
-      const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
+      const { clientSecret, publishableKey } = await createCheckoutSession(chosen, { plan, band });
       setCheckout({ clientSecret, publishableKey });
     },
     {
@@ -270,9 +296,9 @@ export default function BillingTab() {
   // In-App Purchase (docs/in-app-purchase-plan.md). The backend says whether this household may buy
   // and hands over its token; the store takes the payment; the backend verifies the store's proof and
   // writes the plan; only then is the transaction finished (lib/storeSync).
-  async function buyInStore({ plan, band }) {
+  async function buyInStore({ plan, band, interval: chosen }) {
     const store = storeSource();
-    const { productId, accountToken } = await prepareStorePurchase(store, { plan, band, interval });
+    const { productId, accountToken } = await prepareStorePurchase(store, { plan, band, interval: chosen });
     let outcome;
     try {
       outcome = await purchase({ productId, accountToken });

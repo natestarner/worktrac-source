@@ -62,6 +62,15 @@ public interface StoreBillingProvider {
      */
     String cancelAndRefund(StorePurchaseReference reference) throws StoreBillingException;
 
+    /**
+     * Writes the household token onto a purchase that was made without one, so the store returns it on
+     * every renewal from now on (Apple: Set App Account Token). A store that can't do this after the
+     * fact does nothing: the household still finds the purchase by its subscription id.
+     */
+    default void stampAccountToken(StorePurchaseReference reference, java.util.UUID accountToken)
+            throws StoreBillingException {
+    }
+
     /** Anything the store needs once we have accepted a purchase (Google: acknowledge within 3 days). */
     void acknowledge(StorePurchaseReference reference) throws StoreBillingException;
 }

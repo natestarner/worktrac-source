@@ -313,6 +313,54 @@ class StoreBillingControllerTest extends AbstractIntegrationTest {
                             && event.getDetail().contains("3000" + accountId));
         }
 
+        // Bought on the App Store page (streamlined purchasing), so no household token: an owner who
+        // opens the app on that phone, in a household nobody pays for, adopts it -- and Apple is asked
+        // to stamp the household's token on it so renewals carry it.
+        @Test
+        void aTokenlessPurchaseReportedByAFreeHouseholdsOwnerIsAdoptedAndStamped() throws Exception {
+            StoreSubscriptionState state = appleActive("8000" + accountId, null, PlanSku.PLUS_YEAR);
+            apple("jws-8", state);
+
+            sync(token, "jws-8").andExpect(status().isOk())
+                    .andExpect(jsonPath("$.plan").value("PLUS"))
+                    .andExpect(jsonPath("$.billingSource").value("APP_STORE"));
+
+            UUID householdToken = row().getStoreAccountToken();
+            assertThat(householdToken).isNotNull();
+            verify(appStore).stampAccountToken(eq(state.reference()), eq(householdToken));
+        }
+
+        // Never into a household someone is already paying for: that would be a second subscription.
+        @Test
+        void aTokenlessPurchaseIsNotAdoptedByAHouseholdThatIsAlreadyPaid() throws Exception {
+            Subscription subscription = row();
+            subscription.setComped(true);
+            subscriptionRepository.save(subscription);
+            apple("jws-9", appleActive("9000" + accountId, null, PlanSku.PLUS_YEAR));
+
+            sync(token, "jws-9").andExpect(status().isOk());
+
+            assertThat(row().getStoreSubscriptionId()).isNull();
+            verify(appStore, never()).stampAccountToken(any(), any());
+            assertThat(billingEventRepository.findAll()).anyMatch(event ->
+                    event.getEventType() == BillingEventType.STORE_UNMATCHED
+                            && event.getDetail().contains("9000" + accountId));
+        }
+
+        // A notification is the store talking, not anyone in a household: it never adopts.
+        @Test
+        void aTokenlessPurchaseArrivingAsANotificationIsNotAdopted() throws Exception {
+            StoreSubscriptionState state = appleActive("9100" + accountId, null, PlanSku.PLUS_YEAR);
+            when(appStore.parseNotification(anyString())).thenReturn(Optional.of(state.reference()));
+            when(appStore.fetchState(any())).thenReturn(state);
+
+            mockMvc.perform(post("/api/webhooks/store/app-store").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"signedPayload\":\"x\"}")).andExpect(status().isOk());
+
+            assertThat(row().getStoreSubscriptionId()).isNull();
+            verify(appStore, never()).stampAccountToken(any(), any());
+        }
+
         // Permanent: the app may finish it rather than retry forever.
         @Test
         void aProofThatDoesNotVerifyIsRecordedAndTheRequestStillSucceeds() throws Exception {

@@ -61,25 +61,76 @@ public class StoreBillingService {
      */
     public Result apply(StoreBillingProvider provider, StorePurchaseReference reference, String via)
             throws StoreBillingException {
+        return apply(provider, reference, via, null);
+    }
+
+    /**
+     * As {@link #apply(StoreBillingProvider, StorePurchaseReference, String)}, with one more way to find
+     * the household, used only by the app's own sync: {@code claimantAccountId}, the household of an
+     * OWNER who is signed in on the device that holds the purchase.
+     *
+     * <p>It adopts ONLY a purchase that names no household at all -- no known subscription id and no
+     * token -- and only into a household nobody is paying for. That is the shape of a purchase made
+     * outside the app (Apple's "streamlined purchasing" on the App Store page, which can't be turned
+     * off until a build with PurchaseIntent is approved): the person bought on their phone, then opened
+     * the app signed in as the household's owner. Everything else is attributed exactly as before, by
+     * what the store signed, never by who is signed in. An adopted purchase is then stamped with the
+     * household's token at the store, so renewals carry it.
+     */
+    public Result apply(StoreBillingProvider provider, StorePurchaseReference reference, String via,
+                        Long claimantAccountId) throws StoreBillingException {
         // Outside any transaction: no database connection is held while the store answers.
         StoreSubscriptionState state = provider.fetchState(reference);
-        Applied applied = transaction.execute(status -> attributeAndApply(state, reference, via));
+        Applied applied = transaction.execute(status -> attributeAndApply(state, reference, via, claimantAccountId));
         if (applied.outcome() == StoreApplyOutcome.APPLIED) {
             provider.acknowledge(state.reference());
+        }
+        if (applied.adoptedToken() != null) {
+            try {
+                provider.stampAccountToken(state.reference(), applied.adoptedToken());
+            } catch (StoreBillingException e) {
+                // Not fatal: the household already holds the subscription id, which is looked up first,
+                // so renewals still find it. The stamp only makes the store's own record match.
+                log.warn("Could not stamp the household token on {} subscription {}: {}", state.source(),
+                        state.subscriptionId(), e.getMessage());
+            }
         }
         return applied.result();
     }
 
-    private record Applied(Result result, StoreApplyOutcome outcome) {
+    private record Applied(Result result, StoreApplyOutcome outcome, java.util.UUID adoptedToken) {
+
+        Applied(Result result, StoreApplyOutcome outcome) {
+            this(result, outcome, null);
+        }
     }
 
     // One transaction: the attribution read and the write, so the row cannot change between them.
-    private Applied attributeAndApply(StoreSubscriptionState state, StorePurchaseReference reference, String via) {
+    private Applied attributeAndApply(StoreSubscriptionState state, StorePurchaseReference reference, String via,
+                                      Long claimantAccountId) {
 
         // The token as Apple holds it now beats the one in what we were sent: Set App Account Token
         // can stamp a purchase after the fact, and the re-fetched state carries the result.
         java.util.UUID token = state.accountToken() != null ? state.accountToken() : reference.accountToken();
         Optional<Subscription> household = findHousehold(state.subscriptionId(), token);
+        java.util.UUID adoptedToken = null;
+        if (household.isEmpty() && token == null && claimantAccountId != null) {
+            Optional<Subscription> claimant = subscriptionRepository.findByAccountId(claimantAccountId)
+                    .filter(row -> !subscriptionService.isEntitled(row));
+            if (claimant.isPresent()) {
+                Subscription row = claimant.get();
+                if (row.getStoreAccountToken() == null) {
+                    row.setStoreAccountToken(java.util.UUID.randomUUID());
+                    subscriptionRepository.save(row);
+                }
+                adoptedToken = row.getStoreAccountToken();
+                household = claimant;
+                auditService.record(claimantAccountId, BillingEventType.STORE_APPLIED,
+                        via + ": " + state.source() + " " + state.subscriptionId()
+                                + " carried no household token (bought outside the app); adopted by the"
+                                + " household whose owner reported it, and stamped with its token");
+            }
+        }
         if (household.isEmpty()) {
             auditService.record(null, BillingEventType.STORE_UNMATCHED,
                     via + ": " + state.source() + " " + state.subscriptionId() + " (" + state.productId() + ", "
@@ -106,7 +157,7 @@ public class StoreBillingService {
             case OVERLAP_RESOLVED -> Result.OVERLAP_RESOLVED;
             case OVERLAP_UNCANCELLABLE -> Result.OVERLAP_UNCANCELLABLE;
         };
-        return new Applied(result, outcome);
+        return new Applied(result, outcome, outcome == StoreApplyOutcome.APPLIED ? adoptedToken : null);
     }
 
     // Subscription id first: a household that already knows this subscription is its owner, whatever

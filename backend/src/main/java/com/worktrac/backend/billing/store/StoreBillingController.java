@@ -216,7 +216,10 @@ public class StoreBillingController {
                 throw unavailable(e);
             }
             try {
-                storeBillingService.apply(provider, reference, "sync");
+                // An owner may adopt a purchase that names no household (bought outside the app);
+                // StoreBillingService says exactly when. A member's device never adopts anything.
+                Long claimant = currentUser.access().has(Permission.MANAGE_BILLING) ? accountId : null;
+                storeBillingService.apply(provider, reference, "sync", claimant);
             } catch (StoreBillingException e) {
                 throw unavailable(e);
             }
