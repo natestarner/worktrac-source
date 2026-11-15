@@ -373,11 +373,12 @@ account.
   Key ID `N93N6MMUBY`, Issuer ID `e1d9d530-bf88-4df8-8666-3f3e052555c5` (`APPLE_IAP_KEY_ID`,
   `APPLE_IAP_ISSUER_ID`; neither is secret). The `.p8` is in Nate's safe storage and goes into the
   deploy repo only as the `APPLE_IAP_PRIVATE_KEY` secret.
-- Still to do: Huddle Lower's Apple ID; Billing Grace Period (both apps); subscriptions (Huddle Lower
-  first).
+- Huddle Lower's Apple ID: `6826555225` (`APPLE_IAP_APP_APPLE_ID` on lower; Huddle's is `6826555272`).
+  Its License Agreement is already "Apple's Standard License Agreement" (the EULA); the app
+  description still needs a link to it in 1.3.0's metadata.
+- Still to do: Billing Grace Period (both apps); subscriptions (Huddle Lower first).
 
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never
   touches code).
-- Huddle Lower's Apple ID.
 - Whether the Paid Applications Agreement is already in place (likely not, for a free app).
