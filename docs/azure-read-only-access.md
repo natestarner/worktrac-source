@@ -218,10 +218,10 @@ default profile does not make it available to Claude's, or vice versa.
 
 ### Health metrics: outbox backlog and DB pool, per replica
 
-Every replica logs one `health-metrics` line a minute (`config/HealthMetricsLogger`). The
-multi-replica alerts are Log Analytics scheduled-query rules over these lines, in
-`worktrac-deploy`'s `infra/monitoring.bicep` (built 2026-11-14; see that repo's `infra/README.md`
-for the full rule list, including the metric alerts for 5xx, restarts, memory and the database). **The keys are an API.** Add new ones at the end, and never
+Every replica logs one `health-metrics` line a minute (`config/HealthMetricsLogger`). One prod
+alert reads it: `email-stuck`, a Log Analytics search rule in `worktrac-deploy`'s
+`infra/monitoring.bicep` (the full rule list, mostly free metric alerts, is in that repo's
+`infra/README.md`). **The keys are an API.** Add new ones at the end, and never
 rename one without changing the alert rules in the same release.
 
 ```
@@ -239,15 +239,18 @@ az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a 
    | order by TimeGenerated desc" -o table
 ```
 
-What each alert asks (prod only; lower scales to zero, so "no line" there is normal). They email
-`huddle@starner.co` through the `huddle-prod-alerts` action group:
+Alerts email `huddle@starner.co` through the `huddle-prod-alerts` action group. Cost is held to
+$0.50/month on purpose (2026-11-14): metric alerts are free up to 10, log search rules have no free
+tier. So only one rule reads this line:
 
 | Alert | Condition |
 |---|---|
-| Email stuck | `max(oldest) > 900` over 15 min. That's past the outbox's ~9.5-minute retry schedule, so something is wrong |
-| Email failed | `max(failed) > 0` over 15 min. A row gave up; its reason is on the row and in the audit trail |
-| Pool saturated | `max(waiting) > 0` in 3 or more of the last 5 minutes, on any replica |
-| Replica silent | no `health-metrics` line from prod for 10 min (10, not 5: a 10-minute log rule costs $1.00/month, a 5-minute one $1.50) |
+| Email stuck | `oldest > 900` in the last 15 min. That's past the outbox's ~9.5-minute retry schedule, so something is wrong, and the app's own alert email would be stuck behind it |
+
+Three more were designed and dropped for cost, each now covered by a free metric alert or by the
+app: email failed (the app emails the admin), pool saturated (`-response-time`, avg > 5 s) and
+replica silent (`-replicas` < 1, plus `-5xx` once a hung app gets traffic). The queries above still
+answer those questions by hand.
 
 ## Reading quota activity
 
