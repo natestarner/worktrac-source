@@ -227,6 +227,15 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Bouncy Castle arrives only through Apple's app-store-server-library (runtime), which
+                 pins 1.84. 1.84 carries CVE-2026-8763 (CRITICAL, fixed in 1.85) and CVE-2026-13506
+                 (HIGH), and failed Trivy in `docker-build` on #547. 1.87 is the newest 1.8x release
+                 (same API line). Remove once the Apple library's own pin passes it. -->
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>1.87</version>
+            </dependency>
             <!-- Override spring-boot-starter-parent's managed 2.21.4: fixes CVE-2026-54515
                  (per-property @JsonIgnoreProperties exclusions can be silently restored by
                  a later @JsonFormat case-insensitivity rebuild). Patch-only bump within the
