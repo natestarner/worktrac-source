@@ -290,6 +290,11 @@ Notifications "Responding" and "Enabling"; Get All Subscription Statuses; Apple'
   standard EULA, https://www.apple.com/legal/internet-services/itunes/dev/stdeula/, or a custom EULA
   in App Information) in the app description, and the Privacy Policy URL. Each subscription needs a
   display name and description (people see them in Manage subscription) and a review screenshot.
+- **Every subscription: Purchase Options → Available from "The App Store" only, Multiseat
+  Purchases "Not Allowed".** Apple turns multiseat on by default (organizations buying seats through
+  Apple Business / School Manager); one subscription per household can't represent seats, and those
+  purchases carry no household token. Also: Family Sharing off, App Store Promotion off.
+- Subscription group display name: "Huddle: Workout Tracker" (Huddle Lower's group id 22587372).
 - **Billing Grace Period:** 16 days, "All Renewals", "Production and Sandbox Environment" (it is set
   per app, not per product, and takes up to 24 hours).
 - After entering the notification URLs, send Apple's test notification (App Store Server API,
