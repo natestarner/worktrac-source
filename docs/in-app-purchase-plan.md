@@ -1,11 +1,12 @@
 # In-App Purchase plan
 
-**STATUS (2026-11-14): PHASES 1 AND 2 BUILT on branch `feat/iap`, not merged, not deployed.**
+**STATUS (2026-11-17): PHASES 1 AND 2 BUILT on branch `feat/iap`, not merged, not deployed. Huddle
+Lower's App Store Connect setup is done ("Phase 0 progress (2026-11-17)"), except Pro Unlimited Yearly's price.**
 Backend (store-neutral core, Apple provider, V105, overlap rules, watchdog) and app (StoreKit 2
 plugin, `purchases.js`, the store channel on Billing, Restore, delete-screen notice, Help, Terms,
 Privacy, privacy manifest) are written and tested with fakes. **Waiting on Phase 0** (Nate in App
-Store Connect) before Phase 3 can prove it with real sandbox purchases. Apple's reply to the 1.2.0
-appeal is still pending; this ships only if In-App Purchase is required. What the build could not
+Store Connect) before Phase 3 can prove it with real sandbox purchases. Apple requires In-App
+Purchase (2026-11-16); it ships in 1.3.0. What the build could not
 prove without Apple is listed under "Not yet proven".
 
 ## Why
@@ -391,7 +392,38 @@ account.
 - Billing Grace Period: on for Huddle Lower (16 days, all renewals, production and sandbox).
   Streamlined Purchasing is ON and can't be turned off yet (see "After 1.3.0 is approved").
 - Billing Grace Period on for Huddle too (same settings).
-- Still to do (after Apple's answer): subscriptions (Huddle Lower first), notification URLs, secrets.
+- 2026-11-16: Apple answered the 1.2.0 appeal: In-App Purchase is REQUIRED, fixable in the next
+  update. Nate asked App Review to approve 1.2.0 as a bug-fix submission; IAP ships in 1.3.0.
+
+## Phase 0 progress (2026-11-17): Huddle Lower's App Store Connect is set up
+- **All ten subscriptions exist** in group 22587372 ("Huddle: Workout Tracker"). Every one: United
+  States only, App Store only, multiseat Not Allowed, an English (U.S.) display name and description,
+  and a review screenshot (Nate). Yearly ones use "1 Year Upfront"; "Monthly with a 12-Month
+  Commitment" is left unset.
+
+  | Level | Product id (`huddle.lower.` +) | Subscription id | US price |
+  |---|---|---|---|
+  | 1 | `pro.unlimited.month` / `.year` | 6835712887 / 6835713734 | $149.99 / **none yet** |
+  | 2 | `pro.practice.month` / `.year` | 6835711865 / 6835712543 | $79.99 / $789.99 |
+  | 3 | `pro.studio.month` / `.year` | 6835709072 / 6835709989 | $39.99 / $389.99 |
+  | 4 | `pro.starter.month` / `.year` | 6835706993 / 6835707889 | $19.99 / $189.99 |
+  | 5 | `plus.month` / `.year` | 6835701506 / 6835705535 | $3.99 / $29.99 |
+
+  Monthly and yearly of one plan share a level, so switching between them is a crossgrade.
+- **Pro Unlimited Yearly has no price.** The web's $1,489.99 is above the highest price App Store
+  Connect offers ($1,000.00). Apple has 100 higher price points (up to $10,000), but only the Account
+  Holder can request them. Until it has a price, StoreKit doesn't return the product, so the app
+  doesn't offer it (`useStoreCatalog` drops what the store doesn't return). Nate decides: request the
+  higher points, or sell it at $999.99 / $1,000.00 in the app.
+- **Notification URLs:** Huddle Lower's production and sandbox URLs are both
+  `https://api.dev.huddle.fitness/api/webhooks/store/app-store`. App Store Connect no longer offers a
+  version choice; new URLs get Version 2.
+- **Lower's backend config** is worktrac-deploy PR #90 (into `lower`): bundle id, Apple ID, issuer,
+  Key ID, prefix `huddle.lower.`, and the `APPLE_IAP_PRIVATE_KEY_LOWER` secret, which Nate still
+  has to set with `gh secret set` before that PR merges.
+- Still to do: that secret, then `/deploy-to-lower` of this branch and the deploy PR, then Phase 3
+  on a TestFlight build. Huddle (production) gets the same subscriptions with `huddle.` ids before
+  1.3.0 is submitted.
 
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never
