@@ -29,6 +29,21 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!-- In-App Purchase: the App Store transaction and subscription ids, the product and its status,
+		     kept on the household's subscription row (docs/in-app-purchase-plan.md). Must match App
+		     Store Connect's App Privacy answer: Purchases, Purchase History, linked, App Functionality. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
 		<!-- The names of the people in a household. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>

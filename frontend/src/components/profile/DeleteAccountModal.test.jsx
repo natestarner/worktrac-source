@@ -1,5 +1,7 @@
 import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithQuery as render } from '../../test/queryWrapper';
+import { getSubscription } from '../../api/billing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeleteAccountModal from './DeleteAccountModal';
 import { deleteAccount } from '../../api/account';
@@ -8,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 
 vi.mock('../../api/account', () => ({ deleteAccount: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
+vi.mock('../../api/billing', () => ({ getSubscription: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 const navigateMock = vi.fn();
@@ -21,6 +24,7 @@ describe('DeleteAccountModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
+    getSubscription.mockResolvedValue({ plan: 'FREE', billingSource: null });
     logout = vi.fn();
     useAuth.mockReturnValue({
       people: [{ id: 1, name: 'Alex' }, { id: 2, name: 'Sam' }],
@@ -137,5 +141,39 @@ describe('DeleteAccountModal — who else this takes with it', () => {
     renderWith([{ id: 1, name: 'Nate' }]);
 
     expect(screen.queryByText(/cannot get it back/)).toBeNull();
+  });
+});
+
+// Apple: an app that sells subscriptions must tell a person deleting their account that the
+// subscription is not cancelled by it. We can cancel Stripe; we cannot cancel the App Store.
+describe('DeleteAccountModal, a household paying through an app store', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ people: [{ id: 1, name: 'Alex' }], logout: vi.fn() });
+  });
+
+  it('says the App Store subscription keeps running and where to cancel it', async () => {
+    getSubscription.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
+    render(<DeleteAccountModal onClose={vi.fn()} />);
+    expect(await screen.findByText('Your subscription keeps running.')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent(/Billing continues through the App Store/);
+    expect(screen.getByRole('note')).toHaveTextContent(/cancel it before you delete/);
+  });
+
+  // Apple: "notify them that billing will continue through Apple and ask them to cancel their
+  // subscription before continuing", with a way to manage it. On the web that is Apple's own page.
+  it('on the web, links to Apple\u2019s subscriptions page', async () => {
+    getSubscription.mockResolvedValue({ plan: 'PLUS', billingSource: 'APP_STORE' });
+    render(<DeleteAccountModal onClose={vi.fn()} />);
+    const link = await screen.findByRole('link', { name: 'Manage your App Store subscriptions' });
+    expect(link).toHaveAttribute('href', 'https://apps.apple.com/account/subscriptions');
+    expect(screen.getByRole('note')).toHaveTextContent(/Billing continues through the App Store/);
+  });
+
+  it('says nothing for a Stripe household, whose subscription deleting does cancel', async () => {
+    getSubscription.mockResolvedValue({ plan: 'PLUS', billingSource: 'STRIPE' });
+    render(<DeleteAccountModal onClose={vi.fn()} />);
+    await waitFor(() => expect(getSubscription).toHaveBeenCalled());
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
 });

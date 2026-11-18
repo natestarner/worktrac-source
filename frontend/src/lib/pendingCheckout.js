@@ -1,5 +1,8 @@
-// The Stripe checkout the App Store app has just sent someone to, remembered so the app can confirm
-// it when they come back (hooks/useCheckoutResume.js).
+// LEGACY. The Stripe checkout the App Store app had just sent someone to, remembered so the app
+// could confirm it on return (the removed hooks/useCheckoutResume.js). In-App Purchase replaced the
+// link-out, so nothing writes this any more; it stays readable because a note an older build left on
+// a device is pinned by lib/persistedCompatibility.test.js, and the webhook applied that purchase
+// regardless. Delete it with the link-out's backend endpoint (billing.md, "Kept for old app builds").
 //
 // localStorage, written synchronously BEFORE the browser opens: iOS may kill a backgrounded app,
 // and a marker written asynchronously could be lost with it -- leaving a payment the app never

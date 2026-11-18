@@ -51,5 +51,34 @@ public enum BillingEventType {
     // grant transaction rolls back afterwards. That bias is deliberate here -- an audit row for a
     // grant that did not land is a puzzle, while a grant that landed with no row is a hole.
     COMP_GRANTED,
-    COMP_REVOKED
+    COMP_REVOKED,
+
+    // ---- App stores (In-App Purchase). See docs/in-app-purchase-plan.md. ----
+
+    // The app asked to buy in a store and was handed the household token. Proves intent, never payment.
+    STORE_PURCHASE_STARTED,
+
+    // A store subscription's current state, re-fetched from the store, was written to the row.
+    STORE_APPLIED,
+
+    // A store purchase or message was refused: it failed verification, or it was about a subscription
+    // that is not this household's and is not paying (an old, lapsed one).
+    STORE_REJECTED,
+
+    // A verified store purchase that names no household we know: no matching subscription id, and no
+    // household token (or one belonging to a deleted household). Not applied. Apple's Set App Account
+    // Token endpoint can stamp it once someone has worked out whose it is.
+    STORE_UNMATCHED,
+
+    // Two sources were paying for one household. The one we CAN cancel (Stripe, later Google Play) was
+    // cancelled and its latest payment refunded in full; detail names which. Emails the owner.
+    OVERLAP_REFUNDED,
+
+    // Two sources we CANNOT cancel (two Apple IDs) were paying for one household. Nothing could be
+    // undone automatically: an ops alert, and the owner is told which one to cancel in Settings.
+    OVERLAP_UNCANCELLABLE,
+
+    // A household paying through a store was deleted. We cannot cancel a store subscription, so the
+    // delete screen told them to cancel it in Settings; this records that it was left running.
+    STORE_LEFT_RUNNING_ON_DELETION
 }

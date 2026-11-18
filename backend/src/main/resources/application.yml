@@ -232,6 +232,18 @@ app:
       PRO_UNLIMITED_MONTH: ${STRIPE_PRICE_PRO_UNLIMITED_MONTH:}
       PRO_UNLIMITED_YEAR: ${STRIPE_PRICE_PRO_UNLIMITED_YEAR:}
     return-url: ${STRIPE_RETURN_URL:http://localhost:3000/app/billing}
+  # In-App Purchase (docs/in-app-purchase-plan.md). Every value empty by default: an environment
+  # without them answers 503 to the app and 401 to Apple, never a silent "Free". Huddle and Huddle
+  # Lower are separate App Store Connect apps, so lower and production differ in every value but the
+  # issuer id. The private key is the In-App Purchase key's .p8 text, a secret.
+  store:
+    apple:
+      bundle-id: ${APPLE_IAP_BUNDLE_ID:}
+      app-apple-id: ${APPLE_IAP_APP_APPLE_ID:}
+      issuer-id: ${APPLE_IAP_ISSUER_ID:}
+      key-id: ${APPLE_IAP_KEY_ID:}
+      private-key: ${APPLE_IAP_PRIVATE_KEY:}
+      product-prefix: ${APPLE_IAP_PRODUCT_PREFIX:}
   email-delivery-webhook:
     # Shared-secret query-param key gating the public Event Grid delivery-report webhook (see
     # EmailDeliveryWebhookController) -- empty by default so an environment with no key set

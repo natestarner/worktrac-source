@@ -147,6 +147,8 @@ public class AccountDeletionService {
         // after this transaction commits (see the afterCommit hook below, and
         // StripeSubscriptionCanceller for why that ordering is load-bearing).
         String stripeSubscriptionId = stripeSubscriptionCanceller.pendingCancellation(accountId);
+        // An App Store subscription cannot be cancelled by us at all; read it now, record it below.
+        String storeStillBilling = stripeSubscriptionCanceller.storeStillBilling(accountId);
 
         // FIRST: contact_messages holds NO ACTION FKs to accounts, users AND people, so every
         // delete below this line fails with a constraint violation while a submission is still
@@ -252,5 +254,6 @@ public class AccountDeletionService {
         // transaction commits: an outbox row written here, delivered after commit. See
         // StripeSubscriptionCanceller for why both halves of that ordering are load-bearing.
         stripeSubscriptionCanceller.scheduleCancellation(accountId, stripeSubscriptionId);
+        stripeSubscriptionCanceller.recordStoreLeftRunning(accountId, storeStillBilling);
     }
 }

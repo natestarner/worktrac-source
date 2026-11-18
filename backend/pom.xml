@@ -61,6 +61,11 @@
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
              SDK bump cannot silently change request/response shapes. -->
         <stripe-java.version>34.1.0</stripe-java.version>
+        <!-- Apple's official App Store Server Library: verifies StoreKit's signed transactions and
+             notifications, and calls the App Store Server API. Only AppStoreProvider imports it
+             (docs/in-app-purchase-plan.md). Brings Jackson 2, which sits beside our Jackson 3
+             under its own package names. -->
+        <app-store-server-library.version>5.2.0</app-store-server-library.version>
     </properties>
 
     <dependencies>
@@ -72,6 +77,11 @@
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
             <version>${stripe-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.apple.itunes.storekit</groupId>
+            <artifactId>app-store-server-library</artifactId>
+            <version>${app-store-server-library.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -216,6 +226,15 @@
                 <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Bouncy Castle arrives only through Apple's app-store-server-library (runtime), which
+                 pins 1.84. 1.84 carries CVE-2026-8763 (CRITICAL, fixed in 1.85) and CVE-2026-13506
+                 (HIGH), and failed Trivy in `docker-build` on #547. 1.87 is the newest 1.8x release
+                 (same API line). Remove once the Apple library's own pin passes it. -->
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>1.87</version>
             </dependency>
             <!-- Override spring-boot-starter-parent's managed 2.21.4: fixes CVE-2026-54515
                  (per-property @JsonIgnoreProperties exclusions can be silently restored by

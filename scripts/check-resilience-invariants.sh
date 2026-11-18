@@ -276,7 +276,14 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   (its script or init). Nothing is lost: that next tap arms again and reports its own failure.
 # 73 with socialSignIn.js#givenNameFromIdToken (+1): an unreadable token only leaves the sign-up name
 #   field empty for the person to type, as it always was; the token itself is verified by the backend.
-EXPECTED_LIB_SWALLOWS=73
+# 76 with lib/storeSync.js and lib/native/purchases.js (+3), In-App Purchase: a failed finish() of a
+#   store transaction the backend already accepted (the store hands it back and the backend applying
+#   it twice changes nothing); the serialising promise chain's own rejection (each caller still gets
+#   its own run's rejection); and removing a store listener during teardown. Nothing is lost by any:
+#   an unfinished transaction stays in the store's queue until a later sync finishes it.
+# 77 with lib/native/purchases.js#onPurchaseIntent (+1): removing the App Store purchase-request
+#   listener during teardown failed. Nothing is lost: the plugin keeps an undelivered request.
+EXPECTED_LIB_SWALLOWS=77
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

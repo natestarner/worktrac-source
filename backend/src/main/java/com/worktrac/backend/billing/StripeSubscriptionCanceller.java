@@ -65,10 +65,12 @@ public class StripeSubscriptionCanceller implements OutboxHandlerProvider {
     private final StripeService stripeService;
     private final BillingAuditService auditService;
     private final Outbox outbox;
+    private final SubscriptionService subscriptionService;
 
     public StripeSubscriptionCanceller(SubscriptionRepository subscriptionRepository,
                                         StripeService stripeService, BillingAuditService auditService,
-                                        Outbox outbox) {
+                                        Outbox outbox, SubscriptionService subscriptionService) {
+        this.subscriptionService = subscriptionService;
         this.subscriptionRepository = subscriptionRepository;
         this.stripeService = stripeService;
         this.auditService = auditService;
@@ -83,12 +85,45 @@ public class StripeSubscriptionCanceller implements OutboxHandlerProvider {
             return null;
         }
         return subscriptionRepository.findByAccountId(accountId)
+                // A store-billed household's Stripe id (if any) is an old, already-cancelled one:
+                // cancelling it again would only fail, and record a FAILED row asking for manual work.
+                .filter(subscription -> subscriptionService.billingSource(subscription) == null
+                        || subscriptionService.billingSource(subscription) == BillingSource.STRIPE)
                 .map(Subscription::getStripeSubscriptionId)
                 .filter(id -> !id.isBlank())
                 .orElse(null);
     }
 
     // Null id => nothing to do, so callers need no branch of their own.
+    /**
+     * The app store still billing this household, or null. Read BEFORE the deletes, like
+     * {@link #pendingCancellation}: we cannot cancel a store subscription (Apple offers no way), so
+     * deletion can only say so -- the delete screen tells the person to cancel it in Settings -- and
+     * record that it was left running ({@link #recordStoreLeftRunning}).
+     */
+    public String storeStillBilling(Long accountId) {
+        return subscriptionRepository.findByAccountId(accountId)
+                .filter(subscriptionService::isPaying)
+                .filter(subscription -> {
+                    BillingSource source = subscriptionService.billingSource(subscription);
+                    return source != null && source.isStore();
+                })
+                .map(subscription -> subscriptionService.billingSource(subscription) + " "
+                        + subscription.getStoreSubscriptionId() + " (" + subscription.getStoreProductId()
+                        + ", " + subscription.getStoreEnvironment() + ")")
+                .orElse(null);
+    }
+
+    /** Call AFTER the deletes, so the row survives the household's billing_events being cleared. */
+    public void recordStoreLeftRunning(Long accountId, String storeSubscription) {
+        if (storeSubscription == null) {
+            return;
+        }
+        auditService.record(accountId, BillingEventType.STORE_LEFT_RUNNING_ON_DELETION,
+                storeSubscription + " is still billing; only the subscriber can cancel it. The household was"
+                        + " told to cancel it in Settings before deleting.");
+    }
+
     /**
      * Records that this subscription must be cancelled once the caller's transaction commits. Call
      * it INSIDE the delete transaction, after the deletes: the row then commits or rolls back with

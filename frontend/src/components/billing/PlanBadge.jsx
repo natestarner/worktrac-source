@@ -47,7 +47,7 @@ export default function PlanBadge() {
   }
 
   if (plan === 'FREE') {
-    // In the App Store app outside the US storefront there is nowhere it may lead (billing channel
+    // In an app with no store to sell through there is nowhere it may lead (billing channel
     // 'none'), so a Free household's header simply carries no badge -- the same render-nothing a
     // household with an unknown plan gets.
     if (channel === 'none') return null;

@@ -36,7 +36,7 @@ export async function openExternal(url, { onClose } = {}) {
 
 // Leaves the app for the phone's own browser (Safari), for a page the person finishes OUTSIDE the
 // app -- today only the App Store app's hosted Stripe checkout. Not the in-app sheet above, for two
-// reasons: closing a sheet never takes the app out of the foreground, so useCheckoutResume (which
+// reasons: closing a sheet never takes the app out of the foreground, so the old useCheckoutResume (which
 // confirms the payment on `visibilitychange`) would never notice they came back; and Apple's US
 // rules are about linking OUT to a web checkout, which Safari unambiguously is.
 // Web: the same new tab as openExternal's web branch.

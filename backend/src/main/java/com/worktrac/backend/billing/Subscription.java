@@ -118,6 +118,38 @@ public class Subscription {
     @Column(name = "plus_welcome_sent_at", updatable = false)
     private Instant plusWelcomeSentAt;
 
+    // Who writes this row: Stripe or an app store (V105). Exactly one source bills a household at a
+    // time -- see SubscriptionService.applyStoreState and billing.md ("Who bills a household").
+    // Null on a row nothing has ever billed.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_source", length = 20)
+    private BillingSource billingSource;
+
+    // The household's token for store purchases (Apple appAccountToken, Google obfuscatedAccountId).
+    // Created once, on the first prepare, and never changed: renewals years later still carry it.
+    @JdbcTypeCode(SqlTypes.UUID)
+    @Column(name = "store_account_token")
+    private java.util.UUID storeAccountToken;
+
+    // The store's stable id for the subscription (Apple: originalTransactionId). Kept after the
+    // subscription lapses, so a resubscribe from the phone's Settings still finds this household.
+    @Column(name = "store_subscription_id", length = 512)
+    private String storeSubscriptionId;
+
+    @Column(name = "store_product_id", length = 100)
+    private String storeProductId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "store_environment", length = 20)
+    private com.worktrac.backend.billing.store.StoreEnvironment storeEnvironment;
+
+    // The one-purchase-at-a-time claim. Written ONLY by SubscriptionRepository's conditional UPDATEs
+    // (claimStorePurchase / releaseStorePurchase), never through the entity -- updatable = false for
+    // the reason plus_welcome_sent_at is: a stale flush would put an old value back over a claim.
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    @Column(name = "store_purchase_started_at", insertable = false, updatable = false)
+    private Instant storePurchaseStartedAt;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -249,6 +281,50 @@ public class Subscription {
 
     public void setPlusWelcomeSentAt(Instant plusWelcomeSentAt) {
         this.plusWelcomeSentAt = plusWelcomeSentAt;
+    }
+
+    public BillingSource getBillingSource() {
+        return billingSource;
+    }
+
+    public void setBillingSource(BillingSource billingSource) {
+        this.billingSource = billingSource;
+    }
+
+    public java.util.UUID getStoreAccountToken() {
+        return storeAccountToken;
+    }
+
+    public void setStoreAccountToken(java.util.UUID storeAccountToken) {
+        this.storeAccountToken = storeAccountToken;
+    }
+
+    public String getStoreSubscriptionId() {
+        return storeSubscriptionId;
+    }
+
+    public void setStoreSubscriptionId(String storeSubscriptionId) {
+        this.storeSubscriptionId = storeSubscriptionId;
+    }
+
+    public String getStoreProductId() {
+        return storeProductId;
+    }
+
+    public void setStoreProductId(String storeProductId) {
+        this.storeProductId = storeProductId;
+    }
+
+    public com.worktrac.backend.billing.store.StoreEnvironment getStoreEnvironment() {
+        return storeEnvironment;
+    }
+
+    public void setStoreEnvironment(com.worktrac.backend.billing.store.StoreEnvironment storeEnvironment) {
+        this.storeEnvironment = storeEnvironment;
+    }
+
+    public Instant getStorePurchaseStartedAt() {
+        return storePurchaseStartedAt;
     }
 
     public Instant getCreatedAt() {

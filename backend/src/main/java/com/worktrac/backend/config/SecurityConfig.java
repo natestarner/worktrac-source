@@ -96,6 +96,10 @@ public class SecurityConfig {
                         // StripeWebhookController. An environment with no webhook secret rejects
                         // every call rather than defaulting open.
                         .requestMatchers("/api/webhooks/stripe").permitAll()
+                        // Server-to-server (App Store, later Google Play), no JWT possible -- gated by
+                        // the store's own signature, verified by its StoreBillingProvider before
+                        // anything is read. An unconfigured store rejects every call (401).
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/store/*").permitAll()
                         // Server-to-server (Apple), no JWT of OURS possible -- authenticated by the
                         // notification itself, an Apple-signed JWT addressed to our client id,
                         // verified in AppleNotificationController before anything is read.

@@ -208,8 +208,8 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
                   // one-off treatment as much as to a hardcoded value. No HuddleMark here: billing.md
                   // reserves the mark for badges naming Plus as a product, and a small text link
                   // inside a dense row is exactly the "clutter" case it calls out.
-                  // In the App Store app outside the US storefront there is nowhere to send them
-                  // (billing channel 'none'): say why there is no Enable login, link nothing.
+                  // In an app with no store to sell through there is nowhere to send them (billing
+                  // channel 'none'): say why there is no Enable login, link nothing.
                   channel === 'none' ? (
                     <span style={planNoteStyle}>Part of Plus</span>
                   ) : (

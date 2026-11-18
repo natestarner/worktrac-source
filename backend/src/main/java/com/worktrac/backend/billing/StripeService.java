@@ -5,12 +5,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Charge;
 import com.stripe.model.Customer;
 import com.stripe.model.Subscription;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.net.Webhook;
+import com.stripe.param.ChargeListParams;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.RefundCreateParams;
 import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import com.stripe.param.checkout.SessionCreateParams.LineItem;
@@ -227,6 +230,46 @@ public class StripeService {
     public void cancelSubscription(String stripeSubscriptionId) throws StripeException {
         client().subscriptions().cancel(stripeSubscriptionId, SubscriptionCancelParams.builder().build(),
                 requestOptions(null));
+    }
+
+    /**
+     * The overlap rule's Stripe half (docs/in-app-purchase-plan.md, rule 5): an App Store
+     * subscription is billing this household, so this Stripe one must stop and give back its latest
+     * payment in full. Answers a line for the audit trail.
+     *
+     * <p>SAFE TO RETRY, because the outbox will: an already-cancelled subscription is not cancelled
+     * again, an already-refunded charge is skipped, and both writes carry idempotency keys derived
+     * from the object they act on.
+     *
+     * <p>"Latest payment" is the customer's most recent charge. A Huddle customer is only ever
+     * charged by its one subscription, so that is the payment for the period being refunded.
+     */
+    public String cancelAndRefundLatestPayment(String stripeSubscriptionId) throws StripeException {
+        Subscription subscription = client().subscriptions().retrieve(stripeSubscriptionId, requestOptions(null));
+        StringBuilder done = new StringBuilder("Stripe ").append(stripeSubscriptionId);
+        if (!"canceled".equals(subscription.getStatus())) {
+            client().subscriptions().cancel(stripeSubscriptionId, SubscriptionCancelParams.builder().build(),
+                    requestOptions("overlap-cancel-" + stripeSubscriptionId));
+            done.append(" cancelled");
+        } else {
+            done.append(" was already cancelled");
+        }
+
+        ChargeListParams latest = ChargeListParams.builder()
+                .setCustomer(subscription.getCustomer())
+                .setLimit(1L)
+                .build();
+        for (Charge charge : client().charges().list(latest, requestOptions(null)).getData()) {
+            if (Boolean.TRUE.equals(charge.getPaid()) && !Boolean.TRUE.equals(charge.getRefunded())) {
+                client().refunds().create(RefundCreateParams.builder().setCharge(charge.getId()).build(),
+                        requestOptions("overlap-refund-" + charge.getId()));
+                done.append("; refunded ").append(charge.getId()).append(" (")
+                        .append(charge.getAmount()).append(' ').append(charge.getCurrency()).append(')');
+            } else {
+                done.append("; latest charge ").append(charge.getId()).append(" needed no refund");
+            }
+        }
+        return done.toString();
     }
 
     // Verifies the Stripe-Signature header against the raw request bytes. Stripe's own check

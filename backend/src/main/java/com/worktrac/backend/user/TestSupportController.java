@@ -166,6 +166,10 @@ public class TestSupportController {
             // is", which for PRO is unlimited -- the shape a spec wants unless it is specifically
             // testing the ceiling.
             @RequestParam(required = false) Integer clientSeats,
+            // Optional: make the paid plan a PAYING subscription billed by this source (APP_STORE,
+            // STRIPE) instead of a comp, so a spec can see what a store-billed household sees.
+            // Absent keeps the comp every existing spec relies on.
+            @RequestParam(required = false) String source,
             @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
         if (!keyMatches(testKey)) {
             return ResponseEntity.notFound().build();
@@ -194,6 +198,20 @@ public class TestSupportController {
         subscription.setCompedPlan(paid ? requested : null);
         subscription.setPlan(requested);
         subscription.setClientSeats(paid ? clientSeats : null);
+        com.worktrac.backend.billing.BillingSource billedBy = parseSource(source);
+        if (paid && billedBy != null) {
+            subscription.setComped(false);
+            subscription.setCompedPlan(null);
+            subscription.setBillingSource(billedBy);
+            subscription.setStatus(com.worktrac.backend.billing.SubscriptionStatus.ACTIVE);
+            subscription.setCurrentPeriodEnd(java.time.Instant.now().plus(java.time.Duration.ofDays(30)));
+            if (billedBy.isStore()) {
+                subscription.setStoreSubscriptionId("e2e-" + accountId);
+                subscription.setStoreEnvironment(com.worktrac.backend.billing.store.StoreEnvironment.SANDBOX);
+            } else {
+                subscription.setStripeSubscriptionId("sub_e2e_" + accountId);
+            }
+        }
         subscriptionRepository.save(subscription);
 
         // Member logins are gated on the household being Plus, and that answer is cached per login
@@ -209,6 +227,17 @@ public class TestSupportController {
         accountAccessService.invalidateAccount(accountId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    private static com.worktrac.backend.billing.BillingSource parseSource(String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        try {
+            return com.worktrac.backend.billing.BillingSource.valueOf(source.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private boolean keyMatches(String suppliedKey) {

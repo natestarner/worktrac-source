@@ -62,9 +62,9 @@ public record AdminAccountDto(
          * reason the Accounts tab can hide a control the server would refuse rather than turning a
          * 409 into a toast ({@code .claude/rules/member-access.md}).
          *
-         * <p>False means a live Stripe subscription is paying for this household, so comping it
-         * would leave them charged for a plan they were just given. Shared with
-         * {@code CompGrantService.blockedByStripe} rather than mirrored -- one definition, two
+         * <p>False means a live subscription (Stripe or an app store) is paying for this household,
+         * so comping it would leave them charged for a plan they were just given. Shared with
+         * {@code CompGrantService.blockedByBilling} rather than mirrored -- one definition, two
          * readers.
          */
         boolean compGrantable,
@@ -80,5 +80,18 @@ public record AdminAccountDto(
          * have traced back to this screen.
          */
         Integer clientSeats,
-        String stripeCustomerId) {
+        String stripeCustomerId,
+        /**
+         * Who bills this household: STRIPE, APP_STORE or GOOGLE_PLAY, or null when nothing ever has.
+         * The first thing support needs when someone writes in about a charge -- it says whether to
+         * look in Stripe or tell them to go to Apple (docs/in-app-purchase-plan.md).
+         */
+        com.worktrac.backend.billing.BillingSource billingSource,
+        /**
+         * PRODUCTION or SANDBOX for a store subscription. A SANDBOX one on production is App Review or
+         * TestFlight, and expires by itself; never a real customer.
+         */
+        com.worktrac.backend.billing.store.StoreEnvironment storeEnvironment,
+        /** The store's id for the subscription (Apple: originalTransactionId), for finding it in App Store Connect. */
+        String storeSubscriptionId) {
 }

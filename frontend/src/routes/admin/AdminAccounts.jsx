@@ -137,7 +137,16 @@ function buildColumns(onEdit) {
         const suffix = row.currentPeriodEnd
           ? ` ${row.cancelAtPeriodEnd ? 'ends' : 'renews'} ${formatDate(row.currentPeriodEnd)}`
           : '';
-        return `${row.subscriptionStatus}${suffix}`;
+        // Where to look when they write in: Stripe's Dashboard, or "that's Apple's to refund".
+        // A sandbox App Store subscription on production is App Review or TestFlight, never a
+        // customer, and expires by itself.
+        const source = sourceLabel(row);
+        return (
+          <span title={row.storeSubscriptionId ? `Store subscription ${row.storeSubscriptionId}` : undefined}>
+            {`${row.subscriptionStatus}${suffix}`}
+            {source && <span style={{ display: 'block', fontSize: 12, color: 'var(--color-muted)' }}>{source}</span>}
+          </span>
+        );
       },
     },
     { key: 'peopleCount', label: 'People' },
@@ -162,11 +171,7 @@ function buildColumns(onEdit) {
           type="button"
           onClick={() => onEdit(row)}
           disabled={!row.compGrantable && !row.comped}
-          title={
-            !row.compGrantable && !row.comped
-              ? 'Paying through Stripe. Cancel that subscription in Stripe before granting a plan.'
-              : undefined
-          }
+          title={!row.compGrantable && !row.comped ? notGrantableReason(row) : undefined}
           style={actionButtonStyle}
         >
           Change plan
@@ -174,6 +179,24 @@ function buildColumns(onEdit) {
       ),
     },
   ];
+}
+
+const SOURCE_LABELS = { STRIPE: 'Stripe', APP_STORE: 'App Store', GOOGLE_PLAY: 'Google Play' };
+
+// "App Store (sandbox)", "Stripe", or nothing for a household nothing has ever billed.
+function sourceLabel(row) {
+  const name = SOURCE_LABELS[row.billingSource] ?? null;
+  if (!name) return null;
+  return row.storeEnvironment === 'SANDBOX' ? `${name} (sandbox)` : name;
+}
+
+// Why "Change plan" is disabled. The server decided (compGrantable); this only says why, in terms of
+// what the admin would have to do -- which differs, because only Stripe can be cancelled by us.
+function notGrantableReason(row) {
+  if (row.billingSource && row.billingSource !== 'STRIPE') {
+    return `Paying through ${SOURCE_LABELS[row.billingSource] ?? row.billingSource}. Only the subscriber can cancel that, in their phone's settings, before a plan can be granted.`;
+  }
+  return 'Paying through Stripe. Cancel that subscription in Stripe before granting a plan.';
 }
 
 // Why this household is on the plan it is on, for the badge's hover. The comp note is the useful
