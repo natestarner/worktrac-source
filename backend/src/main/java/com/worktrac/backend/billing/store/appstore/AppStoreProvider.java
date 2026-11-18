@@ -253,38 +253,83 @@ public class AppStoreProvider implements StoreBillingProvider {
      * in both environments. Apple names this as the way to recover after an outage; it matters most
      * for the sandbox, where Apple sends each notification once and never retries -- so a lower backend
      * cold-starting through one would otherwise miss it for good.
+     *
+     * <p>⚠️ EACH ENVIRONMENT ON ITS OWN ({@link #fromEveryEnvironment}). Apple's production API answers
+     * 401 for an app that has never had a production release, so Huddle Lower's PRODUCTION read fails
+     * forever while its sandbox read -- the only one lower needs -- works. Until 2026-11-18 the first
+     * failure ended the sweep, so lower's sandbox was never read at all.
      */
     @Override
     public java.util.List<StorePurchaseReference> undeliveredSince(Instant since) throws StoreBillingException {
-        java.util.List<StorePurchaseReference> references = new java.util.ArrayList<>();
+        return fromEveryEnvironment(environment -> undeliveredSince(environment, since));
+    }
+
+    /** One environment's read, for {@link #fromEveryEnvironment}. */
+    @FunctionalInterface
+    interface EnvironmentRead<T> {
+        java.util.List<T> read(StoreEnvironment environment) throws StoreBillingException;
+    }
+
+    /**
+     * Every environment's answer, so one environment failing never costs the other's. Throws only when
+     * NO environment answered (the caller's "could not read" warning, and the next run looks back far
+     * enough to cover this one). A partial failure is logged here: a 401 from one environment while
+     * another answered is the never-released-app case above, an expected state, so it is INFO; anything
+     * else is WARN. A 401 everywhere is a real key problem and still throws. Package-private for the test.
+     */
+    static <T> java.util.List<T> fromEveryEnvironment(EnvironmentRead<T> read) throws StoreBillingException {
+        java.util.List<T> all = new java.util.ArrayList<>();
+        Map<StoreEnvironment, StoreBillingException> failures = new EnumMap<>(StoreEnvironment.class);
         for (StoreEnvironment environment : StoreEnvironment.values()) {
-            String paginationToken = null;
-            do {
-                NotificationHistoryResponse page;
-                try {
-                    page = client(environment).getNotificationHistory(paginationToken, new NotificationHistoryRequest()
-                            .startDate(since.toEpochMilli())
-                            .endDate(Instant.now().toEpochMilli())
-                            .onlyFailures(true));
-                } catch (APIException e) {
-                    throw new StoreBillingException("Get Notification History answered " + e.getHttpStatusCode()
-                            + " " + e.getApiError() + " (" + environment + ")", e);
-                } catch (IOException e) {
-                    throw new StoreBillingException("Could not reach the App Store Server API", e);
-                }
-                if (page.getNotificationHistory() != null) {
-                    for (NotificationHistoryResponseItem item : page.getNotificationHistory()) {
-                        try {
-                            parseSignedNotification(item.getSignedPayload()).ifPresent(references::add);
-                        } catch (StoreVerificationException e) {
-                            log.warn("Skipping an undeliverable {} notification that does not verify: {}",
-                                    environment, e.getMessage());
-                        }
+            try {
+                all.addAll(read.read(environment));
+            } catch (StoreBillingException e) {
+                failures.put(environment, e);
+            }
+        }
+        if (failures.size() == StoreEnvironment.values().length) {
+            throw failures.values().iterator().next();
+        }
+        failures.forEach((environment, e) -> {
+            if (e.getCause() instanceof APIException api && api.getHttpStatusCode() == 401) {
+                log.info("Skipped App Store {}: it answered 401, which Apple gives an app with no release "
+                        + "there yet ({})", environment, e.getMessage());
+            } else {
+                log.warn("Could not read App Store {}; the next run retries it: {}", environment, e.getMessage());
+            }
+        });
+        return all;
+    }
+
+    private java.util.List<StorePurchaseReference> undeliveredSince(StoreEnvironment environment, Instant since)
+            throws StoreBillingException {
+        java.util.List<StorePurchaseReference> references = new java.util.ArrayList<>();
+        String paginationToken = null;
+        do {
+            NotificationHistoryResponse page;
+            try {
+                page = client(environment).getNotificationHistory(paginationToken, new NotificationHistoryRequest()
+                        .startDate(since.toEpochMilli())
+                        .endDate(Instant.now().toEpochMilli())
+                        .onlyFailures(true));
+            } catch (APIException e) {
+                throw new StoreBillingException("Get Notification History answered " + e.getHttpStatusCode()
+                        + " " + e.getApiError() + " (" + environment + ")", e);
+            } catch (IOException e) {
+                throw new StoreBillingException("Could not reach the App Store Server API", e);
+            }
+            if (page.getNotificationHistory() != null) {
+                for (NotificationHistoryResponseItem item : page.getNotificationHistory()) {
+                    try {
+                        parseSignedNotification(item.getSignedPayload()).ifPresent(references::add);
+                    } catch (StoreVerificationException e) {
+                        log.warn("Skipping an undeliverable {} notification that does not verify: {}",
+                                environment, e.getMessage());
                     }
                 }
-                paginationToken = Boolean.TRUE.equals(page.getHasMore()) ? page.getPaginationToken() : null;
-            } while (paginationToken != null);
-        }
+            }
+            paginationToken = Boolean.TRUE.equals(page.getHasMore()) ? page.getPaginationToken() : null;
+        } while (paginationToken != null);
         return references;
     }
 
