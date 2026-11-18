@@ -204,4 +204,51 @@ class AppStoreProviderTest {
         properties.setPrivateKey("-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----");
         assertThat(properties.privateKeyPem()).isEqualTo("-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----");
     }
+
+    // The hourly recovery sweep reads both environments. Apple's production API answers 401 for an app
+    // that has never been released (Huddle Lower, forever), and that used to end the sweep before the
+    // sandbox -- the one environment lower's purchases are in -- was ever read (found 2026-11-18).
+
+    private static com.worktrac.backend.billing.store.StoreBillingException apiFailure(int status) {
+        return new com.worktrac.backend.billing.store.StoreBillingException("answered " + status,
+                new com.apple.itunes.storekit.client.APIException(status));
+    }
+
+    @Test
+    void aProductionThatRefusesAnUnreleasedAppDoesNotCostTheSandbox() throws Exception {
+        java.util.List<String> read = AppStoreProvider.fromEveryEnvironment(environment -> {
+            if (environment == StoreEnvironment.PRODUCTION) {
+                throw apiFailure(401);
+            }
+            return java.util.List.of("sandbox-notification");
+        });
+        assertThat(read).containsExactly("sandbox-notification");
+    }
+
+    @Test
+    void aSandboxOutageDoesNotCostProduction() throws Exception {
+        java.util.List<String> read = AppStoreProvider.fromEveryEnvironment(environment -> {
+            if (environment == StoreEnvironment.SANDBOX) {
+                throw apiFailure(500);
+            }
+            return java.util.List.of("production-notification");
+        });
+        assertThat(read).containsExactly("production-notification");
+    }
+
+    @Test
+    void bothEnvironmentsAnsweringAreBothRead() throws Exception {
+        java.util.List<String> read = AppStoreProvider.fromEveryEnvironment(
+                environment -> java.util.List.of(environment.name()));
+        assertThat(read).containsExactlyInAnyOrder("PRODUCTION", "SANDBOX");
+    }
+
+    // Nothing answered: the caller's warning fires and the next run covers this one. A 401 everywhere is
+    // a real key problem, not the unreleased-app case, so it must not be swallowed.
+    @Test
+    void noEnvironmentAnsweringStillFails() {
+        assertThatThrownBy(() -> AppStoreProvider.fromEveryEnvironment(environment -> {
+            throw apiFailure(401);
+        })).isInstanceOf(com.worktrac.backend.billing.store.StoreBillingException.class);
+    }
 }
