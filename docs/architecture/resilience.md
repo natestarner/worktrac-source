@@ -187,12 +187,17 @@ Recorded here rather than fixed silently, so they are visible to the next person
 - **The Azure Container Apps liveness probe is NOT a hazard.** The concern was that pointing a
   liveness probe at `/actuator/health` would make a DB outage fail liveness on every replica at
   once, so Container Apps would restart them all — turning a recoverable degraded state into a
-  crash-loop, since restarting never fixes a DB outage. Verified 2026-08-10 via the read-only
-  service principal: `az containerapp show --query "properties.template.containers[].probes"`
-  returns `[]` for **both** `worktrac-backend-lower` and `worktrac-backend-prod`. No probes are
-  configured, so Container Apps falls back to its default TCP check, which is unaffected by DB
-  state. **If a probe is ever added, do not point liveness at `/actuator/health`** — use Spring
-  Boot's `management.endpoint.health.probes.enabled` and the `/actuator/health/liveness` group.
+  crash-loop, since restarting never fixes a DB outage. **Both backends now probe the app's own
+  health groups**, `/actuator/health/liveness` and `/actuator/health/readiness`
+  (`management.endpoint.health.probes.enabled`), and neither group checks the database. They are
+  set in worktrac-deploy's `infra/lower.bicepparam` and `infra/prod.bicepparam`; production got
+  them on 2026-11-19. **Never point a probe at `/actuator/health` itself**, which includes the db
+  contributor.
+  - *History:* on 2026-08-10 neither app had probes, which meant the platform's default TCP
+    checks. That was safe for DB outages, but its ~30s liveness restarted production five times in
+    a month for brief stalls, each a ~4-minute outage on its single small replica
+    (`docs/incidents/2026-11-19-prod-default-probes-restarted-backend.md`). Production's readiness
+    is deliberately looser than lower's (30s vs 15s): with one replica, out of rotation means down.
 - **`shouldRetryWrite` treating every 4xx as definitive** — fixed. `408 Request Timeout` and
   `429 Too Many Requests` are now retryable, since both explicitly mean "try again" and dropping a
   durable write on either violates the core invariant. The boundary is tested on both sides so the
