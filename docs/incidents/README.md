@@ -50,6 +50,7 @@ need the "why" or the debugging story.
 | 2026-10-16 | [Lower's frontend deploy failed at Azure's 250 MB limit](2026-10-16-swa-asset-accumulation-250mb.md) — `download-artifact` overlays and never deletes, so ~50 deploys of hashed assets piled up in the deploy repo (production was at 248 MB); now pruned to one previous generation via the outgoing `sw.js` | CI / deploy |
 | 2026-11-02 | [A late "no live workout" answer split a workout in offline mode](2026-11-02-late-live-session-answer-splits-workout.md) — a live-session fetch already on the wire when offline mode went on erased the first set's placeholder session, so the next set restarted the workout and the End recap dropped the earlier sets; display only. The test harness's `finally` reported it as an unrelated click timeout | Offline / log screen |
 | 2026-11-12 | [ACS stopped confirming sends, and the app resent every accepted email](2026-11-12-acs-slow-confirmation-resent-accepted-email.md) — Azure delivered hours late, the 2-minute wait threw, and the outbox re-POSTed each accepted email up to five times, reporting each as FAILED; now an accepted send is never resent, and a missing delivery report alerts after 24 hours | Email |
+| 2026-11-19 | [Production's default health probes restarted the backend five times in a month](2026-11-19-prod-default-probes-restarted-backend.md) — no `probes` meant Azure's 30s TCP liveness; each kill a ~4-minute outage on one 0.25 vCPU replica | Infra |
 
 ## Adding a new incident
 
