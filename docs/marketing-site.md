@@ -436,3 +436,17 @@ which is 3.62:1 and passes AA Large only.
 `marketing/design/` holds the Claude Design canvas artboards. They are the
 design, not the site — see the README there. When they and the shipped page
 disagree, the shipped page wins.
+
+## Email images (`assets/email/`)
+
+Added 2026-11-19. Images for one-off emails Nate sends himself (the first was the November
+friends-and-family "what's new" note, which asks for App Store ratings). No page on the site uses
+them. They are here only because the marketing SWA is a public host that serves `/assets/*`.
+
+- **Never rename or delete one after its email has gone out.** Emails already in inboxes load
+  the image from this URL every time someone opens them, so a missing file shows as a broken image.
+- **`/assets/*` is cached for a week**, so a changed image needs a new filename, not a
+  `?v=` bump: an email that has already gone out can't be edited to pick up a new query string.
+- They are cropped from real phone screenshots, not `tools/marketing-demo-shots.mjs` output, so the
+  "one script, one household" rule for `assets/shots/` doesn't apply. They were cropped so that
+  no family names appear.
