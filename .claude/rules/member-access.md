@@ -23,8 +23,8 @@ source of every bug this feature has produced:
 | **Membership** | `account_memberships` | `(account_id, user_id, person_id, account_role)`. What a credential may do **in one household**. This is the authorization boundary. |
 | **Profile** | `people` | A name you log workouts against. Exists with or without a login, and **outlives one**. |
 
-`users.account_id` still exists, nullable and unread, pending the contract half of an
-expand/contract — see the migration note at the bottom.
+`users` has no household column at all since V106 — see the note at the bottom for what leaving
+it in place cost.
 
 ## Most of the rules live in other files. Do not duplicate them here.
 
@@ -217,13 +217,21 @@ that recovers this — grace periods and drain-before-revoke were both considere
 So the revoke confirmation **says so before the owner acts**, and the handbook repeats it. Do not
 "fix" this by silently dropping the warning; the honesty is the mitigation.
 
-## ⚠️ V72 — the one piece of schema debt, and it needs a DEPLOY rather than a commit
+## ⚠️ An unmapped column is not a harmless column — the contract half of an expand/contract is a fix
 
-`users.account_id` is nullable and unread (V65, phase 2). Dropping it is the CONTRACT half of an
-expand/contract and **must not ship in the same release as the expand**: production runs
-`min-replicas=1`, so an old replica is still serving while Flyway removes the column, and every
-`SELECT` Hibernate generates for `users` on that replica names it.
+`users.account_id` was unmapped in phase 2 (V65 made it nullable) and was meant to be dropped "a
+release later" as V72. That number went to an unrelated migration and the drop was forgotten for
+over two months, during which **its live FK to `accounts` made a household undeletable** whenever a
+login created before phase 2 also belonged to another household: the deletion correctly kept that
+login, and `DELETE FROM accounts` then hit `FK_users_account` — a 503 on every attempt
+(`docs/incidents/2026-11-19-legacy-users-account-id-blocked-account-deletion.md`). V106 dropped it.
 
-That means V72 is gated on a **production release containing phase 2 having already gone out** —
-not on time passing, and not on anything in this repo. Check `worktrac-deploy`'s
-`manifests/image-tag.txt` on `origin/production` before writing it.
+- **No test could see it**, because every login a test creates is post-phase-2 and carries NULL.
+  Data only production holds is exactly where an "unread" column keeps biting.
+  `AccountDeletionTest#deletingOneHouseholdKeepsALoginThatStillBelongsToAnother` reproduced it
+  (503) only by writing the legacy value by hand.
+- **When you unmap a column, the drop is part of the same piece of work** — write it down as a
+  tracked follow-up with its gate (a production release without the read), not as a migration
+  number reserved in a comment.
+- **Never backfill memberships from a legacy column before dropping it.** A revoked login still
+  carried its old `account_id`; recreating its membership would silently undo the revocation.
