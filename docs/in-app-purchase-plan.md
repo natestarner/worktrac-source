@@ -2,7 +2,7 @@
 
 **STATUS (2026-11-18): PHASES 1 AND 2 ARE ON LOWER** (#547, with worktrac-deploy #90 giving lower
 its App Store settings). **App Store Connect is set up for both apps** ("Phase 0 progress
-(2026-11-18)"), except Pro Unlimited Yearly's price and production's review screenshots. A Huddle
+(2026-11-18)"), except Pro Unlimited Yearly's price, which stays out of 1.3.0. A Huddle
 Lower 1.3.0 TestFlight build is next; **Phase 3** (real sandbox purchases on it) is what's left
 before production. Production's backend config is worktrac-deploy #91 (draft, waiting on the
 `APPLE_IAP_PRIVATE_KEY_PROD` secret). Apple requires In-App Purchase (2026-11-16); it ships in 1.3.0.
@@ -448,9 +448,16 @@ account.
   `https://api.huddle.fitness/api/webhooks/store/app-store`: App Review and TestFlight buy in the
   sandbox even against the production app, and the backend verifies both environments. Billing
   Grace Period: 16 days, all renewals, both environments.
-- **Production review screenshots are still missing.** Take them from the Billing screen of the
-  TestFlight build during Phase 3 (the first build that shows real store prices), one per
-  subscription. They are needed before 1.3.0 is submitted, not before.
+- **Production review screenshots are in (2026-11-18), and all ten subscriptions read "Prepare for
+  Submission".** Taken from the lower TestFlight build's Billing screen: the Plus upgrade card on both
+  Plus subscriptions, the Pro card (band picker, Restore purchases) on all eight Pro ones. Apple
+  accepts one image reused across subscriptions. (The API's `state` still says `MISSING_METADATA`;
+  the App Store Connect pages are the authority.)
+- **Submit 1.3.0 with nine subscriptions, not ten: leave Pro Unlimited Yearly out.** It has no price
+  (above), and the first subscriptions go to review only from the version page, where each one is
+  added explicitly. Left unadded it stays a draft, StoreKit doesn't return it, and the app offers
+  Unlimited monthly only. Once Apple grants the higher price points, price it and submit it on its
+  own: after the first subscriptions are in review, more go from the group's table, no new version.
 - **TestFlight buys with the tester's own Apple Account**, not a Sandbox Apple Account, and is never
   charged. Sandbox accounts (one exists: Users and Access, Sandbox) only work in development builds
   from Xcode, which this project doesn't make.
