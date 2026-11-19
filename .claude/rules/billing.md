@@ -520,6 +520,11 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
   (hourly, locked) reads Apple's failed deliveries (Get Notification History, failures only) in both
   environments and re-applies them. Don't remove it as redundant with the watchdog: the watchdog
   only catches a period that has already lapsed. Full Apple checklist: `docs/in-app-purchase-plan.md`.
+  - **⚠️ Each environment is read on its own** (`AppStoreProvider.fromEveryEnvironment`). Apple's
+    production API answers **401 for an app that has never been released**, which Huddle Lower never
+    will be. When the first failure ended the sweep, lower's sandbox, the only environment its
+    purchases are in, was never read (found on lower 2026-11-18). One environment's 401 while the
+    other answered is logged at INFO; a failure in every environment still throws.
 
 ## Billing channels in the client
 
