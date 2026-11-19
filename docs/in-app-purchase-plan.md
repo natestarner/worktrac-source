@@ -1,13 +1,12 @@
 # In-App Purchase plan
 
-**STATUS (2026-11-17): PHASES 1 AND 2 BUILT on branch `feat/iap`, not merged, not deployed. Huddle
-Lower's App Store Connect setup is done ("Phase 0 progress (2026-11-17)"), except Pro Unlimited Yearly's price.**
-Backend (store-neutral core, Apple provider, V105, overlap rules, watchdog) and app (StoreKit 2
-plugin, `purchases.js`, the store channel on Billing, Restore, delete-screen notice, Help, Terms,
-Privacy, privacy manifest) are written and tested with fakes. **Waiting on Phase 0** (Nate in App
-Store Connect) before Phase 3 can prove it with real sandbox purchases. Apple requires In-App
-Purchase (2026-11-16); it ships in 1.3.0. What the build could not
-prove without Apple is listed under "Not yet proven".
+**STATUS (2026-11-18): PHASES 1 AND 2 ARE ON LOWER** (#547, with worktrac-deploy #90 giving lower
+its App Store settings). **App Store Connect is set up for both apps** ("Phase 0 progress
+(2026-11-18)"), except Pro Unlimited Yearly's price, which stays out of 1.3.0. A Huddle
+Lower 1.3.0 TestFlight build is next; **Phase 3** (real sandbox purchases on it) is what's left
+before production. Production's backend config is worktrac-deploy #91 (draft, waiting on the
+`APPLE_IAP_PRIVATE_KEY_PROD` secret). Apple requires In-App Purchase (2026-11-16); it ships in 1.3.0.
+What the build could not prove without Apple is listed under "Not yet proven".
 
 ## Why
 
@@ -410,7 +409,8 @@ account.
   | 5 | `plus.month` / `.year` | 6835701506 / 6835705535 | $3.99 / $29.99 |
 
   Monthly and yearly of one plan share a level, so switching between them is a crossgrade.
-- **Pro Unlimited Yearly has no price.** The web's $1,489.99 is above the highest price App Store
+- **Pro Unlimited Yearly has no price.** $1,489.99 (the web's $1,490, a cent under like every other
+  plan) is above the highest price App Store
   Connect offers ($1,000.00). Apple has 100 higher price points (up to $10,000), but only the Account
   Holder can request them. Until it has a price, StoreKit doesn't return the product, so the app
   doesn't offer it (`useStoreCatalog` drops what the store doesn't return). Nate decides: request the
@@ -424,6 +424,46 @@ account.
 - Still to do: that secret, then `/deploy-to-lower` of this branch and the deploy PR, then Phase 3
   on a TestFlight build. Huddle (production) gets the same subscriptions with `huddle.` ids before
   1.3.0 is submitted.
+
+## Phase 0 progress (2026-11-18): lower is live, Huddle's App Store Connect is set up
+- **Lower:** `APPLE_IAP_PRIVATE_KEY_LOWER` set, #547 deployed, worktrac-deploy #90 merged. Lower's
+  running revision carries all six `APPLE_IAP_*` settings and started cleanly.
+- **Pro Unlimited Yearly price, decided:** it stays out of the app for now (the app hides an unpriced
+  plan, so no code changes). The Account Holder asks Apple for the higher price points and, if
+  granted, sets $1,489.99. $999.99 is the fallback only if Apple refuses: it would undercut the
+  web's $1,490 by $490, and raising a subscription price later needs subscribers' consent.
+- **Huddle (production, app 6826555272):** group "Huddle" (22590367, display name "Huddle: Workout
+  Tracker"); the same ten subscriptions with `huddle.` ids, the same prices, levels and settings as
+  lower (US only, App Store only, multiseat Not Allowed, Family Sharing off, 1 Year Upfront).
+
+  | Level | Product id (`huddle.` +) | Subscription id | US price |
+  |---|---|---|---|
+  | 1 | `pro.unlimited.month` / `.year` | 6836145445 / 6836146435 | $149.99 / **none yet** |
+  | 2 | `pro.practice.month` / `.year` | 6836143374 / 6836144383 | $79.99 / $789.99 |
+  | 3 | `pro.studio.month` / `.year` | 6836142275 / 6836142893 | $39.99 / $389.99 |
+  | 4 | `pro.starter.month` / `.year` | 6836141555 / 6836142051 | $19.99 / $189.99 |
+  | 5 | `plus.month` / `.year` | 6836140810 / 6836141374 | $3.99 / $29.99 |
+
+  Notification URLs (production and sandbox) are both
+  `https://api.huddle.fitness/api/webhooks/store/app-store`: App Review and TestFlight buy in the
+  sandbox even against the production app, and the backend verifies both environments. Billing
+  Grace Period: 16 days, all renewals, both environments.
+- **Production review screenshots are in (2026-11-18), and all ten subscriptions read "Prepare for
+  Submission".** Taken from the lower TestFlight build's Billing screen: the Plus upgrade card on both
+  Plus subscriptions, the Pro card (band picker, Restore purchases) on all eight Pro ones. Apple
+  accepts one image reused across subscriptions. (The API's `state` still says `MISSING_METADATA`;
+  the App Store Connect pages are the authority.)
+- **Submit 1.3.0 with nine subscriptions, not ten: leave Pro Unlimited Yearly out.** It has no price
+  (above), and the first subscriptions go to review only from the version page, where each one is
+  added explicitly. Left unadded it stays a draft, StoreKit doesn't return it, and the app offers
+  Unlimited monthly only. Once Apple grants the higher price points, price it and submit it on its
+  own: after the first subscriptions are in review, more go from the group's table, no new version.
+- **TestFlight buys with the tester's own Apple Account**, not a Sandbox Apple Account, and is never
+  charged. Sandbox accounts (one exists: Users and Access, Sandbox) only work in development builds
+  from Xcode, which this project doesn't make.
+- **Browser automation note:** App Store Connect's level reorder (a drag-and-drop list) ignores every
+  drag while the page is hidden (`document.visibilityState === 'hidden'`, for example the window is
+  behind another one). Bring the window forward first.
 
 ## Left for Phase 0 (only visible in App Store Connect)
 - The exact price points Nate picks (the code shows whatever the store returns, so this never
