@@ -84,6 +84,9 @@ class AccountDeletionTest extends AbstractIntegrationTest {
     @Autowired
     private BillingEventRepository billingEventRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     // Stripe is unconfigured in the test profile, so the cancel-on-deletion path would never
     // run at all without this. Mocked rather than skipped because the ORDERING of that call
     // relative to the deletes is the thing worth pinning.
@@ -325,6 +328,66 @@ class AccountDeletionTest extends AbstractIntegrationTest {
         JsonNode secondRegistration = register(email, "Alex Again");
         assertTrue(userRepository.existsByEmail(email));
         assertEquals("Alex Again", secondRegistration.get("person").get("name").asText());
+    }
+
+    // A login can belong to several households, and deleting ONE of them must keep the login (it is
+    // still somebody's way into the other) and must succeed. Production failed this for every login
+    // created before member logins: users.account_id still named the household the login registered
+    // in, its foreign key to accounts was still live, and AccountDeletionService rightly keeps a
+    // login that has another membership -- so the final DELETE FROM accounts hit FK_users_account
+    // and the person got a 503 ("having trouble reaching your data") on every attempt, with no way
+    // forward. Logins created here never carry that value, which is why no test noticed;
+    // usersNoLongerCarryALegacyAccountId below pins the schema half.
+    @Test
+    void deletingOneHouseholdKeepsALoginThatStillBelongsToAnother() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String sharedEmail = "shared-" + suffix + "@example.com";
+        JsonNode regA = register(sharedEmail, "Stephanie");
+        String tokenA = regA.get("token").asText();
+        long accountIdA = regA.get("account").get("id").asLong();
+        long sharedUserId = userRepository.findByEmail(sharedEmail).orElseThrow().getId();
+        seedAccountData(tokenA, regA.get("person").get("id").asLong());
+
+        JsonNode regB = register("otherhouse-" + suffix + "@example.com", "Nate");
+        long accountIdB = regB.get("account").get("id").asLong();
+        // A plain MEMBER row in B with no profile: the smallest shape of "this login also
+        // belongs to another household". The invite flow itself is MembershipInviteTest's job.
+        jdbc.update("INSERT INTO account_memberships (account_id, user_id, person_id, account_role, created_at) "
+                + "VALUES (?, ?, NULL, 'MEMBER', GETDATE())", accountIdB, sharedUserId);
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        assertTrue(accountRepository.findById(accountIdA).isEmpty());
+        assertTrue(userRepository.existsByEmail(sharedEmail), "the login still belongs to household B");
+
+        // And it still signs in -- now straight into the one household it has left.
+        JsonNode login = objectMapper.readTree(mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", sharedEmail, "password", RegistrationTestSupport.PASSWORD))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertEquals(accountIdB, login.get("account").get("id").asLong());
+    }
+
+    // The schema half of the test above. users.account_id was unmapped in #250 (V65 made it
+    // nullable) and dropped in V106; while it existed, its FK to accounts made a household
+    // undeletable whenever a login created before #250 also belonged to another household.
+    @Test
+    void usersNoLongerCarryALegacyAccountId() {
+        Integer column = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'account_id'",
+                Integer.class);
+        Integer fk = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID('users') "
+                        + "AND referenced_object_id = OBJECT_ID('accounts')",
+                Integer.class);
+        assertEquals(0, column);
+        assertEquals(0, fk);
     }
 
     private boolean containsName(JsonNode items, String name) {

@@ -16,8 +16,8 @@ import java.time.Instant;
 //
 // users.account_id used to live here, which made one email mean one household forever. That moved
 // to account_memberships in V63 so a single password can reach several accounts -- a kid who later
-// pays for their own, or a parent who also coaches a team. The column is still on the table
-// (nullable, unread) until phase 7 drops it; see V65 for why that is two releases rather than one.
+// pays for their own, or a parent who also coaches a team. V65 made the column nullable and V106
+// dropped it -- see V106 for why leaving it on the table blocked account deletion.
 @Entity
 @Table(name = "users")
 public class User {

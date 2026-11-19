@@ -51,6 +51,7 @@ need the "why" or the debugging story.
 | 2026-11-02 | [A late "no live workout" answer split a workout in offline mode](2026-11-02-late-live-session-answer-splits-workout.md) — a live-session fetch already on the wire when offline mode went on erased the first set's placeholder session, so the next set restarted the workout and the End recap dropped the earlier sets; display only. The test harness's `finally` reported it as an unrelated click timeout | Offline / log screen |
 | 2026-11-12 | [ACS stopped confirming sends, and the app resent every accepted email](2026-11-12-acs-slow-confirmation-resent-accepted-email.md) — Azure delivered hours late, the 2-minute wait threw, and the outbox re-POSTed each accepted email up to five times, reporting each as FAILED; now an accepted send is never resent, and a missing delivery report alerts after 24 hours | Email |
 | 2026-11-19 | [Production's default health probes restarted the backend five times in a month](2026-11-19-prod-default-probes-restarted-backend.md) — no `probes` meant Azure's 30s TCP liveness; each kill a ~4-minute outage on one 0.25 vCPU replica | Infra |
+| 2026-11-19 | [A forgotten legacy column made households undeletable](2026-11-19-legacy-users-account-id-blocked-account-deletion.md) — `users.account_id` was unmapped in phase 2 but never dropped; its FK failed the final `DELETE FROM accounts` for any pre-phase-2 login that also belonged to another household, a 503 on every attempt | Account / schema |
 
 ## Adding a new incident
 
