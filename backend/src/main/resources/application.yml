@@ -11,8 +11,10 @@ spring:
       # database sees: replicas x maximum-pool-size must stay well under Azure SQL's limits (Basic,
       # 5 DTU: 300 connections and ~30 concurrent requests). 10 x the planned maxReplicas (3-4) fits.
       maximum-pool-size: 10
-      # Hikari's default keeps maximum-pool-size idle connections open forever. Two warm ones per
-      # replica answer the first requests after a quiet spell; the rest open on demand.
+      # Two warm connections; the rest open on demand. That suits local dev and the test suite, where
+      # many backends and cached test contexts share one SQL Server. Lower and production override it
+      # to keep all 10 warm: an app open needs ~8 at once, and opening them mid-request made /me
+      # take seconds (application-production.yml).
       minimum-idle: 2
       # How long a request waits for a free connection before failing. 10s, deliberately below the
       # client's 15s abort: a saturated pool then answers an honest 503 (GlobalExceptionHandler),

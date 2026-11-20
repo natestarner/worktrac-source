@@ -13,6 +13,9 @@ spring:
       # how long an ordinary request waits for a pooled connection, is set for every profile in
       # application.yml.)
       initialization-fail-timeout: 60000
+      # Whole pool warm, matching production so lower exercises the same setting first. The
+      # reasoning and the evidence are in application-production.yml.
+      minimum-idle: 10
   jpa:
     show-sql: false
   flyway:
