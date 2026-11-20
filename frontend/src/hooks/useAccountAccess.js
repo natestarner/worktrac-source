@@ -26,17 +26,23 @@ export function useAccountAccess() {
   const { membership, people } = useAuth();
 
   const isMember = membership?.accountRole === 'MEMBER';
-  // Pro's assistant. Sees and writes every person, but owns nothing about the ACCOUNT -- no
-  // billing, no deletion, no household settings, no account-wide export. See AccountRole.MANAGER.
+  // A household's "trusted member" (Pro calls it an assistant). Sees everyone and writes everyone
+  // EXCEPT the account owner's own person, and owns nothing about the ACCOUNT -- no billing, no
+  // deletion, no household settings, no account-wide export, no removing people, no deciding who
+  // else is trusted. See AccountRole.MANAGER.
   const isManager = membership?.accountRole === 'MANAGER';
+  // The owner's PERSON id, sent to non-owners only (MembershipDto.ownerPersonId). A manager's one
+  // write refusal is this person, so canWritePerson needs it. Absent (an older snapshot, an owner)
+  // means "nothing closed to me" -- fail open, like everything else here.
+  const ownerPersonId = membership?.ownerPersonId ?? null;
   // ⚠️ Fails OPEN, exactly like the rest of this hook: an absent status (a v1 snapshot, a
   // still-booting render) means NOT paused. The alternative locks somebody out of the whole app
   // over a missing field they cannot do anything about -- and the server refuses every request
   // anyway, so being wrong here costs one 403 rather than a wrongly-bricked app.
   const isPaused = membership?.status === 'PAUSED_PLAN';
   const selfPersonId = membership?.personId ?? null;
-  // Null for an owner by design -- the server resolves it only for members, since an owner does not
-  // need telling who the owner is. Every consumer must render that absence as naming nobody rather
+  // Null for an owner by design -- the server resolves it only for non-owners (members and trusted
+  // members), since an owner does not need telling who the owner is. Every consumer must render that absence as naming nobody rather
   // than printing "null".
   const ownerName = membership?.ownerName ?? null;
 
@@ -87,8 +93,25 @@ export function useAccountAccess() {
      * the one frame between mount and auto-select.
      */
     canWritePerson(personId) {
-      if (!isMember || personId == null) return true;
+      if (personId == null) return true;
+      if (isManager) {
+        // Everyone but the owner's own person -- PersonService.requireWritablePerson's
+        // WRITE_ACCOUNT_OWNER rule. Unknown owner person (null) fails open.
+        return ownerPersonId == null || String(ownerPersonId) !== String(personId);
+      }
+      if (!isMember) return true;
       return selfPersonId != null && String(selfPersonId) === String(personId);
+    },
+    /**
+     * The sentence for a control canWritePerson refuses: a member is told they can only change
+     * their own; a trusted member, looking at the owner, is told whose it is instead -- "only your
+     * own" would be false for someone who can log for everyone else.
+     */
+    readOnlyMessage(personId) {
+      if (isManager && ownerPersonId != null && String(ownerPersonId) === String(personId)) {
+        return `Only ${ownerName || 'the account owner'} can change their own workouts.`;
+      }
+      return 'You can only change your own workouts.';
     },
     /**
      * The people this login can see — already filtered by the server.

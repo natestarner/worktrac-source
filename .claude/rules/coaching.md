@@ -25,7 +25,7 @@ Team is an addition rather than a second retrofit.
 | Role | Sees | Writes | Account settings & billing |
 |---|---|---|---|
 | `OWNER` | everyone | everyone | yes |
-| `MANAGER` | everyone | everyone | **no** |
+| `MANAGER` | everyone | everyone **except the owner's own person** | **no** |
 | `MEMBER` | self, or everyone — decided by `members_see_everyone` | self only | no |
 
 - **A private client is not a new role.** It is `MEMBER` in an account with
@@ -34,11 +34,19 @@ Team is an addition rather than a second retrofit.
   "coach", so that word has to stay free — `AccountVocab` is where it will be spent, as display
   vocabulary, not as a role name. Owner / Manager / Member also reads correctly for a practice, a
   club **and** a second parent on a family account, which no domain-specific ladder does.
-- ⚠️ **`MANAGER` IS SCAFFOLDED BUT NOT YET ASSIGNABLE.** Permissions, vocabulary, `useAccountAccess`
-  and `PlanFeature.MANAGER_ROLE` are all in place, but **no production path sets the role** —
-  `MembershipInviteService` always creates a `MEMBER`. So every "the assistant can…" claim below is
-  verified against the permission map, not against a flow anybody can reach. Whoever builds the
-  promotion path should re-read this file rather than trust that it is already exercised.
+- ⚠️ **`MANAGER` IS ASSIGNABLE (2026-11), on Plus AND Pro, and only by the owner.** An invitation
+  still always creates a `MEMBER`; the owner then turns the role on for an ACTIVE login with
+  `PUT /api/account/logins/{personId}/role` (`ASSIGN_ROLES`, `MembershipInviteService.setRole`),
+  which the client shows as the **"Trusted"** toggle on a family account and **"Assistant"** on Pro
+  (`managerLabel(vocab)`). Promoting needs `PlanFeature.MANAGER_ROLE` (409 otherwise); demoting
+  never does. Pinned end to end by `TrustedLoginTest` and `e2e/tests/member-trusted.spec.ts`.
+- ⚠️ **Three owner-only permissions came with making it assignable, and a manager holds none:**
+  `WRITE_ACCOUNT_OWNER` (the owner's own person stays the owner's — enforced in
+  `PersonService.requireWritablePerson` / `mayWrite`, the only place that may combine it with "is
+  this the owner's person?"), `REMOVE_PEOPLE` (deleting a person's whole history, split off
+  `MANAGE_PEOPLE`), and `ASSIGN_ROLES` (who is trusted, including removing a trusted login).
+  `MembershipDto.ownerPersonId` carries the owner's person to non-owners so the client's
+  `canWritePerson` shows that log read-only instead of offering doomed writes.
 - **An assistant is NOT free.** Seats count people, and the owner's is the only one that doesn't
   spend one — an assistant with a training profile takes a client place like anybody else. The
   marketing, Terms and Help copy all said the opposite for a while; the gate never did. See
@@ -116,7 +124,7 @@ read by `frontend/src/utils/accountVocab.js`.
 
 | Plan | account | owner | member | manager |
 |---|---|---|---|---|
-| Free / Plus | household | household owner | family member | co-parent |
+| Free / Plus | household | household owner | family member | trusted member |
 | **Pro** | **practice** | **trainer** | **client** | **assistant** |
 | Team *(next)* | team | coach | athlete | assistant coach |
 

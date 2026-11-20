@@ -13,12 +13,17 @@ vi.mock('../../hooks/useOnlineStatus', () => ({
   useOnlineStatus: () => online.current,
 }));
 
+const MEMBER_MESSAGE = 'You can only change your own workouts.';
+
 function asOwner() {
-  access.current = { canWritePerson: () => true };
+  access.current = { canWritePerson: () => true, readOnlyMessage: () => MEMBER_MESSAGE };
 }
 
 function asMemberWhoOwns(personId) {
-  access.current = { canWritePerson: (id) => id == null || String(id) === String(personId) };
+  access.current = {
+    canWritePerson: (id) => id == null || String(id) === String(personId),
+    readOnlyMessage: () => MEMBER_MESSAGE,
+  };
 }
 
 function renderNested(personId) {

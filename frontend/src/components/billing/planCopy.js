@@ -43,6 +43,9 @@ export const PLUS_BENEFITS = [
   { id: 'records', label: 'All-time records and trends over any range' },
   { id: 'import', label: 'Import past workouts from a spreadsheet or another app' },
   { id: 'logins', label: 'A personal login for anyone in the household who wants one' },
+  // PlanFeature.MANAGER_ROLE -- the "Trusted" toggle. Kept apart from "logins" so this list stays
+  // one line per PlanFeature, which is how PlanFeatureMappingTest's note says to keep them aligned.
+  { id: 'trusted', label: 'Trusted logins: let another adult log workouts for everyone' },
 ];
 
 // What Pro adds ON TOP of Plus. Written as the difference rather than the whole list, because that

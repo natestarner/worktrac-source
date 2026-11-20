@@ -22,7 +22,7 @@ import { useAccountAccess } from '../../hooks/useAccountAccess';
 export default function ReadOnlyPersonNotice() {
   const { activePersonId } = useAppState();
   const { people } = useAuth();
-  const { canWritePerson } = useAccountAccess();
+  const { canWritePerson, isManager } = useAccountAccess();
 
   if (canWritePerson(activePersonId)) return null;
 
@@ -51,8 +51,13 @@ export default function ReadOnlyPersonNotice() {
         {/* Deliberately says what you CAN do, not what is withheld -- the same framing rule
             billing.md applies to the Free-tier window. "Viewing only" reads as a state; "you do
             not have permission" reads as a failure. */}
-        Viewing {person ? person.name : 'someone else'}&rsquo;s workouts. You can look, but only
-        your own are yours to change.
+        {/* A trusted member (isManager) only ever reaches this on the OWNER's person -- they can
+            change everyone else's -- so "only your own" would be false for them. */}
+        {isManager
+          ? <>Viewing {person ? person.name : 'the account owner'}&rsquo;s workouts. You can look,
+            but only {person ? person.name : 'they'} can change them.</>
+          : <>Viewing {person ? person.name : 'someone else'}&rsquo;s workouts. You can look, but only
+            your own are yours to change.</>}
       </span>
     </div>
   );

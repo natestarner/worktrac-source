@@ -56,6 +56,14 @@ public enum AccountRole {
         permissions.remove(Permission.DELETE_ACCOUNT);
         permissions.remove(Permission.MANAGE_HOUSEHOLD);
         permissions.remove(Permission.EXPORT_ACCOUNT_DATA);
+        // ⚠️ Three more, added when the role became assignable (a family's "trusted member"):
+        // the owner's own log stays the owner's, deleting a person's whole history stays the
+        // owner's call, and only the owner decides who else holds this role. A second parent logs
+        // for the kids; they do not get to rewrite the account holder's sets, wipe a child's
+        // history, or crown a third adult. See Permission's comments on each.
+        permissions.remove(Permission.WRITE_ACCOUNT_OWNER);
+        permissions.remove(Permission.REMOVE_PEOPLE);
+        permissions.remove(Permission.ASSIGN_ROLES);
         return Collections.unmodifiableSet(permissions);
     }
 

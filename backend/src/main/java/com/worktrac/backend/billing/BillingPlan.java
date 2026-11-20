@@ -36,22 +36,27 @@ public enum BillingPlan {
     private static final Set<PlanFeature> PLUS_FEATURES = Collections.unmodifiableSet(EnumSet.of(
             PlanFeature.FULL_HISTORY,
             PlanFeature.DATA_IMPORT,
-            PlanFeature.MEMBER_LOGINS));
+            PlanFeature.MEMBER_LOGINS,
+            // A household may make a second adult "trusted" -- log for everyone, own nothing about
+            // the account. Plus as well as Pro since 2026-11: the shared-iPad family (one parent
+            // signed in, logging for themselves and the kids) is the case member logins created
+            // and could not serve. Pro still has it through PLUS_FEATURES.
+            PlanFeature.MANAGER_ROLE));
 
     // ⚠️ Everything PLUS has, plus whatever is Pro-specific. Built FROM Plus's set rather than
     // retyped, so a feature added to Plus cannot be silently missing from the tier above it --
     // which would present as a household paying more and getting less.
     //
-    // The two Pro-specific ones are what make it a trainer product rather than a bigger Plus:
-    // clients who cannot see each other, and an assistant who can see all of them. The roster and
-    // programs are added by the phases that ENFORCE them -- a PlanFeature nothing checks is a gate
-    // nobody can fail, so declaring one early is capability on paper only.
+    // The Pro-specific ones are what make it a trainer product rather than a bigger Plus: clients
+    // who cannot see each other (an assistant who can see all of them, MANAGER_ROLE, used to be
+    // here too and moved to Plus in 2026-11 for families -- Pro keeps it through PLUS_FEATURES).
+    // The roster and programs are added by the phases that ENFORCE them -- a PlanFeature nothing
+    // checks is a gate nobody can fail, so declaring one early is capability on paper only.
     private static final Set<PlanFeature> PRO_FEATURES = proFeatures();
 
     private static Set<PlanFeature> proFeatures() {
         EnumSet<PlanFeature> features = EnumSet.copyOf(PLUS_FEATURES);
         features.add(PlanFeature.PRIVATE_MEMBERS);
-        features.add(PlanFeature.MANAGER_ROLE);
         features.add(PlanFeature.ROSTER);
         features.add(PlanFeature.CHECK_INS);
         return Collections.unmodifiableSet(features);

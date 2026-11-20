@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginsSection from './LoginsSection';
-import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin, setLoginRole } from '../../api/logins';
 
 vi.mock('../../api/logins', () => ({
   listLogins: vi.fn(),
@@ -10,6 +10,7 @@ vi.mock('../../api/logins', () => ({
   inviteLogin: vi.fn(),
   revokeLogin: vi.fn(),
   unlockLogin: vi.fn(),
+  setLoginRole: vi.fn(),
 }));
 
 const showToast = vi.fn();
@@ -394,5 +395,108 @@ describe('LoginsSection add-and-invite', () => {
     fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
 
     expect(screen.getByText(/never be able to see or set their password/)).toBeInTheDocument();
+  });
+});
+
+// The owner's "Trusted" toggle -- AccountRole.MANAGER, made assignable on Plus and Pro.
+describe('LoginsSection trusted logins', () => {
+  const TRUST_ROWS = [
+    { personId: 1, personName: 'Nate', status: 'ACTIVE', email: 'nate@example.com', isSelf: true, role: 'OWNER' },
+    { personId: 2, personName: 'Jess', status: 'ACTIVE', email: 'jess@example.com', isSelf: false, role: 'MEMBER' },
+    { personId: 3, personName: 'Leo', status: 'NONE', email: null, isSelf: false, role: null },
+    { personId: 4, personName: 'Alex', status: 'INVITED', email: 'alex@example.com', isSelf: false, role: null },
+    { personId: 5, personName: 'Mae', status: 'ACTIVE', email: 'mae@example.com', isSelf: false, role: 'MANAGER' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listLogins.mockResolvedValue(TRUST_ROWS);
+    setLoginRole.mockResolvedValue({});
+    revokeLogin.mockResolvedValue(undefined);
+  });
+
+  // Only an active login that is not the owner's own can be trusted -- the server 409s the rest,
+  // so the control must not be offered there.
+  it('offers the toggle only on active logins other than the owner', async () => {
+    render(<LoginsSection plan="PLUS" />);
+    await screen.findByText('Jess');
+
+    expect(screen.getByRole('checkbox', { name: 'Trusted: Jess' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Trusted: Mae' })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Trusted: Nate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Trusted: Leo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Trusted: Alex' })).not.toBeInTheDocument();
+  });
+
+  it('says what Trusted grants beside the toggle', async () => {
+    render(<LoginsSection plan="PLUS" vocab={{ account: 'household' }} />);
+    await screen.findByText('Jess');
+    expect(screen.getAllByText(/can log workouts for everyone in the household/i).length).toBeGreaterThan(0);
+  });
+
+  it('asks before trusting someone, naming what it grants and what it does not', async () => {
+    render(<LoginsSection plan="PLUS" />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Trusted: Jess' }));
+
+    const [message, , options] = openConfirm.mock.calls[0];
+    expect(message).toMatch(/log, edit and delete workouts for everyone/i);
+    expect(message).toMatch(/except you/i);
+    expect(options).toEqual({ confirmLabel: 'Make trusted' });
+    await waitFor(() => expect(setLoginRole).toHaveBeenCalledWith(2, 'MANAGER'));
+    expect(showToast).toHaveBeenCalledWith('Jess can now log for everyone.');
+    await waitFor(() => expect(listLogins).toHaveBeenCalledTimes(2));
+  });
+
+  // Taking access away needs no confirmation.
+  it('turns trust off without asking', async () => {
+    render(<LoginsSection plan="PLUS" />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Trusted: Mae' }));
+
+    await waitFor(() => expect(setLoginRole).toHaveBeenCalledWith(5, 'MEMBER'));
+    expect(openConfirm).not.toHaveBeenCalled();
+  });
+
+  // Pro keeps its own word for the same role.
+  it('calls it Assistant on a trainer account', async () => {
+    render(<LoginsSection plan="PRO" vocab={{ account: 'practice', manager: 'assistant' }} />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Assistant: Jess' }));
+
+    const [message, , options] = openConfirm.mock.calls[0];
+    expect(message).toMatch(/everyone in this practice except you/i);
+    expect(options).toEqual({ confirmLabel: 'Make assistant' });
+    expect(screen.queryByRole('checkbox', { name: /Trusted/ })).not.toBeInTheDocument();
+  });
+
+  it('offers no toggle on Free', async () => {
+    // MemoryRouter: on Free the section links to Plus.
+    render(<MemoryRouter><LoginsSection plan="FREE" /></MemoryRouter>);
+    await screen.findByText('Jess');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  // A trusted member also reaches this section (MANAGE_LOGINS), but only the owner may trust anyone
+  // (ASSIGN_ROLES) or remove a trusted login -- and nobody removes the owner's.
+  describe('viewed by a trusted member', () => {
+    const AS_MAE = TRUST_ROWS.map((r) => ({ ...r, isSelf: r.personId === 5 }));
+
+    beforeEach(() => listLogins.mockResolvedValue(AS_MAE));
+
+    it('shows who is trusted as a badge, with no toggle', async () => {
+      render(<LoginsSection plan="PLUS" isOwner={false} />);
+      await screen.findByText('Jess');
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(screen.getByText('TRUSTED')).toBeInTheDocument();
+    });
+
+    it('offers Remove login only where the server would allow it', async () => {
+      listLogins.mockResolvedValue([
+        ...AS_MAE,
+        { personId: 6, personName: 'Kit', status: 'ACTIVE', email: 'kit@example.com', isSelf: false, role: 'MANAGER' },
+      ]);
+      render(<LoginsSection plan="PLUS" isOwner={false} />);
+      await screen.findByText('Jess');
+      // Jess (a member) and Alex (an invitation) -- not Nate (owner), Mae (self) or Kit (trusted).
+      expect(screen.getAllByRole('button', { name: 'Remove login' })).toHaveLength(2);
+    });
   });
 });

@@ -242,8 +242,9 @@ public class WorkoutSetService {
                 // response this caller can see -- so it is not a collision anyone reaches by
                 // accident. Failing the forger's own write is a better outcome than serving them
                 // the row, and better than a terminal 4xx, which would discard a real write.
-                .filter(existing -> access.has(Permission.WRITE_OTHER_PEOPLE)
-                        || access.isSelf(existing.getPerson().getId()))
+                // personService.mayWrite, not a local WRITE_OTHER_PEOPLE-or-self: that re-derivation
+                // missed the owner's-own-person rule a MANAGER is subject to.
+                .filter(existing -> personService.mayWrite(existing.getPerson(), access))
                 .map(existing -> {
                     BestDto best = statsService.getBest(existing.getPerson().getId(), existing.getExercise().getId())
                             .orElse(null);

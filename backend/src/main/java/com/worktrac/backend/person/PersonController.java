@@ -74,11 +74,13 @@ public class PersonController {
                 request.weightIncrement(), request.durationIncrementSeconds());
     }
 
-    // MANAGE_PEOPLE rather than person-scoped, deliberately: this deletes that person's entire
-    // training history, so it must not be reachable by a member acting on themselves.
+    // REMOVE_PEOPLE rather than person-scoped, deliberately: this deletes that person's entire
+    // training history, so it must not be reachable by a member acting on themselves. And not
+    // MANAGE_PEOPLE, which a MANAGER (a trusted member) holds so they can add and rename people:
+    // wiping somebody's whole history is the owner's call alone.
     @DeleteMapping("/{personId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Permission.MANAGE_PEOPLE)
+    @RequiresPermission(Permission.REMOVE_PEOPLE)
     public void remove(@PathVariable Long personId) {
         personService.remove(currentUser.access(), personId);
     }

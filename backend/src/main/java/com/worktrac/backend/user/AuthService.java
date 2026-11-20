@@ -19,6 +19,7 @@ import com.worktrac.backend.membership.AccountChoiceDto;
 import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.membership.MembershipInvite;
 import com.worktrac.backend.membership.MembershipInviteService;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
@@ -372,7 +373,7 @@ public class AuthService {
         return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.entitledPlan(account.getId())),
                 MembershipDto.from(membership,
-                        ownerNameForMember(account.getId(), membership.getAccountRole()),
+                        ownerFor(account.getId(), membership.getAccountRole()),
                         subscriptionService.entitledPlan(account.getId())),
                 PersonDto.from(primaryPerson));
     }
@@ -498,7 +499,7 @@ public class AuthService {
                 .toList();
         return new MeResponse(UserDto.from(user),
                 AccountDto.from(account, subscriptionService.entitledPlan(accountId)),
-                MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
+                MembershipDto.from(access, ownerFor(accountId, access.accountRole())),
                 personService.list(access),
                 households,
                 ClientConfigDto.from(nativeAppProperties),
@@ -548,12 +549,20 @@ public class AuthService {
      * membership with no person. Every consumer must degrade to a message that names nobody
      * rather than printing "null".
      */
-    private String ownerNameForMember(Long accountId, AccountRole role) {
-        if (role != AccountRole.MEMBER) {
-            return null;
+    private MembershipDto.Owner ownerFor(Long accountId, AccountRole role) {
+        // Asked as a PERMISSION, not `role == OWNER` (backend-core.md): the login that may write the
+        // owner's own person is the owner, and that is exactly who needs neither field. Members and
+        // managers both get them -- a manager needs the person id so the client shows the owner's
+        // log read-only, and the name so that refusal can say whose it is.
+        if (role.permissions(true).contains(Permission.WRITE_ACCOUNT_OWNER)) {
+            return MembershipDto.Owner.NOBODY;
         }
-        return membershipRepository.findOwnerPersonNames(accountId, AccountRole.OWNER).stream()
+        String name = membershipRepository.findOwnerPersonNames(accountId, AccountRole.OWNER).stream()
                 .findFirst()
                 .orElse(null);
+        Long personId = membershipRepository.findOwnerPersonIds(accountId, AccountRole.OWNER).stream()
+                .findFirst()
+                .orElse(null);
+        return new MembershipDto.Owner(name, personId);
     }
 }

@@ -157,6 +157,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
             case MANAGE_BILLING -> "Only the household owner can manage the plan.";
             case DELETE_ACCOUNT -> "Only the household owner can delete the account.";
             case MANAGE_PEOPLE -> "Only the household owner can add or remove people.";
+            case REMOVE_PEOPLE -> "Only the household owner can remove a person.";
+            case ASSIGN_ROLES -> "Only the household owner can change who is trusted.";
             case MANAGE_LOGINS -> "Only the household owner can manage logins.";
             case MANAGE_HOUSEHOLD -> "Only the household owner can change household settings.";
             case IMPORT_DATA -> "Only the household owner can import workouts.";

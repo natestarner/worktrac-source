@@ -31,7 +31,7 @@ public record AccountVocab(String account, String owner, String member, String m
     // "Trainer" and "Household owner" both read correctly as a field label. Do not "normalise" it
     // to one word -- "Household" alone would name the account, not the person running it.
     private static final AccountVocab FAMILY =
-            new AccountVocab("household", "household owner", "family member", "co-parent");
+            new AccountVocab("household", "household owner", "family member", "trusted member");
     private static final AccountVocab PRACTICE =
             new AccountVocab("practice", "trainer", "client", "assistant");
 

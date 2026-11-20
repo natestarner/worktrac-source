@@ -124,8 +124,8 @@ to every gate.
   training profile, because a trainer who also trains must not pay to log their own squats. An
   assistant is a second pair of hands with a login, not a discount.
   - Seats count **people**, never logins or roles. That is what keeps this one subtraction rather
-    than a per-role tally, and it is why the answer does not change when `MANAGER` finally becomes
-    assignable (nothing in production sets that role yet — see `coaching.md`).
+    than a per-role tally, and it is why the answer did not change when `MANAGER` became assignable
+    (2026-11, the owner's Trusted/Assistant toggle — see `coaching.md`).
 - **UNLIMITED still has a number** (`peoplePerProAccount`). "Unlimited" is a pricing promise, not
   an invitation to create rows without bound. `clientLimit()` is **null** rather than a sentinel,
   because "unlimited" and "a very large number" read the same in a comparison and completely

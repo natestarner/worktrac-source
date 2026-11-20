@@ -5,9 +5,10 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
-import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin, setLoginRole } from '../../api/logins';
 import { planIncludes } from '../../utils/planFeatures';
 import { planCopy } from '../billing/planCopy';
+import { managerLabel } from '../../utils/accountVocab';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 /**
@@ -27,7 +28,12 @@ import { useBillingChannel } from '../../hooks/useBillingChannel';
 // refreshPeople is a PROP rather than useAuth(): this component is rendered bare by its own test,
 // and a new context dependency would make every one of those tests need a provider to exercise the
 // invite flow. Same call as RoutineFormModal's defaultUnit.
-export default function LoginsSection({ plan, vocab, refreshPeople }) {
+//
+// `isOwner` decides the two controls only the OWNER may use (ASSIGN_ROLES): the Trusted toggle, and
+// Remove login on a trusted login. Defaults to true so the existing bare-rendered tests keep the
+// owner's screen they were written against. A trusted member (MANAGER) also reaches this section --
+// they hold MANAGE_LOGINS -- and sees the badge instead of the toggle.
+export default function LoginsSection({ plan, vocab, refreshPeople, isOwner = true }) {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
   const [addingPerson, setAddingPerson] = useState(false);
@@ -97,6 +103,37 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
     },
   );
 
+  const changeRole = run(
+    async (row, role) => {
+      await setLoginRole(row.personId, role);
+      showToast(role === 'MANAGER'
+        ? `${row.personName} can now log for everyone.`
+        : `${row.personName} can now change only their own workouts.`);
+      await load();
+    },
+    {
+      offlineMessage: 'Changing who is trusted needs a connection.',
+      errorMessage: "Couldn't change that login.",
+      // Every refusal is a sentence for the owner: needs a login first, part of Plus.
+      showServerMessage: true,
+    },
+  );
+
+  // Turning it ON asks first, and says exactly what it grants -- including the one thing it does
+  // not. Turning it OFF takes access away and needs no confirmation.
+  function confirmTrust(row) {
+    openConfirm(
+      `Let ${row.personName} log for everyone? They'll be able to log, edit and delete workouts for `
+        + `everyone in this ${vocab?.account ?? 'household'} except you. You can turn this off at any time.`,
+      () => changeRole(row, 'MANAGER'),
+      { confirmLabel: `Make ${roleWord.toLowerCase()}` },
+    );
+  }
+
+  const canTrust = isOwner && planIncludes(plan, 'MANAGER_ROLE');
+  // "Trusted" on a family account, "Assistant" on Pro (the user kept Pro's own word).
+  const roleWord = managerLabel(vocab);
+
   const unlock = run(
     async (row) => {
       await unlockLogin(row.personId);
@@ -145,6 +182,9 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
         <div style={introStyle}>
           Give someone their own email and password so they can log their own workouts. They&rsquo;ll
           see everyone&rsquo;s workouts but can only change their own.
+          {canTrust && (
+            <> Turn on <strong>{roleWord}</strong> to let someone log for everyone else too.</>
+          )}
         </div>
         {/* One motion, for the case a trainer is actually in: a client who does not exist yet. The
             per-person Enable login below stays for everybody already on the account -- a family
@@ -180,9 +220,34 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
                   {row.email}
                 </div>
               )}
+              {/* The owner's Trusted toggle. Only for an ACTIVE login that is not the owner's own --
+                  the server refuses both other cases (409) -- and only on a plan that includes it.
+                  The label is the word plus what it means, so nobody has to guess what "Trusted"
+                  grants. */}
+              {canTrust && row.status === 'ACTIVE' && !row.isSelf && row.role !== 'OWNER' && (
+                <label style={trustRowStyle}>
+                  <OfflineDisabledWrap message="Changing who is trusted needs a connection.">
+                    <input
+                      type="checkbox"
+                      checked={row.role === 'MANAGER'}
+                      onChange={(e) => (e.target.checked ? confirmTrust(row) : changeRole(row, 'MEMBER'))}
+                      aria-label={`${roleWord}: ${row.personName}`}
+                      style={{ width: 18, height: 18, margin: 0 }}
+                    />
+                  </OfflineDisabledWrap>
+                  <span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{roleWord}</span>
+                    {' '}&mdash; can log workouts for everyone in the {vocab?.account ?? 'household'}.
+                  </span>
+                </label>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               {row.status === 'ACTIVE' && <span style={activeBadgeStyle}>HAS LOGIN</span>}
+              {/* Everyone but the owner (who has the toggle) sees who is trusted as a badge. */}
+              {row.role === 'MANAGER' && !canTrust && (
+                <span style={activeBadgeStyle}>{roleWord.toUpperCase()}</span>
+              )}
               {row.status === 'INVITED' && <span style={invitedBadgeStyle}>INVITED</span>}
               {/* Orthogonal to status, deliberately: an ACTIVE login that is locked is still a
                   login, and it clears itself in fifteen minutes. Collapsing the two would leave
@@ -228,7 +293,11 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
               {/* Not offered for the owner's own login: nothing in the app could put it back, and a
                   household with no owner has nobody who can invite one. The server refuses it too
                   (409), so this only stops the client offering a control that can only fail. */}
-              {row.status !== 'NONE' && !row.isSelf && (
+              {/* Also withheld from a trusted viewer on the owner's login (409) and on another
+                  trusted login (403, ASSIGN_ROLES) -- a control the server will refuse must not be
+                  offered (member-access.md). */}
+              {row.status !== 'NONE' && !row.isSelf && row.role !== 'OWNER'
+                && (isOwner || row.role !== 'MANAGER') && (
                 <OfflineDisabledWrap message="Removing a login needs a connection.">
                   {/* ⚠️ "Remove login", never bare "Remove". The People roster higher up this same
                       screen has its own Remove, and THAT one deletes the person along with every
@@ -471,6 +540,20 @@ const cancelStyle = {
   fontSize: 14,
   fontWeight: 600,
   color: 'var(--color-text)',
+  cursor: 'pointer',
+};
+
+// 44px tall so the whole line is the touch target on an iPad mid-workout; the label wraps the
+// checkbox, so tapping the words toggles it too.
+const trustRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-2)',
+  minHeight: 44,
+  marginTop: 'var(--space-1)',
+  fontSize: 13,
+  lineHeight: 1.4,
+  color: 'var(--color-muted)',
   cursor: 'pointer',
 };
 

@@ -85,10 +85,10 @@ describe('isPaidPlan', () => {
 describe('the map itself', () => {
   // Mirrors PlanFeatureMappingTest's assertion on the backend. If these two ever disagree the
   // client offers a control the server refuses, or hides one it would have allowed.
-  it('grants FREE nothing and PLUS exactly the three paid features', () => {
+  it('grants FREE nothing and PLUS exactly the four paid features', () => {
     expect(PLAN_FEATURES.FREE).toEqual([]);
     expect([...PLAN_FEATURES.PLUS].sort()).toEqual(
-      ['DATA_IMPORT', 'FULL_HISTORY', 'MEMBER_LOGINS'].sort(),
+      ['DATA_IMPORT', 'FULL_HISTORY', 'MANAGER_ROLE', 'MEMBER_LOGINS'].sort(),
     );
   });
 

@@ -51,11 +51,13 @@ class PlanFeatureMappingTest {
         // billing screen's PLUS_BENEFITS and the handbook's plan table all describe in prose.
         // If this set changes, all three of those change in the same commit.
         @Test
-        void holdsExactlyTheThreePaidFeatures() {
+        void holdsExactlyTheFourPaidFeatures() {
             assertThat(BillingPlan.PLUS.features()).containsExactlyInAnyOrder(
                     PlanFeature.FULL_HISTORY,
                     PlanFeature.DATA_IMPORT,
-                    PlanFeature.MEMBER_LOGINS);
+                    PlanFeature.MEMBER_LOGINS,
+                    // A "trusted member": a second adult who logs for everyone (2026-11).
+                    PlanFeature.MANAGER_ROLE);
         }
 
         @Test
@@ -86,10 +88,11 @@ class PlanFeatureMappingTest {
                     .containsAll(BillingPlan.PLUS.features());
         }
 
-        // The two that make it a trainer product rather than a bigger Plus: clients who cannot see
-        // each other, and an assistant who can see all of them.
+        // Clients who cannot see each other is what makes it a trainer product rather than a bigger
+        // Plus. The manager role (an assistant who can see all of them) is still here, now through
+        // Plus's set.
         @Test
-        void addsPrivateMembersAndTheManagerRole() {
+        void addsPrivateMembersAndKeepsTheManagerRole() {
             assertThat(BillingPlan.PRO.features())
                     .contains(PlanFeature.PRIVATE_MEMBERS, PlanFeature.MANAGER_ROLE);
         }

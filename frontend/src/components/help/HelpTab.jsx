@@ -984,6 +984,24 @@ export default function HelpTab() {
           ]}
         />
 
+        {/* PlanFeature.MANAGER_ROLE / AccountRole.MANAGER. Each sentence below is enforced
+            server-side: WRITE_OTHER_PEOPLE (logs for everyone), WRITE_ACCOUNT_OWNER withheld (not
+            your workouts), REMOVE_PEOPLE and ASSIGN_ROLES withheld (owner only), and the four
+            account-level permissions withheld. Change one, change this. */}
+        <Note title="Trusted: another adult who logs for everyone">
+          <p>
+            Sharing the iPad with a partner? Turn on <T>Trusted</T> next to their login (Plus). They
+            can then log, edit and delete workouts for <strong>everyone in the household except
+            you</strong> &mdash; your own workouts and settings stay yours, and they see them
+            read-only. They can also add people and fix names.
+          </p>
+          <p>
+            Only you can make someone trusted or turn it off, remove a person and their history,
+            remove a trusted login, or change billing and household settings. Turning it off takes
+            effect straight away; their workouts are untouched either way.
+          </p>
+        </Note>
+
         <Note title="You can never see or set their password">
           <p>
             Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
@@ -1174,7 +1192,8 @@ export default function HelpTab() {
       <Section id="plan" title="Plans">
         <p className="help-lede">
           Free is free for good. Not a trial that runs out. Plus adds your whole history, the
-          ability to bring old workouts in, and a personal login for anyone who wants one. Pro is
+          ability to bring old workouts in, a personal login for anyone who wants one, and trusted
+          logins that can log for everyone. Pro is
           for personal trainers &mdash; it adds clients who can&rsquo;t see each other, assigned
           programs and a roster.
         </p>
@@ -1191,7 +1210,7 @@ export default function HelpTab() {
             ['Import past workouts', 'No', 'Yes', 'Yes'],
             ['A personal login for each person', 'No', 'Yes', 'Yes'],
             ['Keep everyone\u2019s training private from each other', 'No', 'No', 'Yes'],
-            ['Assistants who can see everyone', 'No', 'No', 'Yes'],
+            ['A second adult or assistant who logs for everyone', 'No', 'Yes', 'Yes'],
           ]}
         />
 

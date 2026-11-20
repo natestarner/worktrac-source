@@ -635,7 +635,9 @@ describe('AppSettingsTab muscle highlighter', () => {
     renderTab();
 
     expect(screen.queryByRole('button', { name: 'Muscle highlighter Off' })).not.toBeInTheDocument();
-    expect(screen.getByText('Set by the household owner.')).toBeInTheDocument();
+    // Two: the muscle highlighter and the default unit (MANAGE_HOUSEHOLD, which a manager -- a
+    // family's trusted member -- does not hold either, so it shows the value, not the switch).
+    expect(screen.getAllByText('Set by the household owner.')).toHaveLength(2);
   });
 
   it('needs a connection to change', () => {
