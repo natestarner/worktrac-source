@@ -49,12 +49,11 @@ the old app stays up as the rollback until the move is proven.
    - **uid 32:** a test login, signed in on the same install as uid 1.
    - **uid 31:** the App Store reviewer demo login. It shares an install and home IPs with uid 1, and
      was used from Apple's network (17.0.0.0/8).
-   - **uid 34:** someone else. Signed up on the web on 2026-11-08, then signed in on build 9 from the
-     same IP over one 20-minute visit, and hasn't been seen since. They don't share an install or IP
-     with uid 1.
+   - **uid 34:** someone the owner knows, who will be asked to update. Signed up on the web on
+     2026-11-08, then signed in on build 9 over one 20-minute visit, and hasn't been seen since.
 
-   So the only login with no newer build is uid 34. Step 0.2 shows them the update banner if they
-   return, and the old app isn't deleted until build 9 is gone.
+   **Decision (owner, 2026-11-20): build 9 gets no special handling.** No minimum-build bump, and
+   no waiting on build 9 before deleting the old app.
 
    How this was attributed: `[cid=…]` is a per-install id (`frontend/src/lib/correlationId.js`), so
    "which logins share an install with uid 1" separates the owner's test logins from real ones.
@@ -66,7 +65,7 @@ the old app stays up as the rollback until the move is proven.
 4. **A few minutes of TLS errors at cutover.** A managed certificate is only issued once the CNAME
    points at the new app. Anyone whose DNS has already switched gets certificate errors until it is
    issued. The app treats that like a server blip: writes queue, reads come from cache, nothing is lost.
-   To keep it small: lower the TTL first (0.3), cut over at a quiet hour, and roll back by flipping
+   To keep it small: lower the TTL first (0.2), cut over at a quiet hour, and roll back by flipping
    the CNAME back if the certificate sticks in Pending (the old app keeps its certificate). The only
    zero-gap alternative is uploading our own certificate, which isn't worth it for minutes.
 5. **Deploys during the overlap.** While both apps run, a deploy updates only the app the Bicep names,
@@ -76,7 +75,7 @@ the old app stays up as the rollback until the move is proven.
    (`ContainerAppName_s == 'worktrac-backend-prod'` in `latency.md`, `azure-read-only-access.md` and
    `.claude/rules`), the deploy workflows' health URLs, and memory notes. Phase 3 lists them; grep for
    the old names before calling it done.
-7. **Central US might refuse.** East US refused SQL servers on this subscription. Step 0.4 creates the
+7. **Central US might refuse.** East US refused SQL servers on this subscription. Step 0.3 creates the
    environment first, with nothing depending on it, so a refusal costs nothing and stops the plan
    there.
 8. **Region risk: no worse, slightly better.** Today an outage in *either* region takes the app down,
@@ -110,12 +109,9 @@ the old app stays up as the rollback until the move is proven.
   ```bash
   az eventgrid system-topic event-subscription update -g worktrac-rg --system-topic-name worktrac-comms-prod-topic -n email-delivery-webhook-prod --endpoint https://api.huddle.fitness/api/webhooks/email-delivery
   ```
-- **0.2 Banner for build 9.** A deploy-repo PR sets `NATIVE_MIN_SUPPORTED_BUILD=18` (1.1.0) on prod.
-  This is a banner, never a gate (`api-compatibility.md`). Re-run "Which app builds are live?"
-  (`azure-read-only-access.md`) before deleting the old prod app in 2.6.
-- **0.3 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs from 30
+- **0.2 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs from 30
   minutes to 5, at least 30 minutes before each cutover.
-- **0.4 [you] Create the Central US environment** in `worktrac-rg`, sending logs to `worktrac-logs`
+- **0.3 [you] Create the Central US environment** in `worktrac-rg`, sending logs to `worktrac-logs`
   (the workspace key is under the workspace's Agents blade):
   ```bash
   az containerapp env create -g worktrac-rg -n worktrac-env-cus -l centralus --logs-destination log-analytics --logs-workspace-id ed5b43a9-96fa-4194-9fb4-0d4b7932a86a --logs-workspace-key <key>
@@ -157,8 +153,8 @@ the old app stays up as the rollback until the move is proven.
     is 5 minutes.
 - **2.5 Compare:** the `/me` p50/p90 and slow-sync KQL in `latency.md`, against the numbers recorded
   there.
-- **2.6 [you] Delete the old prod app**, once a week has passed with no rollback and build 9 is gone
-  from the live-builds query. Then unfreeze promotions, and restore the 30-minute TTL.
+- **2.6 [you] Delete the old prod app** once a week has passed with no rollback.
+  Then unfreeze promotions, and restore the 30-minute TTL.
 
 ## Phase 3 — cleanup
 
