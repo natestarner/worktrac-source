@@ -27,6 +27,13 @@ export function inviteLogin(personId, email) {
   return apiClient.post(`/api/account/logins/${personId}/invite`, { email });
 }
 
+// Makes an ACTIVE login trusted ('MANAGER': logs for everyone but the owner) or a plain member again
+// ('MEMBER'). Owner-only on the server (ASSIGN_ROLES) and online-only here: it changes what somebody
+// ELSE may do, so there is nothing to queue. Answers the updated login row.
+export function setLoginRole(personId, role) {
+  return apiClient.put(`/api/account/logins/${personId}/role`, { role });
+}
+
 // What the /join screen needs before it can ask the right question: whether this address already
 // has a Huddle account (so it must SIGN IN) or does not (so it must CHOOSE a password), plus the
 // household and person the invitation names.

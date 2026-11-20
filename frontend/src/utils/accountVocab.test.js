@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accountVocab, capitalize } from './accountVocab';
+import { accountVocab, capitalize, managerLabel } from './accountVocab';
 
 // The server derives these (AccountVocab.java); this pins the CLIENT half, which is entirely about
 // what happens when the server's answer is missing or partial. That is not a hypothetical: the auth
@@ -23,7 +23,7 @@ describe('accountVocab', () => {
       account: 'household',
       owner: 'household owner',
       member: 'family member',
-      manager: 'co-parent',
+      manager: 'trusted member',
     });
   });
 
@@ -34,13 +34,21 @@ describe('accountVocab', () => {
       account: 'practice',
       owner: 'household owner',
       member: 'family member',
-      manager: 'co-parent',
+      manager: 'trusted member',
     });
   });
 
   // An empty string is missing, not a valid noun: it would render as a gap mid-sentence.
   it('treats an empty string as absent', () => {
     expect(accountVocab({ account: '' }).account).toBe('household');
+  });
+});
+
+describe('managerLabel', () => {
+  it('is "Trusted" on a family account and "Assistant" on Pro', () => {
+    expect(managerLabel(undefined)).toBe('Trusted');
+    expect(managerLabel({ manager: 'trusted member' })).toBe('Trusted');
+    expect(managerLabel({ manager: 'assistant' })).toBe('Assistant');
   });
 });
 

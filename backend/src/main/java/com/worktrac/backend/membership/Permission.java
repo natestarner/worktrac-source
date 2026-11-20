@@ -26,6 +26,21 @@ public enum Permission {
     WRITE_OWN_PERSON,
     VIEW_OTHER_PEOPLE,
     WRITE_OTHER_PEOPLE,
+    /**
+     * Change the training data or settings of the person the account's OWNER is.
+     *
+     * <p>Narrower than it looks: {@link #WRITE_OTHER_PEOPLE} says "being someone else is not by
+     * itself a reason to refuse you", and this says the same for the one other person who is
+     * special. A MANAGER (the family's "trusted member", a practice's assistant) logs for everyone
+     * else in the account, but the owner's own log stays the owner's — a second parent logging for
+     * the kids must not be able to rewrite the account holder's sets, and an assistant must not be
+     * able to edit their trainer's.
+     *
+     * <p>Only ever consulted by {@code PersonService}'s write guard, together with "is this person
+     * the owner's?" — it cannot be decided from the {@link AccountAccess} alone, so it is
+     * person-scoped like the four above it. OWNER holds it via {@code allOf}; nobody else does.
+     */
+    WRITE_ACCOUNT_OWNER,
 
     // ── Self-scoped, but answerable from the AccountAccess alone ─────────────────────────────
     /**
@@ -51,8 +66,23 @@ public enum Permission {
     MANAGE_OWN_SIGN_IN_METHODS,
 
     // ── Household-scoped ─────────────────────────────────────────────────────────────────────
-    /** Add or remove a person, and rename/configure someone who is not you. */
+    /** Add a person, and rename/configure someone who is not you. */
     MANAGE_PEOPLE,
+    /**
+     * Remove a person — which deletes every session, set and routine they own.
+     *
+     * <p>Split off {@link #MANAGE_PEOPLE} when the MANAGER role became assignable: a trusted member
+     * may add the new kid and fix a misspelt name, but wiping somebody's whole training history is
+     * the account holder's call alone. Owner-only.
+     */
+    REMOVE_PEOPLE,
+    /**
+     * Make a login a MANAGER, or a MEMBER again — and remove a MANAGER's login.
+     *
+     * <p>Owner-only, so a manager can never promote somebody else to their own level, or demote or
+     * remove a fellow manager. Who holds the household's widest powers is the owner's decision.
+     */
+    ASSIGN_ROLES,
     /** Household name, default unit, and (Team tier) the member-visibility setting. */
     MANAGE_HOUSEHOLD,
     /** Invite, resend, revoke and unlock member logins. Never "set someone's password". */

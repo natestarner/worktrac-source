@@ -44,7 +44,20 @@ import java.time.Instant;
  * the payload that distinguishes "me" from "somebody else here".
  */
 public record PersonLoginDto(Long personId, String personName, String status, String email,
-                             boolean isSelf, Instant lockedUntil) {
+                             boolean isSelf, Instant lockedUntil, String role) {
+
+    /*
+     * {@code role} is the login's AccountRole name ({@code OWNER} / {@code MANAGER} / {@code MEMBER})
+     * for an ACTIVE row, and null otherwise: an invitation always becomes a MEMBER, and a person with
+     * no login has no role at all. It drives the owner's "Trusted" toggle, so the screen shows what the
+     * server holds rather than what was last clicked. Added after the six fields above; an older
+     * client simply ignores it (api-compatibility.md).
+     */
+
+    /** A row for a person whose login is not (yet) active, which therefore has no role. */
+    public static PersonLoginDto invited(Long personId, String personName, String email) {
+        return new PersonLoginDto(personId, personName, INVITED, email, false, null, null);
+    }
 
     public static final String NONE = "NONE";
     public static final String INVITED = "INVITED";

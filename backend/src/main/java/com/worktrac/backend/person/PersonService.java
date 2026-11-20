@@ -6,6 +6,8 @@ import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
@@ -21,15 +23,21 @@ public class PersonService {
     // so a member can never use the difference to enumerate the household they're in.
     private static final String NOT_FOUND = "We couldn't find that person.";
 
+    // The 403 a MANAGER gets on the owner's own person. Says who CAN, like PermissionInterceptor's
+    // messages, and names nobody: the caller can already see the owner's name on screen.
+    static final String OWNER_ONLY = "Only the account owner can change their own workouts.";
+
     private final PersonRepository personRepository;
     private final AccountRepository accountRepository;
     private final QuotaService quotaService;
+    private final AccountMembershipRepository membershipRepository;
 
     public PersonService(PersonRepository personRepository, AccountRepository accountRepository,
-                          QuotaService quotaService) {
+                          QuotaService quotaService, AccountMembershipRepository membershipRepository) {
         this.personRepository = personRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
+        this.membershipRepository = membershipRepository;
     }
 
     // ── THE TWO GUARDS ────────────────────────────────────────────────────────────────────────
@@ -91,10 +99,49 @@ public class PersonService {
         if (!access.has(Permission.VIEW_OTHER_PEOPLE) && !access.isSelf(person.getId())) {
             throw new NotFoundException(notFoundMessage);
         }
-        if (access.has(Permission.WRITE_OTHER_PEOPLE) || access.isSelf(person.getId())) {
+        if (access.isSelf(person.getId())) {
             return person;
         }
-        throw new ForbiddenException("You can only change your own workouts.");
+        if (!access.has(Permission.WRITE_OTHER_PEOPLE)) {
+            throw new ForbiddenException("You can only change your own workouts.");
+        }
+        if (isOwnersPersonClosedTo(person, access)) {
+            throw new ForbiddenException(OWNER_ONLY);
+        }
+        return person;
+    }
+
+    /**
+     * The same answer as {@link #requireWritablePerson(Person, AccountAccess, String)}, as a boolean,
+     * for the one caller that must not throw: {@code WorkoutSetService.findDuplicate}, which decides
+     * whether to hand back an existing row. Kept here so "who may write this person" has exactly one
+     * definition — that caller used to re-derive it as WRITE_OTHER_PEOPLE-or-self, which would have
+     * quietly kept serving a MANAGER the owner's rows.
+     */
+    public boolean mayWrite(Person person, AccountAccess access) {
+        if (access.isSelf(person.getId())) {
+            return true;
+        }
+        return access.has(Permission.WRITE_OTHER_PEOPLE) && !isOwnersPersonClosedTo(person, access);
+    }
+
+    /**
+     * True when {@code person} is the account owner's own person and this login may not write it.
+     *
+     * <p>⚠️ Only queries when it has to. An OWNER short-circuits on WRITE_ACCOUNT_OWNER and a MEMBER
+     * never reaches here (no WRITE_OTHER_PEOPLE), so the extra lookup is paid only by a MANAGER
+     * writing someone who is not themselves — every write an owner makes, which is nearly every write
+     * in the app, costs nothing new.
+     *
+     * <p>An owner whose membership has no person has nothing to protect, and the lookup correctly
+     * finds no row.
+     */
+    private boolean isOwnersPersonClosedTo(Person person, AccountAccess access) {
+        if (access.has(Permission.WRITE_ACCOUNT_OWNER)) {
+            return false;
+        }
+        return membershipRepository.existsByAccount_IdAndPerson_IdAndAccountRole(
+                access.accountId(), person.getId(), AccountRole.OWNER);
     }
 
     // ── CRUD ──────────────────────────────────────────────────────────────────────────────────
@@ -163,7 +210,7 @@ public class PersonService {
     }
 
     // Visible rather than writable: removing a person deletes their entire training history, so it
-    // is gated by MANAGE_PEOPLE at the controller (owner only) rather than by write access to that
+    // is gated by REMOVE_PEOPLE at the controller (owner only) rather than by write access to that
     // person. A member must not be able to delete themselves and take their own history with them.
     @Transactional
     public void remove(AccountAccess access, Long personId) {

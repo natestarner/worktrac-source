@@ -84,7 +84,7 @@ class AccountVocabTest {
         @Test
         void useTheAppsOriginalVocabulary() {
             assertThat(AccountVocab.forPlan(BillingPlan.PLUS))
-                    .isEqualTo(new AccountVocab("household", "household owner", "family member", "co-parent"));
+                    .isEqualTo(new AccountVocab("household", "household owner", "family member", "trusted member"));
         }
     }
 

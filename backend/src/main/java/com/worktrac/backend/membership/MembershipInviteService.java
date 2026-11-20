@@ -132,12 +132,14 @@ public class MembershipInviteService {
         Map<Long, String> emailByPerson = new HashMap<>();
         Map<Long, String> statusByPerson = new HashMap<>();
         Map<Long, Instant> lockedUntilByPerson = new HashMap<>();
+        Map<Long, String> roleByPerson = new HashMap<>();
 
         for (AccountMembership membership : membershipRepository.findByAccount_Id(accountId)) {
             if (membership.getPerson() == null) {
                 continue;
             }
             statusByPerson.put(membership.getPerson().getId(), PersonLoginDto.ACTIVE);
+            roleByPerson.put(membership.getPerson().getId(), membership.getAccountRole().name());
             emailByPerson.put(membership.getPerson().getId(), membership.getUser().getEmail());
             // Only while it is STILL in force -- a lapsed lockout is not something the owner needs
             // to see, and showing one would have them "fixing" a login that already works.
@@ -174,8 +176,77 @@ public class MembershipInviteService {
                         // Objects.equals, not ==: both sides are boxed Longs, and selfPersonId is
                         // legitimately null for a membership not bound to a person.
                         Objects.equals(person.id(), access.selfPersonId()),
-                        lockedUntilByPerson.get(person.id())))
+                        lockedUntilByPerson.get(person.id()),
+                        roleByPerson.get(person.id())))
                 .toList();
+    }
+
+    /**
+     * Makes a login "trusted" ({@link AccountRole#MANAGER}) or a plain member again.
+     *
+     * <p>Every refusal here is a 409 with a sentence the owner can act on, because the client shows
+     * it (a gated write with {@code showServerMessage}). The controller's {@code ASSIGN_ROLES} has
+     * already established the caller is the owner.
+     *
+     * <ul>
+     *   <li><b>Only MANAGER or MEMBER.</b> Anything else is a 400 — there is no way to make a second
+     *       owner, and an unknown string is a malformed request rather than a decision.</li>
+     *   <li><b>Only an ACTIVE login.</b> An invitation always becomes a MEMBER on accept, so
+     *       "trusting" one would be a promise the accept path never keeps; and a person with no login
+     *       has nobody to trust.</li>
+     *   <li><b>Never the owner's own login.</b> Demoting it would leave the household with nobody
+     *       holding the account-level permissions, and nothing could put them back.</li>
+     *   <li><b>Promoting needs {@link PlanFeature#MANAGER_ROLE}; demoting never does.</b> Taking
+     *       access away must always be possible, including on a plan that has since lapsed.</li>
+     * </ul>
+     *
+     * <p>Idempotent: setting the role a login already has changes nothing and answers the row.
+     *
+     * <p>⚠️ Invalidates per MEMBERSHIP ({@code invalidate(userId, accountId)}), never per user and
+     * never by bumping {@code token_version} — the same rule revoke follows. Being made trusted here
+     * must not sign anybody out of a household they also belong to elsewhere.
+     */
+    @Transactional
+    public PersonLoginDto setRole(AccountAccess access, Long personId, String rawRole) {
+        Long accountId = access.accountId();
+        AccountRole role = parseAssignableRole(rawRole);
+        Person person = personService.requireVisiblePerson(personId, access);
+
+        AccountMembership membership = membershipRepository.findByAccount_IdAndPerson_Id(accountId, personId)
+                .orElseThrow(() -> new ConflictException(
+                        person.getName() + " needs a login before they can be trusted."));
+        if (membership.getAccountRole() == AccountRole.OWNER) {
+            throw new ConflictException("The account owner's login can't be changed.");
+        }
+
+        if (membership.getAccountRole() != role) {
+            if (role == AccountRole.MANAGER
+                    && !subscriptionService.has(accountId, PlanFeature.MANAGER_ROLE)) {
+                throw new ConflictException("Trusted logins are part of Plus.");
+            }
+            membership.setAccountRole(role);
+            membershipRepository.save(membership);
+            accountAccessService.invalidate(membership.getUser().getId(), accountId);
+            log.info("Membership role set to {} for person {} in account {} by user {}",
+                    role, personId, accountId, access.userId());
+        }
+
+        User user = membership.getUser();
+        Instant now = clock.instant();
+        return new PersonLoginDto(personId, person.getName(), PersonLoginDto.ACTIVE, user.getEmail(),
+                Objects.equals(personId, access.selfPersonId()),
+                user.isLockedAt(now) ? user.getLockedUntil() : null,
+                membership.getAccountRole().name());
+    }
+
+    private static AccountRole parseAssignableRole(String rawRole) {
+        if (AccountRole.MANAGER.name().equals(rawRole)) {
+            return AccountRole.MANAGER;
+        }
+        if (AccountRole.MEMBER.name().equals(rawRole)) {
+            return AccountRole.MEMBER;
+        }
+        throw new IllegalArgumentException("A login's role can only be MANAGER or MEMBER.");
     }
 
     /**
@@ -604,6 +675,14 @@ public class MembershipInviteService {
             // put it back, and a household with no owner has nobody who can invite one.
             if (membership.get().getAccountRole() == AccountRole.OWNER) {
                 throw new ConflictException("You can't remove your own login. Delete the household instead.");
+            }
+            // A trusted login (MANAGER) holds MANAGE_LOGINS so it can invite and help, but removing
+            // another trusted login is the owner's call alone -- otherwise two trusted adults could
+            // remove each other, and the owner's ASSIGN_ROLES decision would be undone by somebody
+            // who could never have made it. 403 rather than 409: it is "not you", not "not now".
+            if (membership.get().getAccountRole() == AccountRole.MANAGER
+                    && !access.has(Permission.ASSIGN_ROLES)) {
+                throw new ForbiddenException("Only the household owner can remove a trusted login.");
             }
             revokedEmail = Optional.of(membership.get().getUser().getEmail());
             hadMembership = true;

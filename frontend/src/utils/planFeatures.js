@@ -14,17 +14,18 @@ export const PLAN_FEATURES = {
   // Deliberately empty rather than a subset of PLUS: everything Free actually gets is ungated, so
   // none of it is a feature in this map's sense. Mirrors BillingPlan.FREE.features().
   FREE: [],
-  PLUS: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS'],
+  // MANAGER_ROLE is the owner's "Trusted" toggle on a login (LoginsSection) -- a second adult who
+  // logs for everyone. Plus and Pro both, mirroring BillingPlan.PLUS_FEATURES.
+  PLUS: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'MANAGER_ROLE'],
   // Everything Plus has, plus what makes Pro a trainer product. A capability lands in this list in
   // the commit that puts a CONTROL behind it -- a feature nothing checks is a gate nobody can fail,
   // and it would drift from the server's map unnoticed.
   //
-  // PRIVATE_MEMBERS arrived with the member-visibility toggle in AppSettingsTab. MANAGER_ROLE is
-  // still absent on purpose: the server grants it, but no client control asks about it yet.
+  // PRIVATE_MEMBERS arrived with the member-visibility toggle in AppSettingsTab.
   //
   // CHECK_INS gates the account menu's "Check-ins" entry point only -- the route and its endpoints
   // carry no plan check at all, the same ENTRY-POINT-ONLY shape as ROSTER.
-  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'PRIVATE_MEMBERS', 'ROSTER', 'CHECK_INS'],
+  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'MANAGER_ROLE', 'PRIVATE_MEMBERS', 'ROSTER', 'CHECK_INS'],
 };
 
 /**

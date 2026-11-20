@@ -5,6 +5,7 @@ import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.quota.QuotaService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,22 +35,80 @@ class PersonGuardTest {
     private static final long ME = 100L;
     private static final long SIBLING = 200L;
 
+    // The account OWNER's own person, for the manager cases.
+    private static final long OWNER_PERSON = 300L;
+
     private PersonRepository personRepository;
+    private AccountMembershipRepository membershipRepository;
     private PersonService personService;
 
     @BeforeEach
     void setUp() {
         personRepository = mock(PersonRepository.class);
-        personService = new PersonService(personRepository, mock(AccountRepository.class), mock(QuotaService.class));
+        membershipRepository = mock(AccountMembershipRepository.class);
+        personService = new PersonService(personRepository, mock(AccountRepository.class), mock(QuotaService.class),
+                membershipRepository);
 
         // Built BEFORE the stubbing below: person() stubs a mock of its own, and creating it
         // inside a when(...) argument nests one stubbing inside another (UnfinishedStubbing).
         Person me = person(ME);
         Person sibling = person(SIBLING);
+        Person ownersOwn = person(OWNER_PERSON);
 
         when(personRepository.findByIdAndAccount_Id(any(), any())).thenReturn(Optional.empty());
         when(personRepository.findByIdAndAccount_Id(eq(ME), eq(ACCOUNT))).thenReturn(Optional.of(me));
         when(personRepository.findByIdAndAccount_Id(eq(SIBLING), eq(ACCOUNT))).thenReturn(Optional.of(sibling));
+        when(personRepository.findByIdAndAccount_Id(eq(OWNER_PERSON), eq(ACCOUNT))).thenReturn(Optional.of(ownersOwn));
+        when(membershipRepository.existsByAccount_IdAndPerson_IdAndAccountRole(ACCOUNT, OWNER_PERSON, AccountRole.OWNER))
+                .thenReturn(true);
+    }
+
+    private static AccountAccess manager() {
+        return new AccountAccess(3L, ACCOUNT, 7L, AccountRole.MANAGER, ME, true, BillingPlan.PLUS, null);
+    }
+
+    @Nested
+    @DisplayName("a manager (a household's trusted member)")
+    class Manager {
+
+        @Test
+        void canWriteThemselvesAndEveryoneElse() {
+            assertThat(personService.requireWritablePerson(ME, manager()).getId()).isEqualTo(ME);
+            assertThat(personService.requireWritablePerson(SIBLING, manager()).getId()).isEqualTo(SIBLING);
+        }
+
+        @Test
+        void canReadTheOwner() {
+            assertThat(personService.requireVisiblePerson(OWNER_PERSON, manager()).getId()).isEqualTo(OWNER_PERSON);
+        }
+
+        // The rule the role was made assignable with: a second parent logs for the kids, never
+        // over the account holder's own sets. 403 (visible, not writable), never 404.
+        @Test
+        void cannotWriteTheOwnersOwnPerson() {
+            assertThatThrownBy(() -> personService.requireWritablePerson(OWNER_PERSON, manager()))
+                    .isInstanceOf(ForbiddenException.class)
+                    .hasMessage(PersonService.OWNER_ONLY);
+            assertThatThrownBy(() -> personService.requireWritablePerson(
+                    person(OWNER_PERSON), manager(), "We couldn't find that set."))
+                    .isInstanceOf(ForbiddenException.class);
+        }
+
+        // findDuplicate's boolean twin must give the same answers, or a replayed create would
+        // hand a manager back the owner's row.
+        @Test
+        void mayWriteAgreesWithTheGuard() {
+            assertThat(personService.mayWrite(person(SIBLING), manager())).isTrue();
+            assertThat(personService.mayWrite(person(ME), manager())).isTrue();
+            assertThat(personService.mayWrite(person(OWNER_PERSON), manager())).isFalse();
+            assertThat(personService.mayWrite(person(OWNER_PERSON), owner())).isTrue();
+            assertThat(personService.mayWrite(person(SIBLING), member(true))).isFalse();
+        }
+
+        @Test
+        void theOwnerStillWritesTheirOwnPerson() {
+            assertThat(personService.requireWritablePerson(OWNER_PERSON, owner()).getId()).isEqualTo(OWNER_PERSON);
+        }
     }
 
     private static Person person(long id) {

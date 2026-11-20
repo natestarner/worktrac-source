@@ -43,9 +43,13 @@ public enum PlanFeature {
     /**
      * The account may hand out a MANAGER login — full reach over everyone, no say over the account.
      *
-     * <p>Separate from MEMBER_LOGINS because they are different products: a family buying personal
-     * logins is not thereby buying an assistant, and an assistant is the thing a practice with more
-     * than one trainer actually needs.
+     * <p>Separate from MEMBER_LOGINS because the two need not travel together, even though today
+     * every tier that has one has the other. A family calls this login a "trusted member" (a second
+     * parent logging for the kids); a practice calls it an "assistant". Granted on Plus and Pro.
+     *
+     * <p>Gates PROMOTING only ({@code MembershipInviteService.setRole}). A plan that loses it does
+     * not demote anyone: the logins pause with the plan instead (MembershipStatus), and the role
+     * waits — the same posture as PRIVATE_MEMBERS's setting.
      */
     MANAGER_ROLE,
 

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -62,8 +63,8 @@ public class MembershipLoginController {
         MembershipInvite invite = inviteService
                 .addAndInvite(currentUser.access(), request.personName(), request.email())
                 .invite();
-        return new PersonLoginDto(invite.getPerson().getId(), invite.getPerson().getName(),
-                PersonLoginDto.INVITED, invite.getEmail(), false, null);
+        return PersonLoginDto.invited(invite.getPerson().getId(), invite.getPerson().getName(),
+                invite.getEmail());
     }
 
     @GetMapping
@@ -94,8 +95,30 @@ public class MembershipLoginController {
         // one with a 409 before reaching this line.
         // lockedUntil is null by construction: an invitation has no user behind it yet, so there is
         // no lockout to report.
-        return new PersonLoginDto(personId, invite.getPerson().getName(),
-                PersonLoginDto.INVITED, invite.getEmail(), false, null);
+        return PersonLoginDto.invited(personId, invite.getPerson().getName(), invite.getEmail());
+    }
+
+    /**
+     * {@code MANAGER} or {@code MEMBER} — the only two values this accepts. OWNER is not on offer:
+     * there is no way to hand over a household here, and a second owner is not a thing the app has.
+     */
+    public record RoleRequest(@NotBlank String role) {
+    }
+
+    /**
+     * Makes a login "trusted" (MANAGER: logs for everyone except the owner, owns nothing about the
+     * account) or turns that off again (MEMBER).
+     *
+     * <p>ASSIGN_ROLES, which only the OWNER holds — a manager can hold MANAGE_LOGINS and still never
+     * reach this, so who else is trusted stays the owner's decision alone. Online-only on the client:
+     * it changes what somebody else may do, and there is nothing to queue.
+     *
+     * <p>Answers the updated row so the screen shows what the server now holds.
+     */
+    @PutMapping("/{personId}/role")
+    @RequiresPermission(Permission.ASSIGN_ROLES)
+    public PersonLoginDto setRole(@PathVariable Long personId, @Valid @RequestBody RoleRequest request) {
+        return inviteService.setRole(currentUser.access(), personId, request.role());
     }
 
     /**

@@ -24,7 +24,7 @@ const FAMILY = {
   account: 'household',
   owner: 'household owner',
   member: 'family member',
-  manager: 'co-parent',
+  manager: 'trusted member',
 };
 
 /**
@@ -43,6 +43,15 @@ export function accountVocab(vocab) {
     member: vocab.member || FAMILY.member,
     manager: vocab.manager || FAMILY.manager,
   };
+}
+
+/**
+ * The one-word label for the MANAGER role on a toggle or badge: "Trusted" on a family account
+ * ("trusted member"), "Assistant" on Pro ("assistant"). Derived from `vocab.manager` -- its first
+ * word, capitalised -- rather than a second map, so the noun and the label cannot disagree.
+ */
+export function managerLabel(vocab) {
+  return capitalize(accountVocab(vocab).manager.split(' ')[0]);
 }
 
 /**

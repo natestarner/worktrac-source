@@ -48,7 +48,9 @@ export default function AppSettingsTab() {
   // unavailable. That polarity lives in planIncludes now rather than in this file.
   const plan = account?.plan;
   const canImport = planIncludes(plan, 'DATA_IMPORT');
-  const { isMember, isOwner, selfPersonId } = useAccountAccess();
+  // canWritePerson filters the per-person rows below: a member sees only their own, a trusted
+  // member (MANAGER) everyone but the owner -- whose settings PersonService refuses them.
+  const { isMember, isOwner, canWritePerson } = useAccountAccess();
   const vocab = accountVocab(account?.vocab);
   const unit = account?.defaultUnit || 'lb';
   const { openConfirm } = useUI();
@@ -251,7 +253,7 @@ export default function AppSettingsTab() {
             toggle: the unit is genuinely useful information to them (it is what their own new sets
             will be recorded in), while a dead switch communicates only that something is broken.
             Naming who can change it answers the obvious next question in the same breath. */}
-        {isMember ? (
+        {!isOwner ? (
           <div style={{ fontSize: 15, fontWeight: 600 }}>
             {account?.defaultUnit}
             <span style={{ display: 'block', fontSize: 13, fontWeight: 400, color: 'var(--color-muted)', marginTop: 4 }}>
@@ -483,7 +485,7 @@ export default function AppSettingsTab() {
             preference, and a member turning theirs off mid-workout must not need the owner. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {people
-            .filter((person) => !isMember || String(person.id) === String(selfPersonId))
+            .filter((person) => canWritePerson(person.id))
             .map((person) => {
             const personEnabled = person.restTimerEnabled ?? true;
             const busy = pendingRestPerson === person.id;
@@ -539,7 +541,7 @@ export default function AppSettingsTab() {
             for other people invites "why can't I change this?". Their own stays interactive. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {people
-            .filter((person) => !isMember || String(person.id) === String(selfPersonId))
+            .filter((person) => canWritePerson(person.id))
             .map((person) => {
               const weight = Number(person.weightIncrement ?? DEFAULT_WEIGHT_INCREMENT);
               const seconds = Number(person.durationIncrementSeconds ?? DEFAULT_DURATION_INCREMENT_SECONDS);
@@ -654,7 +656,7 @@ export default function AppSettingsTab() {
           follows VIEW, so they can still take their own workouts out. Keeping the two apart is
           the point: "members can see everyone" must not quietly become "any member can walk out
           with the household's complete history in one click". */}
-      {!isMember && (
+      {isOwner && (
       <>
       <SectionLabel>Data</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>

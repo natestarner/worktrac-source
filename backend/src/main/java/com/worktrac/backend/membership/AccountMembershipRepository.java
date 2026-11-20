@@ -41,6 +41,26 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
 
     Optional<AccountMembership> findByAccount_IdAndPerson_Id(Long accountId, Long personId);
 
+    /**
+     * Whether this person is the one a login with this role IS — in practice, "is this the
+     * owner's own person?", which {@code PersonService}'s write guard asks before letting a
+     * MANAGER write. Answered from the membership rather than {@code people.is_primary}: the
+     * primary flag says which person the household was registered with, the membership says who
+     * actually holds the account, and only the second is the question.
+     */
+    boolean existsByAccount_IdAndPerson_IdAndAccountRole(Long accountId, Long personId, AccountRole accountRole);
+
+    /**
+     * The owner's PERSON id, for the client's "may I write here?" chrome (MembershipDto).
+     *
+     * <p>Same ordering and same multiple-owner tolerance as {@link #findOwnerPersonNames}, so the
+     * id and the name a client is handed always describe the same person.
+     */
+    @Query("SELECT m.person.id FROM AccountMembership m "
+            + "WHERE m.account.id = :accountId AND m.accountRole = :role AND m.person IS NOT NULL "
+            + "ORDER BY m.createdAt ASC, m.id ASC")
+    List<Long> findOwnerPersonIds(@Param("accountId") Long accountId, @Param("role") AccountRole role);
+
     long countByUser_Id(Long userId);
 
     /**

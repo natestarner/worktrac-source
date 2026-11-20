@@ -58,10 +58,16 @@ The same holds for the Plus pause, one step weaker: it does not even remove the 
 
 ### The ladder has three rungs now, not two
 
-`MANAGER` sits between owner and member: it sees and writes every person, and owns nothing about the
-account — no billing, no deletion, no household settings, no account-wide export. It exists for a
-trainer's assistant, and it is deliberately **not** called `COACH`, because Team's OWNER is the one a
-club calls a coach. Full table and the reasoning: `.claude/rules/coaching.md`.
+`MANAGER` sits between owner and member: it sees every person and writes every person **except the
+owner's own**, and owns nothing about the account — no billing, no deletion, no household settings,
+no account-wide export, no removing people, no deciding who else holds the role. A family calls it a
+**trusted member** (a second parent sharing the iPad); a trainer calls it an **assistant**. It is
+deliberately **not** called `COACH`, because Team's OWNER is the one a club calls a coach. The owner
+assigns it from Profile → Logins. Full table and the reasoning: `.claude/rules/coaching.md`.
+
+- ⚠️ **The client's `isMember` alone no longer means "not the owner".** Anything that was
+  `isMember ? <the viewer's own identity> : <the owner's>` must be `isMember || isManager` —
+  `ProfileTab` showed a trusted member the owner's name under "Account holder" until it was.
 
 Two things about it belong here rather than there, because they are about member access generally:
 

@@ -44,12 +44,18 @@ class PermissionMappingTest {
         // Everything about the PEOPLE, nothing about the ACCOUNT. An assistant trainer runs the
         // roster; they do not decide what the practice pays for or whether it continues to exist.
         @Test
-        void holdsEverythingExceptTheFourAccountLevelPermissions() {
+        void holdsEverythingExceptTheAccountLevelAndOwnerOnlyPermissions() {
             EnumSet<Permission> expected = EnumSet.allOf(Permission.class);
             expected.remove(Permission.MANAGE_BILLING);
             expected.remove(Permission.DELETE_ACCOUNT);
             expected.remove(Permission.MANAGE_HOUSEHOLD);
             expected.remove(Permission.EXPORT_ACCOUNT_DATA);
+            // Added when the role became assignable as a family's "trusted member": the owner's own
+            // log, deleting somebody's whole history, and deciding who else is trusted all stay the
+            // owner's.
+            expected.remove(Permission.WRITE_ACCOUNT_OWNER);
+            expected.remove(Permission.REMOVE_PEOPLE);
+            expected.remove(Permission.ASSIGN_ROLES);
 
             assertThat(AccountRole.MANAGER.permissions(true))
                     .containsExactlyInAnyOrderElementsOf(expected);
@@ -67,6 +73,18 @@ class PermissionMappingTest {
         void managesTheirOwnSignInMethods() {
             assertThat(AccountRole.MANAGER.permissions(true)).contains(Permission.MANAGE_OWN_SIGN_IN_METHODS);
             assertThat(AccountRole.MEMBER.permissions(false)).contains(Permission.MANAGE_OWN_SIGN_IN_METHODS);
+        }
+
+        // ⚠️ The three that make a trusted member safe to hand to a second adult. Stated one by one
+        // so a future "just give managers everything but billing" refactor has to delete a test
+        // that names exactly what it is giving away.
+        @Test
+        void cannotWriteTheOwnerRemovePeopleOrTrustAnybodyElse() {
+            assertThat(AccountRole.MANAGER.permissions(true)).doesNotContain(
+                    Permission.WRITE_ACCOUNT_OWNER, Permission.REMOVE_PEOPLE, Permission.ASSIGN_ROLES);
+            // ...while still logging for, adding and renaming everyone else.
+            assertThat(AccountRole.MANAGER.permissions(true)).contains(
+                    Permission.WRITE_OTHER_PEOPLE, Permission.MANAGE_PEOPLE, Permission.MANAGE_LOGINS);
         }
 
         @Test
@@ -148,6 +166,9 @@ class PermissionMappingTest {
         void cannotManageTheHouseholdUnderEitherSetting() {
             Set<Permission> ownerOnly = EnumSet.of(
                     Permission.MANAGE_PEOPLE,
+                    Permission.REMOVE_PEOPLE,
+                    Permission.ASSIGN_ROLES,
+                    Permission.WRITE_ACCOUNT_OWNER,
                     Permission.MANAGE_HOUSEHOLD,
                     Permission.MANAGE_LOGINS,
                     Permission.MANAGE_BILLING,

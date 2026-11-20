@@ -326,11 +326,11 @@ public class RegistrationService {
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
                 // null: this registrant IS the household's owner, so there is nobody else to
-                // name. See AuthService.ownerNameForMember.
+                // name. See AuthService.ownerFor.
                 // FREE: a brand-new household is on Free. It makes no difference to the status
                 // this produces -- the registrant is the OWNER, and an owner is never paused --
                 // but stating the true value keeps that from looking like a value chosen to dodge
                 // the question.
-                MembershipDto.from(membership, null, BillingPlan.FREE), PersonDto.from(person));
+                MembershipDto.from(membership, MembershipDto.Owner.NOBODY, BillingPlan.FREE), PersonDto.from(person));
     }
 }

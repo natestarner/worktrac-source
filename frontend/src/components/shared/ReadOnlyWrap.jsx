@@ -33,10 +33,10 @@ import { useAccountAccess } from '../../hooks/useAccountAccess';
 export default function ReadOnlyWrap({
   children,
   personId,
-  message = 'You can only change your own workouts.',
+  message,
   ...passthrough
 }) {
-  const { canWritePerson } = useAccountAccess();
+  const { canWritePerson, readOnlyMessage } = useAccountAccess();
 
   if (canWritePerson(personId)) {
     // Forward whatever OfflineDisabledWrap (or a plain parent) handed down, so this component is
@@ -46,7 +46,9 @@ export default function ReadOnlyWrap({
 
   return cloneElement(children, {
     disabled: true,
-    title: message,
+    // A caller's own message wins; otherwise the hook's, which names the owner when a trusted
+    // member is looking at the owner's log rather than telling them "only your own".
+    title: message ?? readOnlyMessage(personId),
     style: { ...(children.props.style || {}), opacity: 0.5, cursor: 'not-allowed' },
   });
 }

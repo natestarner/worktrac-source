@@ -173,4 +173,45 @@ describe('ProfileTab', () => {
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     });
   });
+
+  // A MANAGER: manages people (adds, renames) but is not the account holder, may not edit the
+  // owner's own person, remove anyone, or delete the account.
+  describe('as a trusted member', () => {
+    beforeEach(() => {
+      useAuth.mockReturnValue({
+        user: { id: 2, email: 'jess@example.com' },
+        account: { id: 1, name: "The Starners' household", defaultUnit: 'lb' },
+        people: [
+          { id: 1, name: 'Nate', isPrimary: true },
+          { id: 2, name: 'Jess', isPrimary: false },
+          { id: 3, name: 'Leo', isPrimary: false },
+        ],
+        membership: {
+          accountRole: 'MANAGER', personId: 2, membersSeeEveryone: true, ownerName: 'Nate', ownerPersonId: 1,
+        },
+        refreshPeople,
+      });
+    });
+
+    it('shows their own identity and role, and who owns the household', () => {
+      render(<ProfileTab />);
+      expect(screen.getByText('You')).toBeInTheDocument();
+      expect(screen.queryByText('Account holder')).not.toBeInTheDocument();
+      expect(screen.getByText('Trusted member')).toBeInTheDocument();
+      expect(screen.queryByText('Account owner')).not.toBeInTheDocument();
+      expect(screen.getByText(/They cannot see or set your password/)).toBeInTheDocument();
+    });
+
+    it('can edit everyone but the owner, and remove nobody', () => {
+      render(<ProfileTab />);
+      // Jess and Leo, not Nate.
+      expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
+      expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    });
+
+    it('never sees the Danger zone', () => {
+      render(<ProfileTab />);
+      expect(screen.queryByText('Danger zone')).not.toBeInTheDocument();
+    });
+  });
 });

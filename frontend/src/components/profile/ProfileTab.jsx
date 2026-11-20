@@ -17,7 +17,12 @@ import { useGoBack } from '../../hooks/useGoBack';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
-  const { isMember, selfPersonId, ownerName } = useAccountAccess();
+  const { isMember, isManager, isOwner, selfPersonId, ownerName, canWritePerson } = useAccountAccess();
+  // Everyone who is not the owner gets their OWN identity card, the owner's name, and the
+  // transparency sentence -- a trusted member (isManager) is no more the account holder than a
+  // member is. Before MANAGER was assignable this was `isMember`, which would have shown a trusted
+  // member the owner's name under "Account holder" and called them "Account owner".
+  const isNotOwner = isMember || isManager;
   // Family nouns when the account carries none -- an auth snapshot written before `vocab` existed
   // is the common case for a browser that has not reloaded across the deploy.
   const vocab = accountVocab(account?.vocab);
@@ -53,9 +58,9 @@ export default function ProfileTab() {
 
           A member also sees WHO the owner is -- MembershipDto.ownerName, resolved for members only.
           It answers "who do I ask?", and it is what makes the refusals elsewhere actionable. */}
-      <SectionLabel>{isMember ? 'You' : 'Account holder'}</SectionLabel>
+      <SectionLabel>{isNotOwner ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
-        <Field label="Name" value={isMember ? self?.name : primary?.name} />
+        <Field label="Name" value={isNotOwner ? self?.name : primary?.name} />
         {/* AccountRole spelled out in the same plain language LoginsSection and the handbook use
             ("Enable login", never "OWNER"/"MEMBER") -- this is the one place a person can just
             look up which they are, rather than inferring it from which controls are missing. */}
@@ -64,13 +69,16 @@ export default function ProfileTab() {
             handbook use -- making this one screen say "Client" while the handbook says "Member"
             trades a small gain here for a contradiction across two documents. The account-shaped
             nouns below DO move with the tier, because those describe the account. */}
-        <Field label="Role" value={isMember ? 'Member' : 'Account owner'} />
+        {/* "Trusted member" on a family account, "Assistant" on Pro -- vocab.manager, because the
+            ROLE is named by the account here (the user chose "Trusted" for families and kept Pro's
+            own word). Member/Account owner stay literal, per the note above. */}
+        <Field label="Role" value={isManager ? capitalize(vocab.manager) : isMember ? 'Member' : 'Account owner'} />
         <Field label={capitalize(vocab.account)} value={account?.name} />
-        <Field label="Email" value={user?.email} last={!isMember} />
+        <Field label="Email" value={user?.email} last={!isNotOwner} />
         {/* Only a member sees this, and only a member needs it: it answers "who do I ask?", and it
             is the same person the refusals elsewhere in the app tell them to ask. ownerName is null
             for an owner by design, so this row simply does not render for them. */}
-        {isMember && <Field label={capitalize(vocab.owner)} value={ownerName} last />}
+        {isNotOwner && <Field label={capitalize(vocab.owner)} value={ownerName} last />}
       </div>
 
       {/* The transparency line. Deliberately plain, deliberately above everything else a member can
@@ -88,7 +96,9 @@ export default function ProfileTab() {
           CHANGE_ANY_PASSWORD, and a trainer must not be able to impersonate a client any more than
           a parent may impersonate a teenager. Same sentence in the invite email, the handbook and
           the privacy policy -- see member-access.md. */}
-      {isMember && (
+      {/* A trusted member gets the same sentence, verbatim: the owner can still see their workouts
+          and remove their login, and still cannot touch their password. */}
+      {isNotOwner && (
         <div style={transparencyStyle}>
           {ownerName || 'The account owner'} owns this {vocab.account}. They can see your workouts
           and can remove your login. <strong>They cannot see or set your password.</strong>
@@ -131,12 +141,17 @@ export default function ProfileTab() {
               {p.isPrimary && <span style={badgeStyle}>PRIMARY</span>}
             </div>
             <div style={{ display: 'flex', gap: 14 }}>
-              <OfflineDisabledWrap message="Editing needs a connection.">
-                <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
-                  Edit
-                </button>
-              </OfflineDisabledWrap>
-              {!p.isPrimary && (
+              {/* Hidden, not disabled, on the one row a trusted member may not edit -- the owner's.
+                  Nothing they could do would ever enable it (member-access.md's "Hide" column). */}
+              {canWritePerson(p.id) && (
+                <OfflineDisabledWrap message="Editing needs a connection.">
+                  <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
+                    Edit
+                  </button>
+                </OfflineDisabledWrap>
+              )}
+              {/* Removing a person deletes their whole history: REMOVE_PEOPLE, owner-only. */}
+              {isOwner && !p.isPrimary && (
                 <OfflineDisabledWrap message="Removing a person needs a connection.">
                   <button
                     onClick={() =>
@@ -153,8 +168,11 @@ export default function ProfileTab() {
         ))}
       </div>
 
-      <LoginsSection plan={account?.plan} vocab={vocab} refreshPeople={refreshPeople} />
+      <LoginsSection plan={account?.plan} vocab={vocab} refreshPeople={refreshPeople} isOwner={isOwner} />
 
+      {/* DELETE_ACCOUNT is the owner's alone; a trusted member never sees it. */}
+      {isOwner && (
+        <>
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>
         <div
@@ -178,6 +196,8 @@ export default function ProfileTab() {
           </OfflineDisabledWrap>
         </div>
       </div>
+        </>
+      )}
 
         </>
       )}

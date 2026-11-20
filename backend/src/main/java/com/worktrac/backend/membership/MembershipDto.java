@@ -31,17 +31,28 @@ import com.worktrac.backend.billing.BillingPlan;
  * guessing wrong there is the signed-out failure
  * {@code docs/incidents/2026-07-27-db-outage-forced-logout.md} describes.
  *
+ * <p><b>{@code ownerPersonId} answers "whose log is closed to me?"</b> — the owner's PERSON id, for a
+ * login that may write other people but not the owner (a MANAGER: a family's trusted member, a
+ * practice's assistant). The client's {@code canWritePerson} reads it so the owner's own log shows
+ * read-only instead of offering writes {@code PersonService} would refuse. Resolved exactly when
+ * {@code ownerName} is, and null for an owner for the same reason. An id, not contact details.
+ *
  * <p>Deliberately carries no permission list. The client needs "can I write to this person" and
  * "who can I see", both derivable from these three fields; shipping the full enum would put a
  * server-side vocabulary into every persisted auth snapshot, where it would then have to be
  * version-migrated every time the enum changed.
  */
 public record MembershipDto(String accountRole, Long personId, boolean membersSeeEveryone,
-                             String ownerName, String status) {
+                             String ownerName, String status, Long ownerPersonId) {
 
-    public static MembershipDto from(AccountAccess access, String ownerName) {
+    /** Who owns the account, as far as a non-owner is told: a name and a person id, either null. */
+    public record Owner(String name, Long personId) {
+        public static final Owner NOBODY = new Owner(null, null);
+    }
+
+    public static MembershipDto from(AccountAccess access, Owner owner) {
         return new MembershipDto(access.accountRole().name(), access.selfPersonId(),
-                access.membersSeeEveryone(), ownerName, access.status().name());
+                access.membersSeeEveryone(), owner.name(), access.status().name(), owner.personId());
     }
 
     /**
@@ -52,13 +63,14 @@ public record MembershipDto(String accountRole, Long personId, boolean membersSe
      * branch. Passing it keeps {@code SubscriptionService.entitledPlan} the single authority
      * instead of this DTO growing a second opinion about which tier a household is on.
      */
-    public static MembershipDto from(AccountMembership membership, String ownerName,
+    public static MembershipDto from(AccountMembership membership, Owner owner,
                                       BillingPlan accountPlan) {
         return new MembershipDto(
                 membership.getAccountRole().name(),
                 membership.getPerson() == null ? null : membership.getPerson().getId(),
                 membership.getAccount().isMembersSeeEveryone(),
-                ownerName,
-                MembershipStatus.forRole(membership.getAccountRole(), accountPlan).name());
+                owner.name(),
+                MembershipStatus.forRole(membership.getAccountRole(), accountPlan).name(),
+                owner.personId());
     }
 }
