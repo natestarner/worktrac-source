@@ -572,7 +572,8 @@ history window is a read filter over rows that are all still there.
 
 **Do not reuse that phrasing for member logins.** From phase 8 a plan genuinely decides what a
 LOGIN can do: a MEMBER in a household that is not Plus has `MembershipStatus.PAUSED_PLAN` and is
-refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription`. That is a real
+refused on every route but `GET /api/auth/me`, `GET /api/billing/subscription` and the CSV export of
+its OWN profile (`PermissionInterceptor#isAllowedWhilePaused`; export is free on every tier). That is a real
 capability gate, not a display rule, and describing it with the data sentence would make one of the
 two claims false.
 

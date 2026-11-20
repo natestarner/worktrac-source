@@ -222,8 +222,17 @@ export default function AppShell() {
   // /me is the single authority for this (it keeps answering 200 while paused), so the client
   // never infers it from a failed request. Offline, it comes from the auth snapshot's last-known
   // value -- the only truth available, and the correct degradation.
+  //
+  // <Toast/> comes with it: the screen's Download button is a gated action whose only way to say
+  // "that failed" or "that needs a connection" is a toast, and the normal render below (which
+  // mounts the one Toast) never happens while paused.
   if (isPaused) {
-    return <PausedLoginScreen />;
+    return (
+      <>
+        <PausedLoginScreen />
+        <Toast />
+      </>
+    );
   }
 
   // NEVER `return null` here. That is a literally empty #root, which boot-watchdog.js reports as

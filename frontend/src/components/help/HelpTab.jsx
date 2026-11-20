@@ -1013,6 +1013,10 @@ export default function HelpTab() {
             everyone else&rsquo;s stay exactly where they are, and the household keeps working from
             the main login. Go back to Plus and their sign-in starts working again on its own.
           </p>
+          <p>
+            While their login is paused, a family member can still download their own workouts
+            from the paused screen, and switch to any other household they belong to.
+          </p>
         </Note>
 
         <Note title="Setting one up for a child">

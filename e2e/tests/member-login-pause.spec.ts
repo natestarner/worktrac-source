@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
-import { loginAs, registerHousehold, setBillingPlan } from './support/auth';
+import { addMemberLogin, loginAs, registerHousehold, setBillingPlan } from './support/auth';
 
 /**
  * Member logins are a Plus feature. Dropping to Free PAUSES them; going back to Plus resumes them.
@@ -178,5 +178,65 @@ test.describe('A member login when the household leaves Plus', () => {
     await expect(page.getByText(/1 personal login will stop working/)).toBeVisible();
     await expect(page.getByText(/Sam/).first()).toBeVisible();
     await expect(page.getByText(/Nothing is deleted/)).toBeVisible();
+  });
+});
+
+/**
+ * What a paused member can do WITHOUT the owner: take their own workouts out, and get to any other
+ * household their login belongs to. Before this, the screen's only control was Sign out — a member
+ * with a second household (the shape a real person hit on 2026-11-19) had to sign out and use the
+ * picker to leave it.
+ *
+ * Built as one login that OWNS household A ("Alex's Household", Free) and is a MEMBER of household
+ * B, which then drops to Free. An owner is never paused, so A stays usable; B is the paused one.
+ */
+test.describe('A paused member is not stuck', () => {
+  async function pausedInOneHouseholdOwnerOfAnother(page: Page, request: APIRequestContext) {
+    const sharedEmail = await registerHousehold(page, request, 'Alex');
+    await logout(page);
+
+    const otherOwnerEmail = await registerHousehold(page, request, 'Robin');
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sam', exact: true }).first()).toBeVisible();
+    await addMemberLogin(page, request, otherOwnerEmail, 'Sam', sharedEmail);
+    await logout(page);
+
+    // Paused BEFORE the member signs in, so no replica has their access cached yet and the first
+    // answer is already the paused one (e2e-tests.md, "A plan change reaches every replica").
+    await setBillingPlan(request, otherOwnerEmail, 'FREE');
+
+    await page.goto('/login');
+    await page.getByPlaceholder('Email', { exact: true }).fill(sharedEmail);
+    await page.getByPlaceholder('Password', { exact: true }).fill('password123');
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await page.getByRole('button', { name: /you.re a member/ }).click();
+    await expect(page.getByText(/Your login is paused/i)).toBeVisible();
+  }
+
+  test('downloads their own workouts from the paused screen', async ({ page, request }) => {
+    await pausedInOneHouseholdOwnerOfAnother(page, request);
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download my workouts' }).click();
+    const download = await downloadPromise;
+
+    // The server let the paused login make exactly this request: the member's OWN profile's CSV.
+    expect(download.suggestedFilename()).toMatch(/\.csv$/);
+    // No error toast -- a refused export would have surfaced as one.
+    await expect(page.getByText(/Couldn.t download/)).toHaveCount(0);
+  });
+
+  test('switches to the other household from the paused screen', async ({ page, request }) => {
+    await pausedInOneHouseholdOwnerOfAnother(page, request);
+
+    // Only the OTHER household is offered: switching to the paused one would do nothing.
+    await expect(page.getByRole('button', { name: /^Switch to / })).toHaveCount(1);
+    await page.getByRole('button', { name: "Switch to Alex's Household" }).click();
+
+    await expect(page).toHaveURL(/\/app\/log/);
+    await expect(page.getByText(/Your login is paused/i)).toHaveCount(0);
+    await expect(page.locator('.header-bar').getByRole('button', { name: /Alex/ })).toBeVisible();
   });
 });

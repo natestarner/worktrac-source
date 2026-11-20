@@ -1,6 +1,12 @@
 import { useAuth } from '../../context/AuthContext';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { useHouseholdSwitch, unsyncedSwitchMessage } from '../../hooks/useHouseholdSwitch';
+import { downloadPersonCsv } from '../../api/export';
 import { accountVocab } from '../../utils/accountVocab';
+import Button from './Button';
+import OfflineDisabledWrap from './OfflineDisabledWrap';
+import { IconDownload } from './icons';
 
 /**
  * What a member sees when their account is no longer on a paid plan.
@@ -31,12 +37,32 @@ import { accountVocab } from '../../utils/accountVocab';
  * important sentence on the screen, because the honest fear on seeing this is that a lapsed
  * payment cost somebody their training history. It did not, and `billing.md`'s promise that
  * workouts are never deleted on Free still holds exactly.
+ *
+ * <b>Two ways forward that do not depend on the owner</b> (added 2026-11-20, after a real member
+ * with a second household could only reach it by signing out):
+ * - <b>Download my workouts</b> — their OWN profile's CSV, the same export History offers. The
+ *   server lets a paused login make exactly this one extra request (`PermissionInterceptor
+ *   #isAllowedWhilePaused`), because export is free on every tier and someone locked out through no
+ *   fault of their own is who needs it most. Hidden when the membership has no profile: there is
+ *   nothing to export, and the server would refuse it.
+ * - <b>Switch to {household}</b>, one per OTHER household this login belongs to, through
+ *   `useHouseholdSwitch` — the account menu's exact mechanism, since the menu is not on screen
+ *   here. The pause is per-household, so the other household is unaffected by it.
  */
 export default function PausedLoginScreen() {
   const { user, account, logout } = useAuth();
-  const { ownerName } = useAccountAccess();
+  const { ownerName, selfPersonId } = useAccountAccess();
   const vocab = accountVocab(account?.vocab);
   const owner = ownerName || `The ${vocab.owner}`;
+  const { otherAccounts, switching, pendingSwitch, requestSwitch, confirmSwitch, cancelSwitch } =
+    useHouseholdSwitch();
+  // Export is a gated (online-only) action like everywhere else it appears: no queue behind it, so a
+  // failure has to be said out loud (the toast AppShell renders beside this screen).
+  const { pending: downloading, run } = useGatedMutation({
+    offlineMessage: 'Downloading needs a connection.',
+    errorMessage: "Couldn't download your workouts. Try again.",
+  });
+  const download = run(() => downloadPersonCsv(selfPersonId));
 
   return (
     <div style={wrapStyle}>
@@ -63,11 +89,48 @@ export default function PausedLoginScreen() {
           &mdash; you won&rsquo;t need a new invitation.
         </p>
 
-        {/* No Upgrade button: managing the plan is owner-only, so it could only ever 403.
-            Sign out IS offered, and it is the only control here that must be: without it this
-            screen is a dead end for somebody who has another household to switch to, or who is
-            simply on the wrong login. Switching households is not offered instead -- that needs
-            the account menu, which this screen replaces, and the pause is per-household anyway. */}
+        {/* What the reader CAN do without the owner. No Upgrade button: managing the plan is
+            owner-only, so it could only ever 403 (member-access.md, "a control the server will
+            refuse must not be offered"). */}
+        <div style={actionsStyle}>
+          {selfPersonId != null && (
+            <OfflineDisabledWrap message="Downloading needs a connection.">
+              <Button onClick={download} disabled={downloading} variant="primary" fullWidth>
+                <IconDownload size={16} />
+                Download my workouts
+              </Button>
+            </OfflineDisabledWrap>
+          )}
+
+          {otherAccounts.map((other) => (
+            <Button
+              key={other.accountId}
+              onClick={() => requestSwitch(other)}
+              disabled={switching}
+              variant="secondary"
+              fullWidth
+            >
+              {`Switch to ${other.accountName}`}
+            </Button>
+          ))}
+
+          {pendingSwitch && (
+            <div role="alertdialog" aria-label="Unsynced changes" style={confirmStyle}>
+              <p style={{ margin: '0 0 var(--space-3)' }}>{unsyncedSwitchMessage(pendingSwitch.count)}</p>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'center' }}>
+                <Button onClick={confirmSwitch} size="sm" variant="secondary">
+                  Switch anyway
+                </Button>
+                <Button onClick={cancelSwitch} size="sm" variant="secondary">
+                  Stay here
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sign out stays, and is the one control that must always be here: the wrong login, or a
+            household this login can only reach through the household picker, both need it. */}
         <div style={footStyle}>
           Signed in as {user?.email}
           {' \u00b7 '}
@@ -131,6 +194,21 @@ const signOutStyle = {
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
+};
+
+const actionsStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--space-3)',
+  marginTop: 'var(--space-5)',
+};
+
+const confirmStyle = {
+  padding: 'var(--space-4)',
+  borderRadius: 'var(--radius-md)',
+  background: 'var(--color-bg)',
+  fontSize: 'var(--text-sm)',
+  lineHeight: 1.5,
 };
 
 const footStyle = {

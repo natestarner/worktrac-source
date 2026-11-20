@@ -112,7 +112,8 @@ token is the only credential it can have. Details and the pins: `registration-an
 ### ⚠️ Member logins are PAID-only, so EVERY test that mints one must set a paid plan first
 
 Registration creates a **Free** subscription. A MEMBER in a Free household is `PAUSED_PLAN` and is
-refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription` — correctly. So a
+refused on every route but `GET /api/auth/me`, `GET /api/billing/subscription` and the export of its
+own profile — correctly. So a
 test that registers a household and then mints a member is testing the pause, whatever its name
 says.
 
