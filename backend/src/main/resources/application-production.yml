@@ -10,6 +10,14 @@ spring:
       # how long an ordinary request waits for a pooled connection, is set for every profile in
       # application.yml.)
       initialization-fail-timeout: 60000
+      # The whole pool stays warm here (application.yml's 2 is for local dev and tests). Opening the
+      # app fires ~8 requests at once; with 2 warm connections the rest had to be opened to Azure
+      # SQL mid-request, and /me took 2.6-4.3s four times in a week (2026-11-14 to 11-20, each one
+      # the pool jumping from 2-3 to 8-9), tripping the response-time alert on 2026-11-20.
+      # No new worst case: replicas x maximum-pool-size was already sized to fit. Hikari 7 pings an
+      # idle connection every 2 minutes and replaces each after 30, in the background, so warm
+      # connections don't go stale behind Azure's idle timeout.
+      minimum-idle: 10
   jpa:
     show-sql: false
   flyway:
