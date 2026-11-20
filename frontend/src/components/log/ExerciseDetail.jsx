@@ -8,7 +8,7 @@ import { useStepperIncrements } from '../../hooks/useStepperIncrements';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { queryKeys } from '../../api/queryKeys';
-import { isTempExerciseId } from '../../lib/exerciseIdMap';
+import { isTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets } from '../../api/sets';
@@ -744,8 +744,20 @@ export default function ExerciseDetail({
   // Log set, and the set was silently logged at the prefill instead. Locally those queries return
   // in milliseconds so it almost never lost; against a deployed backend it did. See
   // docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md.
+  //
+  // ⚠️ The stamp is compared through resolveExerciseId, not raw. A custom exercise is opened under
+  // its TEMP id the moment it is created, and when the create syncs LogTab moves the selection to
+  // the real id -- the same exercise, but `draftExerciseId === exercise.id` read that as "you left
+  // for another exercise" and re-seeded. So a weight or hold set on a brand-new exercise was logged
+  // at the prefill whenever the create landed between the typing and the tap: never locally (the
+  // round trip beats any thumb), routinely on lower (~800ms). Found by the nightly WebKit run's
+  // endurance.spec "add its own timed exercise" (0:20 dialled, 0:30 logged), 2026-11-19.
+  // setExerciseIdMapping runs before LogTab's remap, so the mapping exists by the render that swaps.
   const userOwnsDraft =
-    draftExerciseId === exercise.id && draftSource === 'user' && !setLoggedSinceSeed;
+    draftExerciseId != null
+    && resolveExerciseId(draftExerciseId) === resolveExerciseId(exercise.id)
+    && draftSource === 'user'
+    && !setLoggedSinceSeed;
 
   // Paint the stored draft only while the person owns it; otherwise the freshly computed prefill,
   // and null (em dash) when even that isn't known yet. The draft lives in AppStateProvider ABOVE
