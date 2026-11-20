@@ -357,6 +357,13 @@ which: `draftExerciseId`, `draftSetCount`, `draftSource` (`'prefill' | 'user'`).
 - **Only an exercise change or a set actually being added may re-seed over `source: 'user'`.** Not
   a background revalidation, not the window-focus refetch `staleTime: 0` guarantees, not a pending
   row reconciling. `docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`.
+- **⚠️ A temp→real id swap is NOT an exercise change.** A just-created exercise is open under its
+  temp id, and LogTab moves the selection to the real id when the create syncs. `userOwnsDraft`
+  therefore compares the stamp through `resolveExerciseId` on both sides; a raw `===` re-seeded at
+  the swap and logged the prefill over a weight or hold dialled while the create was in flight —
+  invisible locally (the create always wins), 3/3 in lower's nightly WebKit run (2026-11-19).
+  `endurance.spec.ts`'s "dialled before the new exercise finishes saving" holds the create's
+  response until after the dial, so it is red every run without the resolve.
 - Reps has a `null`/em-dash state for the same reason weight does — an honest blank beats another
   exercise's rep count. `repsValue` (`?? 8`) is what gets logged, mirroring `weightValue` (`?? 0`).
 

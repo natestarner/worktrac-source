@@ -108,6 +108,45 @@ test.describe('endurance exercises', () => {
     await expect(setRows(page).getByText('0:20', { exact: true })).toBeVisible();
   });
 
+  // ⚠️ The create syncing between the dial and the tap must not reset the dialled value. A new
+  // exercise opens under its TEMP id and moves to the real id when the create lands; the draft's
+  // ownership stamp used to compare those raw, read the swap as "you left for another exercise",
+  // and logged the prefill (0:30) instead of the 0:20 just dialled. Locally the create always beat
+  // the thumb, so only lower's nightly WebKit run ever saw it (2026-11-19, 3/3 attempts). Holding
+  // the create's response until AFTER the dial makes the race happen every run, in either engine.
+  test('a hold dialled before the new exercise finishes saving is the one logged', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Sable');
+
+    let releaseCreate: () => void = () => {};
+    const createHeld = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    let createSettled: () => void = () => {};
+    const createDone = new Promise<void>((resolve) => { createSettled = resolve; });
+    await page.route(/\/api\/exercises$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await createHeld;
+      const response = await route.fetch();
+      await route.fulfill({ response });
+      createSettled();
+    });
+
+    await page.getByPlaceholder('Search all exercises').fill('Ring Support Hold');
+    await addOwnTimedExercise(page, 'Ring Support Hold');
+    await expect(page.getByLabel('Time')).toBeVisible();
+
+    // Dialled while the exercise still has only its temp id...
+    await setHoldSeconds(page, 20);
+    // ...then the create lands and the screen swaps to the real id underneath the dialled value.
+    releaseCreate();
+    await createDone;
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value'))
+      .toHaveValue('0:20');
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(setRows(page).getByText('0:20', { exact: true })).toBeVisible();
+  });
+
   test('a hold survives being logged offline and reads back as time after syncing', async ({ page, request }) => {
     await registerHousehold(page, request, 'Tovi');
     await pickExercise(page, 'Wall Sit');
