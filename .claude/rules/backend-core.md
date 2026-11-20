@@ -196,8 +196,10 @@ its own copy of everything in-process. Full plan: `docs/architecture/scaling.md`
   table `shedlock`). Without it each replica runs the job on its own timer. Set `lockAtLeastFor`
   just under the interval and `lockAtMostFor` as the crash fallback. A job whose run is skipped
   because its holder died must be safe to wait for the next tick.
-  `EveryScheduledJobIsLockedTest` fails the build on an unlocked one, and on two jobs sharing a
-  lock name.
+  `EveryScheduledJobIsLockedTest` fails the build on an unlocked one, on two jobs sharing a
+  lock name, and on a `lockAtLeastFor` longer than its `lockAtMostFor` — which ShedLock refuses
+  only when the job fires, from the scheduler thread, so nothing else notices. The video checker
+  shipped that way and never ran once in production.
 - **Every change to what a login may do goes through `AccountAccessService.invalidate*`**, never
   around it, and never by evicting a cache directly. Those methods clear this replica's cache *and*
   write `access_invalidations`, which every other replica replays every ~2s. A new `@Scheduled` job
