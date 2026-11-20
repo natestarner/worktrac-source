@@ -96,7 +96,7 @@ Before this, prod ran 0.25 vCPU / 0.5 GiB: `/me` p50 410 ms, p90 1.8 s, max 6.4 
 | Lever | Removes | Cost | Risk |
 |---|---|---|---|
 | **Prod to 1 vCPU / 2 GiB** (`infra/prod.bicepparam`) | Most of the CPU wait: burst sync 478 -> 184 ms in the replay | ~$12/month more while idle | None; one-line deploy-repo PR to `production` |
-| **Move the app to Central US** (a new Container Apps environment) | The network part of every request, app open or not | Same running cost | New app names ripple into Bicep, workflows, alerts and log queries. Managed certificates are per environment, so they are re-issued (a few minutes of TLS errors per hostname at cutover unless a certificate is brought). The `api.` hostnames stay, so the iOS binary, Stripe, Apple and email webhooks are untouched. Lower first |
+| **Move the app to Central US** (a new Container Apps environment) | The network part of every request, app open or not | Same running cost | New app names ripple into Bicep, workflows, alerts and log queries. Managed certificates are per environment, so they are re-issued (a few minutes of TLS errors per hostname at cutover unless a certificate is brought). The `api.` hostnames stay, so iOS builds from 1.1.0, Stripe and Apple are untouched. **Two callers use the raw East US address and do need handling:** iOS 1.0.0 (build 9) and the email delivery webhook. Lower first. The step-by-step plan and every downside found: `region-move.md` |
 | **Fewer requests per app open** (one start-up read per person instead of five) | The burst itself | A code project across client and server | API compatibility: additive endpoint, old builds keep the old calls (`api-compatibility.md`) |
 
 Two smaller ones, worth it only if the region move has to wait:
