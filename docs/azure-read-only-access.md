@@ -41,9 +41,11 @@ Everything else is governed by the service principal's roles.
 
 Deliberate gaps — don't "fix" these by widening the roles:
 
-- **SQL table data.** RBAC does not grant data-plane access to Azure SQL. Reading rows would
-  need a contained database user with `db_datareader`, granted in-database. Not set up, on
-  purpose — the app's data is per-person and private.
+- **SQL table data.** RBAC does not grant data-plane access to Azure SQL. The service principal
+  has a contained database user with **`VIEW DATABASE STATE` only** (granted 2026-11-20, see
+  "Reading the database's performance views" below): DMVs and Query Store, never a row. Reading
+  rows would need `db_datareader`. Not granted, on purpose: the app's data is per-person and
+  private, and production has real users.
 - **Key Vault secret values.** Requires `Key Vault Secrets User`. Not assigned.
 - **Container app log *streaming*.** `az containerapp logs show --follow` is unreliable under
   `Reader`. Query Log Analytics instead (below).
@@ -291,7 +293,9 @@ genuine refusal is a signal to raise the limit -- each one is an env var
 
 ## Reading which SQL statements are expensive (Query Store over ARM)
 
-The SQL *data* is out of reach, but the database's **Query Store statistics are not**. The ARM
+Superseded for most uses by the sqlcmd section below, which reads the full Query Store. This
+still works without the database user. The SQL *data* is out of reach, but the database's
+**Query Store statistics are not**. The ARM
 `topQueries` endpoint returns the top statements by CPU, duration, IO or log IO, broken into
 intervals, with executions, CPU, duration and memory for each. This is how the History sync's
 per-person plan problem was found on lower
@@ -318,6 +322,37 @@ MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml \
 - Pair it with `az monitor metrics list --metrics cpu_percent physical_data_read_percent
   dtu_consumption_percent`. Those say *whether* the DB was CPU-bound or IO-bound; Query Store says
   *which* statement did it.
+
+## Reading the database's performance views (sqlcmd, `VIEW DATABASE STATE`)
+
+Granted 2026-11-20 on `worktrac-db-prod` and `worktrac-db-lower`. Unlike the ARM endpoint above,
+this reads the **whole** Query Store (every statement, its text, its plans and its waits) and the
+DMVs. It reads **no table rows**: `SELECT` on any table answers Msg 229, permission denied, which
+is the check to repeat after any change here.
+
+```bash
+'/c/Program Files/SqlCmd/sqlcmd.exe' -S worktrac-sql-server.database.windows.net -d worktrac-db-prod \
+  --authentication-method ActiveDirectoryAzCli -W -s '|' -i query.sql
+```
+
+- **`ActiveDirectoryAzCli` signs in as whoever the `az` profile is**, so under
+  `AZURE_CONFIG_DIR` it is the read-only service principal, with no secret in the command.
+  `ActiveDirectoryDefault` tries several credential sources first and looks hung.
+- **The firewall rule `AllowMyIP` must name this machine's current public IP.** A home IP that
+  changes makes every connection time out.
+- go-sqlcmd (`winget install Microsoft.Sqlcmd`), not the old ODBC sqlcmd.
+
+**How it was granted** (by the server's Entra admin, the owner, once per database). The user is
+created by the app ID as a SID (`TYPE = E`), not `FROM EXTERNAL PROVIDER`, so it needs no
+directory lookup by the SQL server:
+
+```powershell
+foreach ($db in 'worktrac-db-prod','worktrac-db-lower') { & 'C:\Program Files\SqlCmd\sqlcmd.exe' -S worktrac-sql-server.database.windows.net -d $db --authentication-method ActiveDirectoryAzCli -b -Q "IF DATABASE_PRINCIPAL_ID('worktrac-claude-readonly') IS NULL CREATE USER [worktrac-claude-readonly] WITH SID = <the app ID's bytes, little-endian GUID order>, TYPE = E; GRANT VIEW DATABASE STATE TO [worktrac-claude-readonly];" }
+```
+
+(The SID is `uuid.UUID(<appId>).bytes_le` in hex. The server's Entra admin was set the same day
+with `az sql server ad-admin create`; SQL logins, which the app uses, are unaffected because
+Entra-only authentication stays off.)
 
 ## Scope note
 
