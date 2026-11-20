@@ -25,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -66,6 +67,7 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
     private String ownerToken;
     private String memberToken;
     private long memberPersonId;
+    private long ownerPersonId;
 
     @BeforeEach
     void setUpPlusHouseholdWithAMember() throws Exception {
@@ -73,9 +75,10 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
         ownerEmail = "owner-" + suffix + "@example.com";
         String memberEmail = "member-" + suffix + "@example.com";
 
-        ownerToken = RegistrationTestSupport
-                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, ownerEmail, "Nate")
-                .get("token").asText();
+        JsonNode ownerRegistration = RegistrationTestSupport
+                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, ownerEmail, "Nate");
+        ownerToken = ownerRegistration.get("token").asText();
+        ownerPersonId = ownerRegistration.get("person").get("id").asLong();
 
         setPlan("PLUS");
 
@@ -169,6 +172,35 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
                             .header("Authorization", bearer(memberToken)))
                     .andExpect(status().isForbidden());
             mockMvc.perform(get("/api/exercises").header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isForbidden());
+        }
+
+        /**
+         * ⚠️ A paused member can still take their OWN training out. Export is free on every tier
+         * (coaching.md), and somebody whose login stopped working through no fault of theirs is
+         * exactly who needs it -- the paused screen's Download button calls this.
+         */
+        @Test
+        void aPausedMemberCanStillDownloadTheirOwnData() throws Exception {
+            mockMvc.perform(get("/api/people/" + memberPersonId + "/export.csv")
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Content-Type", org.hamcrest.Matchers.startsWith("text/csv")));
+        }
+
+        /**
+         * ...and ONLY their own. On a family account a member can normally SEE their siblings, so
+         * an export exemption keyed on "visible" would hand a paused login everybody's history; the
+         * household zip is owner-only even unpaused. Both stay refused with the pause's own code.
+         */
+        @Test
+        void butNotAnybodyElsesNorTheWholeHousehold() throws Exception {
+            JsonNode sibling = json(mockMvc.perform(get("/api/people/" + ownerPersonId + "/export.csv")
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isForbidden()));
+            assertThat(sibling.get("code").asText()).isEqualTo("MEMBER_LOGIN_PAUSED");
+
+            mockMvc.perform(get("/api/export/all.zip").header("Authorization", bearer(memberToken)))
                     .andExpect(status().isForbidden());
         }
 

@@ -76,7 +76,7 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
         // Asked BEFORE any permission, because it is a different question: not "may you do this"
         // but "may you do anything at all right now". See below for what stays open.
-        if (access.status() == MembershipStatus.PAUSED_PLAN && !isAllowedWhilePaused(request)) {
+        if (access.status() == MembershipStatus.PAUSED_PLAN && !isAllowedWhilePaused(request, access)) {
             log.warn("Refused {} {} for account {} membership {}: member login paused (household is not Plus)",
                     request.getMethod(), request.getRequestURI(), access.accountId(), access.membershipId());
             throw new ForbiddenException(
@@ -102,9 +102,9 @@ public class PermissionInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * The two routes a paused login may still call.
+     * The three routes a paused login may still call.
      *
-     * <p>⚠️ <b>An allow-list, not a deny-list, and it is deliberately two entries long.</b> A
+     * <p>⚠️ <b>An allow-list, not a deny-list, and it is deliberately three entries long.</b> A
      * deny-list would silently admit every route added later, which is precisely the class of
      * mistake a pause must not make — a member whose household stopped paying would keep whatever
      * the newest endpoint offers.
@@ -121,16 +121,31 @@ public class PermissionInterceptor implements HandlerInterceptor {
      *   <li><b>{@code GET /api/billing/subscription}</b> so the paused screen can say what plan the
      *   household is actually on. Without it the screen can state the problem but never confirm it
      *   is fixed.</li>
+     *   <li><b>{@code GET /api/people/{own person}/export.csv}</b>, for the caller's OWN profile and
+     *   nobody else's. Export is free on every tier and must stay so (coaching.md) — it is what
+     *   makes "your training lives in someone else's account" acceptable, and a paused member is
+     *   exactly the person who most needs it. The comparison is an exact string against
+     *   {@code selfPersonId}, so a sibling's profile, the household zip ({@code EXPORT_ACCOUNT_DATA})
+     *   and any path variation are still refused; a membership with no profile has nothing to
+     *   export and matches nothing. {@code CsvExportService} still runs its own visibility guard
+     *   behind this. Reading your own data grants nothing a paid plan sells.</li>
      * </ul>
      *
-     * <p>Both are GETs. A paused login writes nothing, anywhere.
+     * <p>All three are GETs. A paused login writes nothing, anywhere. (Switching to another
+     * household is not on this list because it needs no exemption: {@code POST /api/auth/session}
+     * carries no {@code @RequiresPermission}, and the session it mints is for the OTHER household,
+     * whose own status then applies.)
      */
-    private boolean isAllowedWhilePaused(HttpServletRequest request) {
+    private boolean isAllowedWhilePaused(HttpServletRequest request, AccountAccess access) {
         if (!"GET".equals(request.getMethod())) {
             return false;
         }
         String path = request.getRequestURI();
-        return "/api/auth/me".equals(path) || "/api/billing/subscription".equals(path);
+        if ("/api/auth/me".equals(path) || "/api/billing/subscription".equals(path)) {
+            return true;
+        }
+        Long selfPersonId = access.selfPersonId();
+        return selfPersonId != null && ("/api/people/" + selfPersonId + "/export.csv").equals(path);
     }
 
     // Says who CAN do it rather than only that the caller can't, because in every case here the

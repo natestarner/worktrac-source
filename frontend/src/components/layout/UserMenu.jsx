@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { useHouseholdSwitch, unsyncedSwitchMessage } from '../../hooks/useHouseholdSwitch';
 import { planIncludes } from '../../utils/planFeatures';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
@@ -25,7 +26,7 @@ import { appReviewUrl, openInBrowser } from '../../lib/native';
 // lands after the real Header mounts instead of opening a menu that is about to disappear.
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
-  const { people, logout, isAdmin, accounts, account, switchAccount, client } = useAuth();
+  const { people, logout, isAdmin, account, client } = useAuth();
   const reviewUrl = appReviewUrl(client?.appStoreUrl);
   const vocab = accountVocab(account?.vocab);
   const { selfPersonId, isMember } = useAccountAccess();
@@ -33,17 +34,12 @@ export default function UserMenu({ booting = false }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [pendingLogoutCount, setPendingLogoutCount] = useState(0);
-  // The household a switch is waiting on, once the person has been told about unsynced work.
-  const [pendingSwitch, setPendingSwitch] = useState(null);
-  const [switching, setSwitching] = useState(false);
   const containerRef = useRef(null);
-
-  // Only the OTHER households -- there is nothing to switch to when there is one, and offering the
-  // one you are already in is a control that does nothing. Undefined on an older auth snapshot,
-  // which reads as "nowhere to go" and hides the entry rather than erroring.
-  const otherAccounts = (accounts ?? []).filter(
-    (h) => String(h.accountId) !== String(account?.id),
-  );
+  const closeMenu = useCallback(() => setOpen(false), []);
+  // Shared with the paused-login screen (useHouseholdSwitch's header has the rules): only the OTHER
+  // households, a suspension-not-loss confirm when work is unsynced, and no connectivity branch.
+  const { otherAccounts, switching, pendingSwitch, requestSwitch, confirmSwitch, cancelSwitch } =
+    useHouseholdSwitch({ onSwitched: closeMenu });
 
   // The VIEWER's own name, not the household's primary -- for a member those are different
   // people, and showing the primary's name here read as "logged in as the owner" while actually
@@ -62,14 +58,14 @@ export default function UserMenu({ booting = false }) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false);
         setPendingLogoutCount(0);
-        setPendingSwitch(null);
+        cancelSwitch();
       }
     }
     function handleKey(e) {
       if (e.key === 'Escape') {
         setOpen(false);
         setPendingLogoutCount(0);
-        setPendingSwitch(null);
+        cancelSwitch();
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -78,7 +74,7 @@ export default function UserMenu({ booting = false }) {
       document.removeEventListener('mousedown', handleClick);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [open]);
+  }, [open, cancelSwitch]);
 
   function go(path) {
     setOpen(false);
@@ -106,41 +102,6 @@ export default function UserMenu({ booting = false }) {
       setOpen(false);
       logout();
     }
-  }
-
-  // Switching household needs the network -- it mints a new session token, and there is no offline
-  // equivalent of that. Rather than a connectivity branch, the attempt simply surfaces its own
-  // failure like any other gated write would; useOnlineStatus is not consulted here.
-  async function runSwitch(household) {
-    setPendingSwitch(null);
-    setSwitching(true);
-    try {
-      await switchAccount(household.accountId);
-      setOpen(false);
-      navigate('/app/log');
-    } catch {
-      // Deliberately swallowed to a no-op UI-wise: nothing was torn down (establishSession only
-      // commits after /me answers), so the person is still exactly where they were, in the
-      // household they were already in. Reopening the menu and trying again is the whole recovery.
-    } finally {
-      setSwitching(false);
-    }
-  }
-
-  function handleSwitch(household) {
-    // getUnsyncedWriteCount, NOT the banner's display count -- same reasoning as handleLogout: the
-    // banner deliberately ignores a brand-new in-flight write, and a decision about someone's data
-    // needs the honest answer.
-    const queued = getUnsyncedWriteCount(queryClient);
-    if (queued > 0) {
-      setPendingSwitch({ ...household, count: queued });
-      return;
-    }
-    runSwitch(household);
-  }
-
-  function confirmSwitch() {
-    runSwitch(pendingSwitch);
   }
 
   function confirmLogout() {
@@ -280,7 +241,7 @@ export default function UserMenu({ booting = false }) {
                   key={other.accountId}
                   label={`Switch to ${other.accountName}`}
                   disabled={switching}
-                  onClick={() => handleSwitch(other)}
+                  onClick={() => requestSwitch(other)}
                 />
               ))}
             </>
@@ -299,14 +260,13 @@ export default function UserMenu({ booting = false }) {
                   out a sync they never needed to wait for. Same getUnsyncedWriteCount source as
                   logout (the safety count, never the banner's display count), much lower severity. */}
               <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>
-                {pendingSwitch.count === 1 ? '1 change hasn’t' : `${pendingSwitch.count} changes haven’t`} synced yet.
-                They’ll stay saved here and sync when you switch back.
+                {unsyncedSwitchMessage(pendingSwitch.count)}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button role="menuitem" onClick={confirmSwitch} style={cancelInlineStyle}>
                   Switch anyway
                 </button>
-                <button onClick={() => setPendingSwitch(null)} style={cancelInlineStyle}>
+                <button onClick={cancelSwitch} style={cancelInlineStyle}>
                   Stay here
                 </button>
               </div>
