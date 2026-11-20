@@ -47,8 +47,11 @@ public class ExerciseVideoChecker {
         this.enabled = enabled;
     }
 
+    // lockAtMostFor must be >= lockAtLeastFor, or ShedLock throws on every run and the job never
+    // happens -- which it did, daily, from at least 2026-11-10 (EveryScheduledJobIsLockedTest now
+    // checks every lock). 23h30m frees a crashed run's lock before the next day's tick.
     @Scheduled(cron = "0 30 4 * * *", zone = "UTC")
-    @SchedulerLock(name = "exerciseVideoChecker", lockAtLeastFor = "PT23H", lockAtMostFor = "PT2H")
+    @SchedulerLock(name = "exerciseVideoChecker", lockAtLeastFor = "PT23H", lockAtMostFor = "PT23H30M")
     public void checkDaily() {
         if (enabled) {
             checkAll();

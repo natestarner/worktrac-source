@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -58,5 +59,39 @@ class EveryScheduledJobIsLockedTest {
         assertEquals(List.of(), unlocked, "every @Scheduled method needs @SchedulerLock (or @RunsOnEveryReplica with a reason), or it runs once per replica");
         Set<String> unique = lockNames.stream().collect(Collectors.toSet());
         assertEquals(lockNames.size(), unique.size(), "two jobs sharing a lock name would block each other: " + lockNames);
+    }
+
+    // ShedLock refuses a lock whose lockAtLeastFor exceeds its lockAtMostFor -- but only when the job
+    // FIRES, by throwing from the scheduler thread, where Spring logs it and carries on. Nothing
+    // fails at startup or in any test that calls the job's method directly. ExerciseVideoChecker
+    // shipped with PT23H / PT2H and threw every morning in production from at least 2026-11-10 until
+    // this test existed: its daily check never once ran.
+    @Test
+    void everySchedulerLockHoldsAtLeastNoLongerThanAtMost() throws Exception {
+        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(Component.class));
+
+        List<String> checked = new ArrayList<>();
+        List<String> inverted = new ArrayList<>();
+        for (BeanDefinition candidate : scanner.findCandidateComponents("com.worktrac.backend")) {
+            Class<?> type = Class.forName(candidate.getBeanClassName());
+            for (Method method : type.getDeclaredMethods()) {
+                SchedulerLock lock = method.getAnnotation(SchedulerLock.class);
+                if (lock == null) {
+                    continue;
+                }
+                checked.add(lock.name());
+                // Every lock here spells both bounds as ISO-8601; an empty value would inherit
+                // SchedulingConfig's default, which this test would then need to read -- none do.
+                Duration atLeast = Duration.parse(lock.lockAtLeastFor());
+                Duration atMost = Duration.parse(lock.lockAtMostFor());
+                if (atLeast.compareTo(atMost) > 0) {
+                    inverted.add(lock.name() + " (lockAtLeastFor " + atLeast + " > lockAtMostFor " + atMost + ")");
+                }
+            }
+        }
+
+        assertFalse(checked.isEmpty(), "the scan found no @SchedulerLock at all -- it is not looking in the right place");
+        assertEquals(List.of(), inverted, "ShedLock throws on every run of a job whose lockAtLeastFor exceeds its lockAtMostFor");
     }
 }
