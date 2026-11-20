@@ -11,6 +11,35 @@ public interface PersonExerciseRepository extends JpaRepository<PersonExercise, 
 
     List<PersonExercise> findByPerson_Id(Long personId);
 
+    /**
+     * Every PersonExercise of this person with its tags AND custom fields loaded: two statements
+     * whatever the count. For callers that read both collections on every row (the Log picker
+     * list, CSV export, the importer's dedup). Both are lazy, so {@link #findByPerson_Id} followed
+     * by a per-row read was one SELECT per exercise for each collection, and in production every
+     * one of those is a cross-region round trip (PersonExerciseQueryCostTest).
+     *
+     * <p>Two statements, not one: fetching a Set and a List together multiplies the rows (tags x
+     * fields per exercise). The second query fetches the custom fields into the SAME entities the
+     * first loaded, which only works inside one persistence context, so the caller must be
+     * {@code @Transactional}. Chosen per query, deliberately not a global
+     * {@code hibernate.default_batch_fetch_size} (backend-core.md).
+     */
+    default List<PersonExercise> findWithPersonalizationByPersonId(Long personId) {
+        List<PersonExercise> rows = findWithTagsByPersonId(personId);
+        if (!rows.isEmpty()) {
+            fetchCustomFieldsByPersonId(personId);
+        }
+        return rows;
+    }
+
+    @Query("SELECT DISTINCT pe FROM PersonExercise pe LEFT JOIN FETCH pe.tags WHERE pe.person.id = :personId")
+    List<PersonExercise> findWithTagsByPersonId(@Param("personId") Long personId);
+
+    // Only for its side effect on the persistence context: initialises customFields on the
+    // entities findWithTagsByPersonId already loaded. See findWithPersonalizationByPersonId.
+    @Query("SELECT DISTINCT pe FROM PersonExercise pe LEFT JOIN FETCH pe.customFields WHERE pe.person.id = :personId")
+    List<PersonExercise> fetchCustomFieldsByPersonId(@Param("personId") Long personId);
+
     Optional<PersonExercise> findByPerson_IdAndExercise_Id(Long personId, Long exerciseId);
 
     /**

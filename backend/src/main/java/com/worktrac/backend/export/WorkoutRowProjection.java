@@ -48,6 +48,9 @@ public class WorkoutRowProjection {
     @Transactional(readOnly = true)
     public List<ExportRow> project(Person person) {
         List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
+        // Each row reads its set's exercise name; load those exercises in one statement first,
+        // rather than one lazy SELECT per exercise as the rows are built.
+        workoutSetRepository.findDistinctExercisesByPerson(person.getId());
         Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
         for (WorkoutSet s : allSets) {
             setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
@@ -67,7 +70,8 @@ public class WorkoutRowProjection {
         // four are per-(person, exercise), same granularity as Tags always was, so they repeat
         // across every row that exercise appears in, exactly like Tags already does.
         Map<Long, PersonExercise> personExerciseByExercise = new HashMap<>();
-        for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
+        // Tags and custom fields loaded with it, not one SELECT per exercise as each row reads them.
+        for (PersonExercise pe : personExerciseRepository.findWithPersonalizationByPersonId(person.getId())) {
             personExerciseByExercise.put(pe.getExercise().getId(), pe);
         }
 
