@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { queryKeys } from '../../api/queryKeys';
 import { markSessionEnded } from '../../lib/endedSessions';
+import { newTempExerciseId, setExerciseIdMapping } from '../../lib/exerciseIdMap';
 import { registerOfflineMutationDefaults } from '../../lib/queryClient';
 import ExerciseDetail from './ExerciseDetail';
 import { useAuth } from '../../context/AuthContext';
@@ -2334,6 +2335,41 @@ describe('ExerciseDetail draft ownership', () => {
     // navigation paths reach this state -- the routine strip switches the `exercise` prop without
     // remounting, and the picker unmounts/remounts but the draft outlives it in AppStateProvider.
     mockDraft({ weightDraft: 185, repsDraft: 5, draftExerciseId: 999, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 95, reps: 12, unit: 'lb' }] },
+      best: null,
+    });
+
+    renderExerciseDetail();
+
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('95'));
+    expect(screen.getByLabelText('Reps')).toHaveValue('12');
+  });
+
+  // A just-created exercise is open under its temp id, and LogTab swaps the selection to the real
+  // id when the create syncs. That swap is the SAME exercise, so a value typed under the temp id
+  // must survive it -- the 2026-11-19 nightly failure (0:20 dialled, 0:30 logged), at unit level.
+  it('keeps a typed value across the temp-to-real id swap of a just-created exercise', async () => {
+    const tempId = newTempExerciseId();
+    setExerciseIdMapping(tempId, exercise.id);
+    mockDraft({ weightDraft: 315, repsDraft: 5, draftExerciseId: tempId, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 95, reps: 12, unit: 'lb' }] },
+      best: null,
+    });
+
+    renderExerciseDetail();
+
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('315'));
+    expect(screen.getByLabelText('Reps')).toHaveValue('5');
+  });
+
+  // ...and the resolve must not widen ownership: a temp id that maps to a DIFFERENT exercise is
+  // still somebody else's draft.
+  it('still refuses a draft whose temp id maps to a different exercise', async () => {
+    const tempId = newTempExerciseId();
+    setExerciseIdMapping(tempId, 999);
+    mockDraft({ weightDraft: 315, repsDraft: 5, draftExerciseId: tempId, draftSource: 'user' });
     getExerciseSummary.mockResolvedValue({
       lastSession: { sets: [{ weight: 95, reps: 12, unit: 'lb' }] },
       best: null,
