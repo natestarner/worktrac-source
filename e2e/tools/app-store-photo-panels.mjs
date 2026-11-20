@@ -50,14 +50,15 @@ if (!IN || !OUT || !HERO_PHOTO || !(PHONE_BEZEL || TABLET_BEZEL)) {
 }
 const url = (p) => pathToFileURL(resolve(p)).href;
 
-// Store order. `shot` is the raw capture's scene name from app-store-shots.mjs, per family: the
-// iPad has no separate progress-chart capture (its Trends opens on the overview, which carries the
-// same story), so panel 3 uses that there.
+// Store order. `shot` is the raw capture's scene name from app-store-shots.mjs, per family. The iPad
+// has no separate progress-chart capture, so its two Trends captures swap jobs: the muscles capture
+// (whose lower half is the est.-1RM trend line) carries "make progress" in panel 3, and the overview
+// (calendar, weekly bars, then the muscles card) carries "every muscle" in panel 7 (Nate, 2026-11-20).
 const PANELS = [
   { scene: '01-every-set', hero: true },
   { scene: '02-log-for-anyone', shot: '01-log-mid-workout', switcher: true,
     title: 'Log a set for<br><em>anyone</em> in the house', sub: 'Switch people with one tap.' },
-  { scene: '03-progress-chart', shot: { phone: '03-progress-chart', tablet: '04-trends-overview' },
+  { scene: '03-progress-chart', shot: { phone: '03-progress-chart', tablet: '08-muscles' },
     title: 'Watch each other<br><em>make progress</em>', sub: 'Charts and personal bests<br>for every person.' },
   { scene: '04-pr-celebration', shot: '02-pr-celebration',
     title: 'Celebrate<br><em>every PR</em>', sub: 'Records spotted the moment<br>you lift them.' },
@@ -65,7 +66,7 @@ const PANELS = [
     title: 'Every best,<br><em>in one place</em>', sub: 'Recomputed from<br>your actual sets.' },
   { scene: '06-no-signal', shot: '06-history',
     title: 'Works with<br><em>no signal</em>', sub: 'Sets save on your phone first,<br>then sync.' },
-  { scene: '07-muscles', shot: '08-muscles',
+  { scene: '07-muscles', shot: { phone: '08-muscles', tablet: '04-trends-overview' },
     title: 'Every muscle,<br><em>counted</em>', sub: 'Sets per muscle,<br>shaded on the body.' },
 ];
 
