@@ -44,8 +44,20 @@ the old app stays up as the rollback until the move is proven.
    2026-10-27; `NATIVE_API_URL` switched to `api.huddle.fitness` on 2026-11-02). Once the old app is
    deleted, build 9 can't reach the server. It doesn't lose data: it degrades to offline (cached reads,
    queued writes), and the outbox lives in WebKit storage, which an App Store update keeps, so it
-   drains on update. Last 30 days: 4 people on build 9, **last seen 2026-11-12**. Step 0.2 shows those
-   people the update banner first, and the old app isn't deleted until build 9 is gone.
+   drains on update. Build 9 was used by four logins in all (checked 2026-11-20, last seen 2026-11-12):
+   - **uid 1:** the owner's own login. It has since moved to newer builds.
+   - **uid 32:** a test login, signed in on the same install as uid 1.
+   - **uid 31:** the App Store reviewer demo login. It shares an install and home IPs with uid 1, and
+     was used from Apple's network (17.0.0.0/8).
+   - **uid 34:** someone else. Signed up on the web on 2026-11-08, then signed in on build 9 from the
+     same IP over one 20-minute visit, and hasn't been seen since. They don't share an install or IP
+     with uid 1.
+
+   So the only login with no newer build is uid 34. Step 0.2 shows them the update banner if they
+   return, and the old app isn't deleted until build 9 is gone.
+
+   How this was attributed: `[cid=…]` is a per-install id (`frontend/src/lib/correlationId.js`), so
+   "which logins share an install with uid 1" separates the owner's test logins from real ones.
 3. **The email delivery-status webhook calls the raw East US address.** The Event Grid subscriptions
    `email-delivery-webhook-prod` and `worktrac-email-delivery-lower` post to
    `…whitehill-3dc27bb3.eastus.azurecontainerapps.io/api/webhooks/email-delivery`. Left alone, bounce
@@ -73,11 +85,19 @@ the old app stays up as the rollback until the move is proven.
 9. **Not downsides:** Stripe and Apple webhooks, Sign in with Apple/Google, the iOS builds from
    1.1.0 on, CORS and the CSP all use the custom domains or the frontend's origin, so they don't
    change. During DNS propagation they may land on either app, and both answer correctly.
-10. **Open decision: the legacy `*.starnerconsulting.co` API hostnames** (`worktrac-api.`,
-    `worktrac-api-dev.`) are still bound with certificates. Nothing in either repo references them
-    since #473, but the backend doesn't log `Host`, so their use can't be proven to be zero.
-    **Default: move them too** (the same two steps as the `api.` names). Retire them in a later change
-    once evidence exists.
+10. **The legacy `*.starnerconsulting.co` API hostnames are dropped, not moved.**
+    `worktrac-api.` and `worktrac-api-dev.` are still bound with certificates, but nothing ever
+    shipped with them. Checked 2026-11-20:
+    - **Web config:** every `apiUrl` either repo has ever had is a raw `*.eastus` name or an `api.`
+      name.
+    - **iOS:** every release run's `NATIVE_API_URL` is likewise a raw `*.eastus` name or an `api.`
+      name.
+    - **The only other use:** the deploy workflow's health check, which #473 removed.
+
+    They are simply not added in the new environment, and their CNAMEs can go once the old apps are
+    deleted. The *frontend* names `worktrac-app.` / `worktrac-dev.starnerconsulting.co` are a separate
+    matter: they are still bound on the Static Web Apps and listed in `CORS_ALLOWED_ORIGINS`. This move
+    doesn't touch them, and retiring them is its own change.
 
 ## Phase 0 — prep (no user-visible change; days before)
 
@@ -93,7 +113,7 @@ the old app stays up as the rollback until the move is proven.
 - **0.2 Banner for build 9.** A deploy-repo PR sets `NATIVE_MIN_SUPPORTED_BUILD=18` (1.1.0) on prod.
   This is a banner, never a gate (`api-compatibility.md`). Re-run "Which app builds are live?"
   (`azure-read-only-access.md`) before deleting the old prod app in 2.6.
-- **0.3 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs (and the two legacy names) from 30
+- **0.3 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs from 30
   minutes to 5, at least 30 minutes before each cutover.
 - **0.4 [you] Create the Central US environment** in `worktrac-rg`, sending logs to `worktrac-logs`
   (the workspace key is under the workspace's Agents blade):
@@ -131,7 +151,7 @@ the old app stays up as the rollback until the move is proven.
 - **2.2 Deploy-repo PR (`production`):** `prod.bicepparam` and `deploy-prod.yml`, as in 1.1.
   The new app starts with `minReplicas = 1` beside the old one.
 - **2.3 Prove it** at its raw address, as in 1.2.
-- **2.4 [you] Cut over `api.huddle.fitness`** (and the legacy name), as in 1.3. Watch `/me` errors and
+- **2.4 [you] Cut over `api.huddle.fitness`**, as in 1.3. Watch `/me` errors and
   the 5xx alert for the hour after.
   - **Rollback:** point the CNAME back to the old app. It still runs, with its certificate, and the TTL
     is 5 minutes.
