@@ -32,7 +32,13 @@ describe('MuscleMapCard', () => {
   it('draws each bar solid, sized by sets -- the shade is the body\'s job, not the bar\'s', () => {
     const { container } = render(<MuscleMapCard muscleSets={sets()} weeks={4} muscleMap={ON} />);
     const bars = [...container.querySelectorAll('.muscle-map-bar')];
-    expect(bars.map((b) => b.style.width)).toEqual(['100%', `${(3.5 / 6) * 100}%`, `${(0.5 / 6) * 100}%`]);
+    // Compared as numbers, not strings: jsdom 31 serializes a CSS percentage to six significant
+    // digits ("58.3333%"), where 30 kept the full double. The width the bar gets is the same.
+    const widths = bars.map((b) => parseFloat(b.style.width));
+    [100, (3.5 / 6) * 100, (0.5 / 6) * 100].forEach((expected, i) => {
+      expect(widths[i]).toBeCloseTo(expected, 3);
+    });
+    expect(bars.every((b) => b.style.width.endsWith('%'))).toBe(true);
     expect(bars.every((b) => b.style.opacity === '')).toBe(true);
   });
 
