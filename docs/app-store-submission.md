@@ -197,8 +197,9 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
     (the tool only adds a shadow).
   - Run it from `e2e/` against a `raw/` folder from `app-store-shots.mjs`:
     `HERO_PHOTO=<jpg> PHONE_BEZEL=<png> TABLET_BEZEL=<png> node tools/app-store-photo-panels.mjs <raw> <out>`.
-  - The iPad has no progress-chart capture (its Trends opens on the overview), so its panel 3 uses
-    `ipad-04-trends-overview`.
+  - The iPad has no progress-chart capture, so its two Trends captures swap jobs: panel 3 uses
+    `ipad-08-muscles` (its lower half is the est.-1RM trend line) and panel 7 uses
+    `ipad-04-trends-overview` (Nate chose this on 2026-11-20 so panel 3 shows a rising line).
   - Panel 2's lifted person switcher is a crop of each log capture at fixed coordinates. After any
     change to the app's header or person pills, re-check that it still frames the row.
 - **Header** (version page → Header and Search Results → Header) comes from
