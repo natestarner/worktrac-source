@@ -205,16 +205,22 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
 - **Header** (version page → Header and Search Results → Header) comes from
   `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and a short headline sit inside
   the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
-  if they don't fit. Two real captures flank it outside the safe area. **Redone 2026-11-05 for the
-  iPhone** (Nate chose "B2" from side-by-side iPhone crops): the 1.0 header's type looked small and
-  the page empty there, because an iPhone shows ~86% of the header's width while the type filled
-  only the much narrower safe area. The headline is now "The whole family's workout" (192px, was the
-  site's longer "One screen, the whole family's workout" at 116px, which was already width-bound),
-  the lockup 210px (was 150), and the phones sit lower and further in so the back/share buttons
-  don't cover them. The new file is in `screenshots/app-store-2026-10-27/next-version/` and goes up
-  with the next version; the 1.0 header stays live until then. **Search Results is left
-  empty on purpose**: without that asset, the first three screenshots show in search, and those sell
-  the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
+  if they don't fit. Two real captures flank it outside the safe area.
+  - **Restyled 2026-11-20 to match the photo-led screenshots** (Nate chose "A" from three mock-ups):
+    the same warm charcoal with a faint amber glow behind the type (not a terracotta one: that read
+    espresso-brown), white type with "family's" in amber, and the two
+    captures (log, progress chart) in Apple's iPhone frame. So it now needs `PHONE_BEZEL=<png>`,
+    the same frame file as the panels, and inherits their App-Store-only license. The final is
+    `screenshots/app-store-2026-11-19/header-21x9.png`; it goes up with 1.4, alongside the panels.
+  - **No photo in the header, on purpose.** The two variants that used the father/son photo were
+    rejected: the same photo in the same pose then appears again in screenshot 1 one scroll below.
+    Moving the photo up here would mean replacing panel 1 too.
+  - **Sized for the iPhone** (2026-11-05, "B2", kept): an iPhone shows ~86% of the header's width,
+    so the headline is the short "The whole family's workout" (196px, with a 190px lockup), and the
+    phones start low enough that the page's back/share buttons don't cover them.
+  - **Search Results is left empty on purpose**: without that asset, the first three screenshots
+    show in search, and those sell the app better than one banner. Every asset is RGB with no alpha
+    channel, as Apple requires.
 - **Store order is the file number.** Only the first two or three show in search results: logging,
   the PR celebration, then the strength chart.
 - **`08-muscles`** (added 2026-11-09) is Sam's Trends "Muscles worked" card. It draws bodies only
