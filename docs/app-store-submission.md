@@ -173,6 +173,23 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
   it. Nate chose the `cream` theme on 2026-10-27 over `night` and `sunrise`, and asked for quieter
   background circles. The headlines reuse the marketing site's own claims. These captioned panels
   are what gets uploaded.
+- **The photo-led set (2026-11-19) replaces those captioned panels for the iPhone.** It comes from
+  `e2e/tools/app-store-photo-panels.mjs`: a licensed family photo opens the set, then the raw
+  captures above inside Apple's own iPhone frame, on a warm charcoal ground. Seven panels: every
+  set / log for anyone / progress chart / PR celebration / every best / no signal / muscles. Nate
+  chose every element of it side by side; the tool's header records each choice so nobody
+  "fixes" one back. Upload its **`iphone63-*`** files (the required 6.3" slot) as before.
+  - **Two inputs live outside the repo, and must stay outside: it is public.** The photo is Adobe
+    Stock #509656835, licensed (Standard) by Nate on 2026-11-19, at
+    `../logo/v3/Huddle Stock.jpeg` beside the repo. Standard covers the App Store, Search Ads, the
+    site and social posts; it does **not** cover merchandise for sale (that is Extended). The frame
+    is Apple's "iPhone 18 Pro Max - Black - Portrait.png" from `Bezel-iPhone-18.dmg`
+    (developer.apple.com/design/resources, Product Bezels; open the `.dmg` with 7-Zip on Windows).
+    Apple's marketing guidelines say to use it unmodified, so the tool only adds a shadow.
+  - Run it from `e2e/` against a `raw/` folder from `app-store-shots.mjs`:
+    `HERO_PHOTO=<jpg> BEZEL=<png> node tools/app-store-photo-panels.mjs <raw> <out>`.
+  - Panel 2's lifted person switcher is a crop of the log capture at fixed coordinates. After any
+    change to the app's header or person pills, re-check that it still frames the row.
 - **Header** (version page → Header and Search Results → Header) comes from
   `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and a short headline sit inside
   the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
