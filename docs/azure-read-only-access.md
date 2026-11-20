@@ -81,6 +81,11 @@ Then set in `~/.claude/settings.json` (user scope, so it applies inside every wo
 
 ## Reading container app logs
 
+The apps are `worktrac-backend-prod-cus` and `worktrac-backend-lower-cus` (Central US, environment
+`worktrac-env-cus`) since 2026-11-20; before that `worktrac-backend-prod` / `worktrac-backend-lower`
+in East US (`docs/architecture/region-move.md`). The queries below match both with `startswith`, so
+a window spanning the move reads as one series.
+
 Logs land in Log Analytics, not on the container app. The workspace is `worktrac-logs` in
 `worktrac-rg`; its query GUID (`customerId`, which is *not* the resource ID) is:
 
@@ -101,7 +106,7 @@ Query with KQL:
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a \
   --analytics-query \
   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-lower'
+   | where ContainerAppName_s startswith 'worktrac-backend-lower'
    | where TimeGenerated > ago(1h)
    | project TimeGenerated, Log_s
    | order by TimeGenerated desc
@@ -120,7 +125,7 @@ request trail — including the errors the person hit *before* they decided to w
 
 ```bash
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-production'
+   | where ContainerAppName_s startswith 'worktrac-backend-prod'
    | where Log_s contains 'cid=<correlation-id>'
    | project TimeGenerated, Log_s
    | order by TimeGenerated asc
@@ -151,7 +156,7 @@ use. An App Store build can stay in use for months, so this is the evidence
 
 ```bash
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-prod'
+   | where ContainerAppName_s startswith 'worktrac-backend-prod'
    | where TimeGenerated > ago(30d)
    | where Log_s contains 'Session check'
    | extend client = extract(@'\[client=([^\]]+)\]', 1, Log_s),
@@ -178,7 +183,7 @@ The first request after each cold start is the one that woke it. This lists thos
 
 ```bash
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-lower'
+   | where ContainerAppName_s startswith 'worktrac-backend-lower'
    | where TimeGenerated > ago(7d)
    | where Log_s matches regex @' access [A-Z]+ /'
    | extend ip = extract(@'ip=(\S+)', 1, Log_s),
@@ -232,7 +237,7 @@ health-metrics outboxPending=0 outboxOldestPendingSeconds=0 outboxFailedLastHour
 
 ```bash
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a --analytics-query   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-prod' and TimeGenerated > ago(1h)
+   | where ContainerAppName_s startswith 'worktrac-backend-prod' and TimeGenerated > ago(1h)
    | where Log_s contains 'health-metrics '
    | parse Log_s with * 'outboxPending=' pending:int ' outboxOldestPendingSeconds=' oldest:long
        ' outboxFailedLastHour=' failed:int ' poolActive=' active:int ' poolIdle=' idle:int

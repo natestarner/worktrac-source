@@ -13,7 +13,7 @@ under 1 ms.
 
 | Part | Size in production | Why |
 |---|---|---|
-| Network per round trip | ~25-35 ms | The app runs in East US, the database in Central US (below) |
+| Network per round trip | ~25-35 ms until 2026-11-20; now a few ms | The app ran in East US, the database in Central US. The app moved beside it on 2026-11-20 (below) |
 | Round trips per request | 5-10 (a History sync with nothing new: 8) | 4 are the app's own queries; ~4 are framework defaults per transaction |
 | CPU wait during an app open | ~400 ms per request at 0.5 vCPU | An app open sends ~25 requests at once |
 
@@ -48,7 +48,12 @@ The whole sync runs on one connection; there is no hidden second borrow and no d
 None of the framework trips is wrong. They cost almost nothing when the database is next door, which
 is why nobody tuned them; they matter here only because each one crosses regions.
 
-## Network: why the app and the database are in different regions
+## Network: why the app and the database were in different regions
+
+> **Resolved 2026-11-20: the app moved to Central US** (`region-move.md`). Server-side `/me`, p50:
+> lower 314 -> 16 ms (4,000+ requests either side), prod 372 -> 17 ms (first 13 after the cutover).
+> Signed-in requests from the owner's machine, which is ~33 ms further from Central US: `/me`
+> 341 -> 82 ms, a no-change History sync 331 -> 82 ms. The rest of this section is the history.
 
 When the database was created (July 2026), this subscription's `eastus` and `eastus2` both refused new
 SQL servers (`RegionDoesNotAllowProvisioning`), so it went to `centralus`
@@ -96,10 +101,10 @@ Before this, prod ran 0.25 vCPU / 0.5 GiB: `/me` p50 410 ms, p90 1.8 s, max 6.4 
 | Lever | Removes | Cost | Risk |
 |---|---|---|---|
 | **Prod to 1 vCPU / 2 GiB** (`infra/prod.bicepparam`) | Most of the CPU wait: burst sync 478 -> 184 ms in the replay | ~$12/month more while idle | None; one-line deploy-repo PR to `production` |
-| **Move the app to Central US** (a new Container Apps environment) | The network part of every request, app open or not | Same running cost | New app names ripple into Bicep, workflows, alerts and log queries. Managed certificates are per environment, so they are re-issued (a few minutes of TLS errors per hostname at cutover unless a certificate is brought). The `api.` hostnames stay, so iOS builds from 1.1.0, Stripe and Apple are untouched. **Two callers use the raw East US address and do need handling:** iOS 1.0.0 (build 9) and the email delivery webhook. Lower first. The step-by-step plan and every downside found: `region-move.md` |
+| **Move the app to Central US** (a new Container Apps environment). **DONE 2026-11-20** | The network part of every request, app open or not | Same running cost | New app names ripple into Bicep, workflows, alerts and log queries. Managed certificates are per environment, so they are re-issued (a few minutes of TLS errors per hostname at cutover unless a certificate is brought). The `api.` hostnames stay, so iOS builds from 1.1.0, Stripe and Apple are untouched. **Two callers use the raw East US address and do need handling:** iOS 1.0.0 (build 9) and the email delivery webhook. Lower first. The step-by-step plan and every downside found: `region-move.md` |
 | **Fewer requests per app open** (one start-up read per person instead of five) | The burst itself | A code project across client and server | API compatibility: additive endpoint, old builds keep the old calls (`api-compatibility.md`) |
 
-Two smaller ones, worth it only if the region move has to wait:
+Two smaller ones (each saves trips that now cost a few ms, so little is left to gain):
 - **Skip the liveness check for recently used connections** (`com.zaxxer.hikari.aliveBypassWindowMs`
   above Hikari's 2-minute keepalive). One trip per request. A connection that died since its last use
   then fails one request, which a read's retry or the outbox absorbs.
@@ -121,7 +126,7 @@ every History sync over 500 ms (`Slow History sync`). Per-request access logging
 ```kusto
 // Sign-in check (one per app open) and slow syncs, per day.
 ContainerAppConsoleLogs_CL
-| where ContainerAppName_s == 'worktrac-backend-prod' and TimeGenerated > ago(14d)
+| where ContainerAppName_s startswith 'worktrac-backend-prod' and TimeGenerated > ago(14d)
 | where Log_s has 'GET /api/auth/me' and Log_s has '-> 200'
 | extend ms = toint(extract(@'\((\d+) ms\)', 1, Log_s))
 | summarize opens = count(), p50 = percentile(ms, 50), p90 = percentile(ms, 90), worst = max(ms)
@@ -131,7 +136,7 @@ ContainerAppConsoleLogs_CL
 
 ```kusto
 ContainerAppConsoleLogs_CL
-| where ContainerAppName_s == 'worktrac-backend-prod' and TimeGenerated > ago(14d)
+| where ContainerAppName_s startswith 'worktrac-backend-prod' and TimeGenerated > ago(14d)
 | where Log_s has 'Slow History sync'
 | summarize slow_syncs = count(),
     prepare_p50 = percentile(toint(extract(@'prepareMs=(\d+)', 1, Log_s)), 50),

@@ -16,7 +16,7 @@ export const LOWER = {
   name: 'lower',
   app: 'https://app.dev.huddle.fitness',
   api: 'https://api.dev.huddle.fitness',
-  containerApp: 'worktrac-backend-lower',
+  containerApp: 'worktrac-backend-lower-cus', // Central US since 2026-11-20 (region-move.md)
   resourceGroup: 'worktrac-rg',
   sqlServer: 'worktrac-sql-server',
   database: 'worktrac-db-lower',
