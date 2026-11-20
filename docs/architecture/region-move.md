@@ -1,7 +1,7 @@
 # Moving the backend to Central US
 
-> **STATUS (2026-11-20): planned, nothing done.** Do the phases in order. Write the date and the
-> outcome under each step as it is done. Why this move: `latency.md`. Who does what: steps marked
+> **STATUS (2026-11-20): Phase 0 done; lower cut over to Central US (`api.dev` → `worktrac-backend-lower-cus`);
+> prod not started.** Do the phases in order. Write the date and the outcome under each step as it is done. Why this move: `latency.md`. Who does what: steps marked
 > **[you]** need Azure write access, the DNS registrar or App Store Connect, which Claude doesn't
 > have. Claude does the deploy-repo PRs and all the checking.
 
@@ -98,42 +98,59 @@ the old app stays up as the rollback until the move is proven.
     matter: they are still bound on the Static Web Apps and listed in `CORS_ALLOWED_ORIGINS`. This move
     doesn't touch them, and retiring them is its own change.
 
-## Phase 0 — prep (no user-visible change; days before)
+## Phase 0 — prep (no user-visible change) — DONE 2026-11-20
 
-- **0.1 [you] Point the email webhooks at the custom domains.** Event Grid re-runs its validation
-  handshake against the new URL, and the endpoint already answers it. Afterwards, check that a test
-  email's delivery event is recorded on each environment.
-  ```bash
-  az eventgrid system-topic event-subscription update -g worktrac-rg --system-topic-name worktrac-comms-lower-topic -n worktrac-email-delivery-lower --endpoint https://api.dev.huddle.fitness/api/webhooks/email-delivery
+- **0.1 [you] Point the email webhooks at the custom domains.** DONE. The webhook authenticates with
+  `?key=…` in its URL (`EmailDeliveryWebhookController`), so the update must keep the query string:
+  read the full URL with `--include-full-endpoint-url` and swap only the host. Event Grid re-runs
+  its validation handshake against the new URL, so wake lower first (it scales to zero).
+  ```powershell
+  Invoke-WebRequest https://api.dev.huddle.fitness/actuator/health -UseBasicParsing -TimeoutSec 90 | Out-Null; $u = az eventgrid system-topic event-subscription show -g worktrac-rg --system-topic-name worktrac-comms-lower-topic -n worktrac-email-delivery-lower --include-full-endpoint-url --query destination.endpointUrl -o tsv; az eventgrid system-topic event-subscription update -g worktrac-rg --system-topic-name worktrac-comms-lower-topic -n worktrac-email-delivery-lower --endpoint ($u -replace '^https://[^/]+', 'https://api.dev.huddle.fitness') --query provisioningState -o tsv
   ```
-  ```bash
-  az eventgrid system-topic event-subscription update -g worktrac-rg --system-topic-name worktrac-comms-prod-topic -n email-delivery-webhook-prod --endpoint https://api.huddle.fitness/api/webhooks/email-delivery
+  ```powershell
+  $u = az eventgrid system-topic event-subscription show -g worktrac-rg --system-topic-name worktrac-comms-prod-topic -n email-delivery-webhook-prod --include-full-endpoint-url --query destination.endpointUrl -o tsv; az eventgrid system-topic event-subscription update -g worktrac-rg --system-topic-name worktrac-comms-prod-topic -n email-delivery-webhook-prod --endpoint ($u -replace '^https://[^/]+', 'https://api.huddle.fitness') --query provisioningState -o tsv
   ```
-- **0.2 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs from 30
-  minutes to 5, at least 30 minutes before each cutover.
-- **0.3 [you] Create the Central US environment** in `worktrac-rg`, sending logs to `worktrac-logs`
-  (the workspace key is under the workspace's Agents blade):
-  ```bash
-  az containerapp env create -g worktrac-rg -n worktrac-env-cus -l centralus --logs-destination log-analytics --logs-workspace-id ed5b43a9-96fa-4194-9fb4-0d4b7932a86a --logs-workspace-key <key>
+- **0.2 [you] Lower the TTL** on the `api` and `api.dev` CNAMEs from 30 minutes to 5 (Namecheap →
+  Advanced DNS). DONE.
+- **0.3 [you] Create the Central US environment.** DONE: `worktrac-env-cus`, default domain
+  `wittygrass-413cc690.centralus.azurecontainerapps.io`, logs to `worktrac-logs`. Central US allowed it.
+  ```powershell
+  az containerapp env create -g worktrac-rg -n worktrac-env-cus -l centralus --logs-destination log-analytics --logs-workspace-id ed5b43a9-96fa-4194-9fb4-0d4b7932a86a --logs-workspace-key (az monitor log-analytics workspace get-shared-keys -g worktrac-rg -n worktrac-logs --query primarySharedKey -o tsv) --query properties.provisioningState -o tsv
   ```
-  If Central US refuses, stop here and record the error.
 
-## Phase 1 — lower
+## Phase 1 — lower — cut over 2026-11-20
 
-- **1.1 Deploy-repo PR (`lower`).**
-  - `lower.bicepparam`: `location = 'centralus'`, `managedEnvironmentName = 'worktrac-env-cus'`,
-    `appName = 'worktrac-backend-lower-cus'`, `customDomains = []` for now.
-  - `deploy-lower.yml`: its four health checks use the new raw address.
-  - Merging deploys a **new** app beside the old one; Bicep deletes nothing, and `api.dev` still
-    points at the old app.
-- **1.2 Prove the new app before any traffic moves.**
-  - health, plus a signed-in `/me` and a History sync against the raw `*.centralus` address
-  - the round-trip timing: expect `/me` alone well under the ~350 ms prod shows today
-- **1.3 [you] Cut over `api.dev`.**
-  - Point the CNAME at the new app's raw address.
-  - Bind the hostname with a managed certificate:
-    `az containerapp hostname add` and then `az containerapp hostname bind … --validation-method CNAME`.
-  - Then a deploy-repo PR adds it to `customDomains`, so the next Bicep deploy keeps it.
+- **1.1 Deploy-repo PR (`lower`).** DONE, worktrac-deploy #100: `lower.bicepparam` gets
+  `appName = 'worktrac-backend-lower-cus'`, `location = 'centralus'`,
+  `managedEnvironmentName = 'worktrac-env-cus'` and `customDomains = []`, and `deploy-lower.yml`'s
+  four health checks use the new raw address. The PR's what-if showed exactly one change, "Create
+  containerApps/worktrac-backend-lower-cus". (Its *prod* what-if on a `lower`-based PR shows
+  unrelated deletes: `lower`'s copy of `prod.bicepparam` is older than `production`'s. Ignore it.)
+- **1.2 Prove the new app before any traffic moves.** DONE. Signed in with the barrage account
+  against both apps, median of 10 from the owner's machine:
+
+  | Request | East US (old) | Central US (new) |
+  |---|---|---|
+  | `/me` | 334 ms | 98 ms |
+  | `/api/tags` | 199 ms | 82 ms |
+  | History sync, nothing new (5-year account) | 508 ms | 262 ms |
+
+- **1.3 [you] Cut over `api.dev`.** DONE. The order matters, and `bind` alone fails:
+  1. Namecheap: point the CNAME at the new app's raw address.
+  2. **`hostname add` first.** `bind` on a hostname the app doesn't have yet fails with
+     `RequireCustomHostnameInEnvironment`.
+     ```powershell
+     az containerapp hostname add -g worktrac-rg -n worktrac-backend-lower-cus --hostname api.dev.huddle.fitness -o none
+     ```
+  3. Then bind, which issues the managed certificate. It took **~7 minutes**, during which
+     `api.dev` served certificate errors (the app reads that as offline; nothing is lost).
+     ```powershell
+     az containerapp hostname bind -g worktrac-rg -n worktrac-backend-lower-cus --hostname api.dev.huddle.fitness --environment worktrac-env-cus --validation-method CNAME --query "[].{host:name,binding:bindingType}" -o table
+     ```
+  4. **Straight away**, a deploy-repo PR records it in `customDomains` with the issued certificate's
+     name (worktrac-deploy #101, `mc-worktrac-env-c-api-dev-huddle-f-5278`). Until it merges, any
+     deploy (every merge to main promotes to lower) applies `customDomains = []` and removes the
+     binding.
 - **1.4 Verify on lower:**
   - the nightly e2e (`gh workflow run lower-e2e-nightly.yml`)
   - `/barrage quick`
@@ -144,13 +161,18 @@ the old app stays up as the rollback until the move is proven.
 ## Phase 2 — production (same steps, at a quiet hour)
 
 - **2.1 Freeze lower→production promotions** until 2.6.
-- **2.2 Deploy-repo PR (`production`):** `prod.bicepparam` and `deploy-prod.yml`, as in 1.1.
-  The new app starts with `minReplicas = 1` beside the old one.
-- **2.3 Prove it** at its raw address, as in 1.2.
-- **2.4 [you] Cut over `api.huddle.fitness`**, as in 1.3. Watch `/me` errors and
-  the 5xx alert for the hour after.
-  - **Rollback:** point the CNAME back to the old app. It still runs, with its certificate, and the TTL
-    is 5 minutes.
+- **2.2 Deploy-repo PR (`production`):** `prod.bicepparam` as in 1.1 (`worktrac-backend-prod-cus`,
+  `customDomains = []`), plus any raw prod address in `deploy-prod.yml`. Check the PR's prod
+  what-if says only "Create". The new app starts with `minReplicas = 1` beside the old one.
+- **2.3 Prove it** at its raw address, as in 1.2 (`region-compare.mjs`-style: same token, both
+  bases).
+- **2.4 [you] Cut over `api.huddle.fitness`**, exactly as in 1.3: CNAME, then `hostname add`, then
+  `hostname bind` (with `-n worktrac-backend-prod-cus --hostname api.huddle.fitness`). Then the
+  `customDomains` PR immediately. **Budget ~7 minutes of certificate errors on prod** between the
+  CNAME change and the bind finishing, so do it at a quiet hour. Watch `/me` errors and the 5xx
+  alert for the hour after.
+  - **Rollback:** point the CNAME back to the old app. It still runs, with its certificate, and the
+    TTL is 5 minutes.
 - **2.5 Compare:** the `/me` p50/p90 and slow-sync KQL in `latency.md`, against the numbers recorded
   there.
 - **2.6 [you] Delete the old prod app** once a week has passed with no rollback.
@@ -159,6 +181,9 @@ the old app stays up as the rollback until the move is proven.
 ## Phase 3 — cleanup
 
 - `monitoring.bicep`: alert scopes point to the new prod app's ID. Confirm each alert still evaluates.
+- worktrac-deploy `infra-preview.yml`: its secret comparison runs `az containerapp show` against the
+  app names, so it must name the new apps before the old ones are deleted.
+- `e2e/barrage/lib/config.mjs`: `LOWER.containerApp`.
 - Rename everywhere: `ContainerAppName_s` and app names in:
   - `docs/azure-read-only-access.md`, `latency.md`, `scaling.md`, `.claude/rules/*`
   - the memory notes
