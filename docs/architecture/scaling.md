@@ -170,3 +170,9 @@ timeout. It also added about 260 MB. In production's 0.25 vCPU / 0.5 GiB contain
 at 509 of 512 MiB and took 203s to start, against 100s without it. Revisit when the container is
 resized. Production is deliberately staying at its current size for now, to be scaled vertically
 before horizontally.
+
+## See also: latency
+
+Vertical scaling comes before more replicas here. `docs/architecture/latency.md` has the 2026-11-20
+measurements of where a request's time goes (network per database trip, and CPU during the app-open
+burst), the levers left unpulled, and the queries that say when to pull them.

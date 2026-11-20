@@ -73,3 +73,13 @@ the installed Node is left alone.
   handling *by design* and emits nothing. This was the single most expensive wrong inference.
 - **"Host memory was comfortable, therefore not memory."** True, but it measured host commit
   charge — a different quantity from the failing allocation. Measure the *process*.
+
+## Backend latency: where a request's time goes
+
+Unrelated to the dev-server deaths above, kept here because they are the same kind of tool:
+measure before theorising. The findings they produced are in `docs/architecture/latency.md`.
+
+| Script | What it answers |
+|---|---|
+| `db-round-trips.sh [plus\|free]` | Every database round trip ONE History sync sends, recorded with an Extended Events session on the local SQL Server. Needs this checkout's stack up (`bash scripts/up.sh`). |
+| `app-open-burst.sh 0.5 1 4` | How long each request of an app open's ~25-request burst takes with the backend under each CPU cap and the database on this machine, so no network is involved. Needs a built jar and a Java 25 image (`BURST_IMAGE`). |
