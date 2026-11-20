@@ -178,17 +178,28 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
   captures above inside Apple's own iPhone frame, on a warm charcoal ground. Seven panels: every
   set / log for anyone / progress chart / PR celebration / every best / no signal / muscles. Nate
   chose every element of it side by side; the tool's header records each choice so nobody
-  "fixes" one back. Upload its **`iphone63-*`** files (the required 6.3" slot) as before.
-  - **Two inputs live outside the repo, and must stay outside: it is public.** The photo is Adobe
+  "fixes" one back. Upload its **`iphone63-*`** (the required 6.3" slot) and **`ipad-*`** files.
+  - **Three inputs live outside the repo, and must stay outside: it is public.** The photo is Adobe
     Stock #509656835, licensed (Standard) by Nate on 2026-11-19, at
     `../logo/v3/Huddle Stock.jpeg` beside the repo. Standard covers the App Store, Search Ads, the
-    site and social posts; it does **not** cover merchandise for sale (that is Extended). The frame
-    is Apple's "iPhone 18 Pro Max - Black - Portrait.png" from `Bezel-iPhone-18.dmg`
-    (developer.apple.com/design/resources, Product Bezels; open the `.dmg` with 7-Zip on Windows).
-    Apple's marketing guidelines say to use it unmodified, so the tool only adds a shadow.
+    site and social posts; it does **not** cover merchandise for sale (that is Extended). The frames
+    are Apple's "iPhone 18 Pro Max - Black - Portrait.png" (`Bezel-iPhone-18.dmg`) and
+    "iPad Pro (M5) 13" - Space Black - Portrait.png" (`Bezel-iPad-Pro-(M5).dmg`), from
+    developer.apple.com/design/resources, Product Bezels; open a `.dmg` with 7-Zip on Windows
+    (it writes the iPad file's `"` as `_`). Each frame's screen opening is exactly its capture's
+    size, so the captures drop in at 1:1.
+  - **Apple's frames are for the App Store listing only.** Their license grants them "solely for
+    creating mock-ups of user interfaces designed for use in software products that run only on"
+    Apple's platforms, and Apple's page points to its marketing guidelines for using them in
+    marketing. The iOS app's own App Store screenshots are squarely that; the **website and Google
+    Play are not** (Huddle also runs on the web, and Android is planned), and the license forbids
+    other artwork and website content. Don't reuse these panels there, and use them unmodified
+    (the tool only adds a shadow).
   - Run it from `e2e/` against a `raw/` folder from `app-store-shots.mjs`:
-    `HERO_PHOTO=<jpg> BEZEL=<png> node tools/app-store-photo-panels.mjs <raw> <out>`.
-  - Panel 2's lifted person switcher is a crop of the log capture at fixed coordinates. After any
+    `HERO_PHOTO=<jpg> PHONE_BEZEL=<png> TABLET_BEZEL=<png> node tools/app-store-photo-panels.mjs <raw> <out>`.
+  - The iPad has no progress-chart capture (its Trends opens on the overview), so its panel 3 uses
+    `ipad-04-trends-overview`.
+  - Panel 2's lifted person switcher is a crop of each log capture at fixed coordinates. After any
     change to the app's header or person pills, re-check that it still frames the row.
 - **Header** (version page → Header and Search Results → Header) comes from
   `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and a short headline sit inside
