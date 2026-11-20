@@ -271,6 +271,15 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
   not merely "is a seek", which a per-set seek by id also is — and that the per-exercise load seeks
   on the exercise. Measure with `StatsCostProbe` (`-Dstats.probe=true`, optionally
   `-Dstats.probe.sharedExercises=true`), never with a local timing.
+- **A list that reads a lazy collection or association on every row loads it in the list's own
+  queries, never one SELECT per row.** Production's database is in another Azure region from the
+  app (Central US vs East US: East refused new SQL servers on this subscription), so every
+  statement is a cross-region round trip and a per-row load costs ~a second per 40 rows. The Log
+  picker list and CSV export read each `PersonExercise`'s tags and custom fields and each set's
+  exercise: `PersonExerciseRepository.findWithPersonalizationByPersonId` and
+  `WorkoutSetRepository.findDistinctExercisesByPerson` load them up front.
+  `PersonExerciseQueryCostTest` requires the same statement count for 2 exercises as for 12
+  (verified red: 7 vs 17 and 12 vs 42 before the fix).
 - **Ordering by a timestamp needs an id tie-break.** Two workouts can start at the same instant (an
   import with equal date and time; a frozen test clock), and without one their order is whatever the
   query plan returns — adding an index (V82) once flipped CSV export's. `WorkoutRowProjection` and

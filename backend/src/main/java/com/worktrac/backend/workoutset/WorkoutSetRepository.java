@@ -108,6 +108,13 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     @Query("SELECT DISTINCT ws.exercise.id FROM WorkoutSet ws WHERE ws.person.id = :personId")
     List<Long> findDistinctExerciseIdsByPerson(@Param("personId") Long personId);
 
+    // Every exercise this person has a set for, in ONE statement, keyed on the person rather than
+    // a list of ids (no parameter cap). Export loads its sets without their exercises, so reading
+    // each row's exercise name was one SELECT per exercise; loading them here first means those
+    // reads find them already in the persistence context (PersonExerciseQueryCostTest).
+    @Query("SELECT DISTINCT e FROM WorkoutSet ws JOIN ws.exercise e WHERE ws.person.id = :personId")
+    List<com.worktrac.backend.exercise.Exercise> findDistinctExercisesByPerson(@Param("personId") Long personId);
+
     List<WorkoutSet> findBySession_Id(Long sessionId);
 
     List<WorkoutSet> findBySession_IdAndExercise_IdOrderByCreatedAtAsc(Long sessionId, Long exerciseId);

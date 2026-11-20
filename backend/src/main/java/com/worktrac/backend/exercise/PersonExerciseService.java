@@ -67,7 +67,8 @@ public class PersonExerciseService {
 
         Map<Long, PersonExercise> byExerciseId = new HashMap<>();
         Set<Long> pickerIds = new HashSet<>();
-        for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
+        // Tags and custom fields are read for every row below: load them up front, not per row.
+        for (PersonExercise pe : personExerciseRepository.findWithPersonalizationByPersonId(person.getId())) {
             Long exId = pe.getExercise().getId();
             byExerciseId.put(exId, pe);
             boolean personalized = pe.isFavorite()
