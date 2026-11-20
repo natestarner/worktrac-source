@@ -272,9 +272,10 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
   on the exercise. Measure with `StatsCostProbe` (`-Dstats.probe=true`, optionally
   `-Dstats.probe.sharedExercises=true`), never with a local timing.
 - **A list that reads a lazy collection or association on every row loads it in the list's own
-  queries, never one SELECT per row.** Production's database is in another Azure region from the
-  app (Central US vs East US: East refused new SQL servers on this subscription), so every
-  statement is a cross-region round trip and a per-row load costs ~a second per 40 rows. The Log
+  queries, never one SELECT per row.** Every statement is a network round trip to Azure SQL. Until
+  2026-11-20 the app ran in another region from the database (East US vs Central US), where a
+  per-row load cost ~a second per 40 rows; the app now sits beside it (`region-move.md`), which
+  shrinks each trip but not the number of them. The Log
   picker list and CSV export read each `PersonExercise`'s tags and custom fields and each set's
   exercise: `PersonExerciseRepository.findWithPersonalizationByPersonId` and
   `WorkoutSetRepository.findDistinctExercisesByPerson` load them up front.

@@ -1,7 +1,8 @@
 # Moving the backend to Central US
 
-> **STATUS (2026-11-20): Phase 0 done; lower cut over to Central US (`api.dev` → `worktrac-backend-lower-cus`);
-> prod not started.** Do the phases in order. Write the date and the outcome under each step as it is done. Why this move: `latency.md`. Who does what: steps marked
+> **STATUS (2026-11-20): both environments run in Central US.** Lower cut over at ~22:05 UTC and prod
+> at 23:08 UTC. The old East US apps are still running as the rollback; Phase 3 (deleting them) is
+> due from 2026-11-27. Do the phases in order. Write the date and the outcome under each step as it is done. Why this move: `latency.md`. Who does what: steps marked
 > **[you]** need Azure write access, the DNS registrar or App Store Connect, which Claude doesn't
 > have. Claude does the deploy-repo PRs and all the checking.
 
@@ -151,44 +152,69 @@ the old app stays up as the rollback until the move is proven.
      name (worktrac-deploy #101, `mc-worktrac-env-c-api-dev-huddle-f-5278`). Until it merges, any
      deploy (every merge to main promotes to lower) applies `customDomains = []` and removes the
      binding.
-- **1.4 Verify on lower:**
-  - the nightly e2e (`gh workflow run lower-e2e-nightly.yml`)
-  - `/barrage quick`
-  - the `latency.md` KQL before and after
-  - an email delivery event recorded
-- **1.5 [you] Delete the old lower app** after a few quiet days.
+- **1.4 Verify on lower.** DONE 2026-11-20, all against the new app:
+  - full nightly e2e: Chrome 494 passed / 0 failed (2 passed on retry), WebKit green
+  - `/barrage quick`: 39 passed. The 2 failures were "holds no finished workout in 2026-10": the
+    barrage account's data ends 2026-09-25, and both passed re-run with `BARRAGE_TODAY=2026-10-20`.
+    No drift, no unexpected exceptions.
+  - server-side `/me` p50: 314 -> 16 ms
+  - email delivery events delivered to the new address (Event Grid: 0 failed deliveries)
+- **1.5 [you] Delete the old lower app** after a few quiet days (see Phase 3).
 
-## Phase 2 — production (same steps, at a quiet hour)
+## Phase 2 — production — cut over 2026-11-20 23:08 UTC
 
-- **2.1 Freeze lower→production promotions** until 2.6.
-- **2.2 Deploy-repo PR (`production`):** `prod.bicepparam` as in 1.1 (`worktrac-backend-prod-cus`,
-  `customDomains = []`), plus any raw prod address in `deploy-prod.yml`. Check the PR's prod
-  what-if says only "Create". The new app starts with `minReplicas = 1` beside the old one.
-- **2.3 Prove it** at its raw address, as in 1.2 (`region-compare.mjs`-style: same token, both
-  bases).
-- **2.4 [you] Cut over `api.huddle.fitness`**, exactly as in 1.3: CNAME, then `hostname add`, then
-  `hostname bind` (with `-n worktrac-backend-prod-cus --hostname api.huddle.fitness`). Then the
-  `customDomains` PR immediately. **Budget ~7 minutes of certificate errors on prod** between the
-  CNAME change and the bind finishing, so do it at a quiet hour. Watch `/me` errors and the 5xx
-  alert for the hour after.
+- **2.1 Freeze lower→production promotions** while both apps take traffic. Lifted once the old app's
+  request log went quiet (23:10): from then a promotion deploys only the new app. If a rollback to
+  the old app is ever needed after a promotion, redeploy the old app's image first.
+- **2.2 Deploy-repo PR (`production`).** DONE, worktrac-deploy #102: `prod.bicepparam` as in 1.1
+  (`worktrac-backend-prod-cus`, `customDomains = []`), and `deploy-prod.yml`'s revision wait, health
+  check and smoke test on the new app. What-if: only "Create".
+- **2.3 Prove it.** DONE. Checked before any DNS change:
+  - config identical to the old app: 38 env vars, 21 secret names, ingress, probes and scaling
+  - signed in with the screenshot demo account: a token minted by the old app is accepted by the
+    new one (same signing secret, so nobody is signed out at cutover), with identical `/me` and
+    History sync answers
+  - `/me` 341 -> 82 ms from the owner's machine
+  - The demo password has special characters: read the creds file in Node, never through a shell
+    (`. file`, `eval`), which mangles it into a 401.
+- **2.4 [you] Cut over `api.huddle.fitness`.** DONE, the same as 1.3:
+  - The certificate (`mc-worktrac-env-c-api-huddle-fitne-1107`) took ~6 minutes.
+  - worktrac-deploy #103 recorded it, moved the alert rules to the new app (`prod.monitoring.bicepparam`
+    `appName`), and put the deploy's health check and smoke test back on `api.huddle.fitness`.
+  - Checked immediately before the change: nobody but the owner had signed in for over an hour.
   - **Rollback:** point the CNAME back to the old app. It still runs, with its certificate, and the
     TTL is 5 minutes.
-- **2.5 Compare:** the `/me` p50/p90 and slow-sync KQL in `latency.md`, against the numbers recorded
-  there.
-- **2.6 [you] Delete the old prod app** once a week has passed with no rollback.
-  Then unfreeze promotions, and restore the 30-minute TTL.
+- **2.5 Compare.** DONE: server-side `/me` p50 372 -> 17 ms. No errors, 5xx or slow syncs on the new
+  app after the cutover. The owner's iOS 1.3.0 app worked.
+- **2.6 [you] Delete the old prod app** once a week has passed with no rollback (Phase 3), and
+  restore the 30-minute TTL.
 
 ## Phase 3 — cleanup
 
-- `monitoring.bicep`: alert scopes point to the new prod app's ID. Confirm each alert still evaluates.
-- worktrac-deploy `infra-preview.yml`: its secret comparison runs `az containerapp show` against the
-  app names, so it must name the new apps before the old ones are deleted.
-- `e2e/barrage/lib/config.mjs`: `LOWER.containerApp`.
-- Rename everywhere: `ContainerAppName_s` and app names in:
-  - `docs/azure-read-only-access.md`, `latency.md`, `scaling.md`, `.claude/rules/*`
-  - the memory notes
-  - `rg -n "worktrac-backend-(prod|lower)\b|worktrac-env\b|eastus"` across both repos should only find
-    history
-- `docs/architecture/latency.md`: replace the "different regions" section with the measured result.
-- **[you]** Delete `worktrac-env` once both old apps are gone. Its managed certificates go with it.
-  `interactive-timeline-env` is another project's environment; leave it alone.
+Done 2026-11-20 (worktrac-source cleanup PR, worktrac-deploy cleanup PR):
+- Alerts: the prod rules watch `worktrac-backend-prod-cus` (worktrac-deploy #103).
+- worktrac-deploy `infra-preview.yml` compares secrets against the new app names.
+- `e2e/barrage/lib/config.mjs`: `LOWER.containerApp` is the new lower app.
+- Log queries in `docs/azure-read-only-access.md` and `latency.md` match `startswith
+  'worktrac-backend-<env>'`, so a window spanning the move reads as one series. `latency.md` records
+  the measured result; `backend-core.md`'s N+1 rule no longer claims the regions differ.
+
+**[you] From 2026-11-27**, once a week has passed with no rollback, one command at a time:
+```powershell
+az containerapp delete -g worktrac-rg -n worktrac-backend-lower --yes
+```
+```powershell
+az containerapp delete -g worktrac-rg -n worktrac-backend-prod --yes
+```
+```powershell
+foreach ($r in 'worktrac-backend-prod-5xx','worktrac-backend-prod-restarts','worktrac-backend-prod-memory','worktrac-backend-prod-replicas','worktrac-backend-prod-response-time') { az monitor metrics alert delete -g worktrac-rg -n $r }; az resource delete -g worktrac-rg -n worktrac-backend-prod-email-stuck --resource-type Microsoft.Insights/scheduledqueryrules
+```
+```powershell
+az containerapp env delete -g worktrac-rg -n worktrac-env --yes
+```
+- Deleting `worktrac-env` takes its four managed certificates with it, including the two legacy
+  `*.starnerconsulting.co` API names; their CNAMEs can then be removed from that domain's DNS.
+- `interactive-timeline-env` is another project's environment; leave it alone.
+- Namecheap: put the `api` and `api.dev` TTLs back to 30 minutes.
+- Afterwards, `rg -n "worktrac-backend-(prod|lower)|worktrac-env"` across both repos should find
+  only history.
