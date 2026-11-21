@@ -7,6 +7,8 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/user/User.java"
   - "backend/src/main/java/com/worktrac/backend/account/AccountDeletionService.java"
   - "backend/src/test/java/com/worktrac/backend/identity/**"
+  - "frontend/src/components/auth/SocialSignIn.jsx"
+  - "frontend/src/components/auth/ProviderButtons.jsx"
 ---
 
 # Sign in with Apple / Google: the invariants
@@ -121,6 +123,31 @@ days, no nonce). `consent-revoked` / `account-delete` disconnect the Apple ident
 `token_version`, and **never touch the household** (Apple speaks for one person's Apple ID; the
 household may hold other people's training). `email-disabled` / `email-enabled` are audit rows only.
 Idempotent; an unknown subject is ignored.
+
+## ⚠️ The "Signing you in" overlay must never trap anyone (`SocialSignIn.jsx`)
+
+A full-screen, opaque overlay covers the gap between the provider's sheet closing and the app
+appearing. A screen that covers everything is the shape that bricks the app if it can fail to
+close, so it has three independent exits and each one must stay:
+
+- **It is `busy` and nothing else.** No second flag. `finish()`'s `finally` clears it on every
+  outcome, and the page navigating away on success unmounts it.
+- **"Start over" after `SIGNING_IN_ESCAPE_MS` (60s), which depends on nothing finishing.** The
+  requests are time-limited, but the response body, `/me` after it and `restoreOutbox`'s IndexedDB
+  read are not, so the `finally` alone is not trusted. 60s = the 45s sign-in limit + `/me`'s 15s;
+  earlier would abandon a cold start that was about to succeed.
+- **A superseded attempt touches nothing** (`attemptRef`). After "Start over", a late answer may
+  only do one thing: a late SUCCESS still calls `onSignedIn` (the session is live, so staying on the
+  login screen would be the lie). A late failure, picker or name step is dropped, and a late
+  `finally` must not clear a NEW attempt's overlay.
+- **`onToken` must not return the attempt to `ProviderButtons`.** Its button stays disabled until
+  `onToken` settles, so a hung attempt would leave it disabled after "Start over". `ProviderButtons`
+  itself is unchanged because Delete account relies on exactly that to block a second tap.
+- **Portalled to `<body>`**, so no ancestor transform or overflow can shrink it.
+
+Pinned by `SocialSignIn.test.jsx` ("an attempt that never finishes") and `social-sign-in.spec.ts`
+(a server that never answers; a sign-in stuck past every limit), each verified red by removing what
+it guards.
 
 ## Deleting a user deletes its identities
 

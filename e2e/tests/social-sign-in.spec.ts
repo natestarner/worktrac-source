@@ -135,6 +135,116 @@ test.describe('sign in with Apple or Google', () => {
     await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
     await expect(page.getByLabel('Your name')).toBeVisible();
   });
+
+  // Between the provider's sheet closing and the app appearing, the login screen used to sit there
+  // looking idle. The overlay covers exactly that wait -- our own sign-in request -- so each request
+  // is HELD here until the spec releases it, with no timing guess either way.
+  test('a "Signing you in" screen covers the wait, through the name step and into the app', async ({ page }) => {
+    const held: Array<() => void> = [];
+    await page.route('**/api/auth/oauth/**', async (route) => {
+      await new Promise<void>((release) => held.push(release));
+      await route.continue();
+    });
+    const overlay = page.getByTestId('signing-in-overlay');
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(overlay).toContainText('Signing you in…');
+    await expect.poll(() => held.length).toBe(1);
+    held[0]();
+
+    // A new identity: the name step replaces it, usable.
+    await expect(page.getByLabel('Your name')).toBeVisible();
+    await expect(overlay).toBeHidden();
+    await page.getByLabel('Your name').fill('Jordan');
+    await page.getByRole('button', { name: 'Create my household' }).click();
+    await expect(overlay).toContainText('Creating your household…');
+    await expect.poll(() => held.length).toBe(2);
+    held[1]();
+
+    await expect(page).toHaveURL(/\/app\/log/);
+    await expect(overlay).toBeHidden();
+  });
+
+  // A server that never answers: the request's own 45s limit (AUTH_TIMEOUT_MS) ends the attempt,
+  // and the overlay comes down with it, before "Start over" is ever needed.
+  test('a sign-in the server never answers ends at its time limit and says why', async ({ page }) => {
+    await page.clock.install();
+    await page.route('**/api/auth/oauth/**', () => {}); // never fulfilled
+    const overlay = page.getByTestId('signing-in-overlay');
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(overlay).toBeVisible();
+
+    await page.clock.fastForward(45_000);
+    await expect(overlay).toBeHidden();
+    await expect(page.getByRole('alert')).toContainText('reach Huddle');
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeEnabled();
+  });
+
+  // ⚠️ The worst case: something under the attempt hangs where no time limit reaches (a response
+  // body that stalls after its headers, an IndexedDB that never answers). Stood in for here by a
+  // fetch that never settles and ignores its abort. The overlay offers its own way out, and the
+  // screen behind must then work in full -- the very button whose attempt is still hanging included.
+  test('a sign-in stuck past every time limit can be abandoned, and the next one works', async ({ page }) => {
+    await page.clock.install();
+    await page.addInitScript(() => {
+      const realFetch = window.fetch;
+      (window as unknown as { __stuckSignIn: boolean }).__stuckSignIn = true;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/auth/oauth/') && (window as unknown as { __stuckSignIn: boolean }).__stuckSignIn) {
+          return new Promise(() => {});
+        }
+        return realFetch(input, init);
+      };
+    });
+    const overlay = page.getByTestId('signing-in-overlay');
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(overlay).toBeVisible();
+
+    // Step the clock until "Start over" shows. Not one 60s jump: the overlay's timers start in an
+    // effect a moment AFTER it is on screen, and a jump the instant it appears can land before they
+    // exist (it did, in WebKit). The exact 60s boundary is pinned by the unit tests' fake timers;
+    // what only a browser can show is that the way out appears and works.
+    const startOver = page.getByRole('button', { name: 'Start over' });
+    await expect.poll(async () => {
+      await page.clock.fastForward(5_000);
+      return startOver.isVisible();
+    }).toBe(true);
+    await startOver.click();
+
+    await expect(overlay).toBeHidden();
+    await expect(page.getByRole('alert')).toContainText('taking longer than it should');
+
+    await page.evaluate(() => { (window as unknown as { __stuckSignIn: boolean }).__stuckSignIn = false; });
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(page.getByLabel('Your name')).toBeVisible();
+    await expect(overlay).toBeHidden();
+  });
+
+  test('when the sign-in fails, the screen comes back with the reason and the buttons work', async ({ page }) => {
+    const held: Array<() => void> = [];
+    await page.route('**/api/auth/oauth/**', async (route) => {
+      await new Promise<void>((release) => held.push(release));
+      await route.fulfill({ status: 503, json: { message: 'Huddle is having trouble right now. Try again in a moment.' } });
+    });
+    const overlay = page.getByTestId('signing-in-overlay');
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(overlay).toBeVisible();
+    await expect.poll(() => held.length).toBe(1);
+    held[0]();
+
+    await expect(overlay).toBeHidden();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeEnabled();
+  });
 });
 
 // The bug fixed alongside this feature: a wrong password in Delete account used to sign the person

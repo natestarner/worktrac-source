@@ -172,6 +172,12 @@ the sign-up step.
   branch as the other plugins are. This needs the **Sign in with Apple entitlement** (the
   provisioning profiles must be regenerated through `match`), the Google iOS client ID, and its URL
   scheme in `Info.plist`.
+- **The wait after the provider answers (2026-11-21).** Apple's or Google's sheet closes, then our
+  own sign-in (and on lower a ~35s cold start) runs before the app appears. For that whole gap the
+  login screen used to sit there with only greyed-out buttons, and people read it as broken. A
+  full-screen "Signing you in…" overlay with the Huddle mark breathing now covers it, adds "Still
+  working" after 5s, and offers "Start over" after 60s. The rules that keep it from ever trapping
+  anyone are in `.claude/rules/social-sign-in.md`.
 - **Buttons:** the Apple button follows Apple's design rules (black or white, the official
   wording, at least as prominent as Google). Shown on Login, Register, and Profile → Sign-in
   methods.

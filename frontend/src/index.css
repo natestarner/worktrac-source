@@ -2997,6 +2997,90 @@ button.person-row {
    would loop forever for someone with the OS setting on. */
 
 /* ===========================================================================
+   Signing in with Apple / Google (SocialSignIn.jsx's SigningInOverlay)
+   Opaque and full-screen on purpose: it replaces the login form, so nothing under it can be
+   tapped mid-sign-in. Its exits are in the component: the attempt ending, the page unmounting,
+   and a "Start over" button after SIGNING_IN_ESCAPE_MS that needs neither.
+   z-index is a LOCAL CONSTANT like .tour-layer's: below the modal (100) and the service-worker
+   updater (1000), above everything a login screen can show.
+   =========================================================================== */
+.signing-in-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: env(safe-area-inset-top) var(--space-4) env(safe-area-inset-bottom);
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-align: center;
+  animation: fadeIn var(--dur-base) var(--ease-out);
+}
+
+.signing-in-overlay__mark {
+  margin-bottom: var(--space-2);
+}
+
+/* The four circles breathe in turn -- a huddle, not a spinner. Each scales about its own centre
+   (fill-box), so the mark never shifts. Keyframes start and end at rest, so the blanket
+   prefers-reduced-motion rule (one 0.01ms iteration) leaves the plain mark on screen; the words
+   below still say what is happening. */
+.signing-in-overlay__mark circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: huddleBreathe 1.6s var(--ease-in-out) infinite;
+}
+
+.signing-in-overlay__mark circle:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.signing-in-overlay__mark circle:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+.signing-in-overlay__mark circle:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+@keyframes huddleBreathe {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(0.84);
+  }
+}
+
+.signing-in-overlay__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.signing-in-overlay__escape {
+  margin-top: var(--space-4);
+}
+
+.signing-in-overlay__label {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.signing-in-overlay__hint {
+  margin: 0;
+  max-width: 320px;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* ===========================================================================
    Animations
    =========================================================================== */
 
