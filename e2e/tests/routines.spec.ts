@@ -272,7 +272,7 @@ test.describe('Routines', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
     // exact: true -- a plain substring match also catches the still-fading toast
     // ("Copied "Push Day" to Sam") and the confirm dialog's own message
-    // ("Delete "Push Day"? ..."), both of which legitimately contain this text.
+    // title ("Delete "Push Day"?"), both of which legitimately contain this text.
     await expect(page.getByText('Push Day', { exact: true })).not.toBeVisible();
 
     await personPill(page, 'Sam').click();

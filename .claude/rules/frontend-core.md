@@ -151,6 +151,10 @@ no undo.
 - **Do not reinstate an `onClick` on the scrim**, in the primitive or at a call site.
 - **`onClose` is the single dismissal callback** and drives both the X and Escape. Pass `title` too
   and the header renders it and wires `aria-labelledby`; don't hand-roll a title `<div>`.
+- **Every dialog has a title.** A headerless one reads as unfinished: a lone X over a paragraph.
+  `openConfirm(message, onConfirm, { title })` — the **title asks the question** ("Delete this
+  set?") and the **message states only the consequence**, so the two never repeat each other.
+  Every caller passes one; the untitled fallback in `ConfirmDialog` is a safety net, not a style.
 - **Escape stays.** `Modal` installs a focus trap, so it is the only keyboard exit.
 - **Every modal must be closable** — an `onClose` or a footer button. Nothing enforces this
   mechanically.

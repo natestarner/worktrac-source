@@ -78,7 +78,8 @@ test.describe('App Settings', () => {
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
     await expect(page.getByRole('dialog').getByText('Created by you')).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete this exercise' }).click();
-    await expect(page.getByRole('dialog')).toContainText('Already-logged sets for it are kept, but it will disappear from your picker.');
+    await expect(page.getByRole('heading', { name: 'Delete "Yoke Carry Press"?' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toContainText('Sets already logged for it are kept, but it will no longer appear in your exercise list.');
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 
     // A preloaded (system) exercise is immutable: its Customize modal is badged as preloaded
@@ -96,7 +97,7 @@ test.describe('App Settings', () => {
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByText('Mobility')).toBeVisible();
     await rowWithButton(page, 'Mobility', '×').getByRole('button', { name: '×', exact: true }).click();
-    await expect(page.getByRole('dialog')).toContainText('Delete tag "Mobility"?');
+    await expect(page.getByRole('heading', { name: 'Delete tag "Mobility"?' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText('Mobility')).toHaveCount(0);
 
@@ -106,7 +107,8 @@ test.describe('App Settings', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
-    await expect(page.getByRole('dialog')).toContainText('Remove Sam? This deletes all of their sessions, sets, routines, and setup values.');
+    await expect(page.getByRole('heading', { name: 'Remove Sam?' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toContainText('This permanently deletes all of their sessions, sets, routines, and setup values.');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     // Scoped to .person-pill-bar for the same reason as the earlier /Sam/ checks in this
     // file: an unscoped match can also catch the header's account-holder dropdown trigger

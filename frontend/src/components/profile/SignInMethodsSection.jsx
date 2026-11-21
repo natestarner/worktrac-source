@@ -55,7 +55,7 @@ export default function SignInMethodsSection() {
 
   const disconnect = (provider) =>
     openConfirm(
-      `Disconnect ${NAMES[provider]}? You'll stay signed in here, and every other device signed in as you will be signed out.`,
+      `You'll stay signed in here, and every other device signed in as you will be signed out.`,
       run(
         async () => {
           await disconnectSignInMethod(provider);
@@ -67,7 +67,7 @@ export default function SignInMethodsSection() {
           errorMessage: `Couldn't disconnect ${NAMES[provider]}.`,
         },
       ),
-      { confirmLabel: 'Disconnect' },
+      { title: `Disconnect ${NAMES[provider]}?`, confirmLabel: 'Disconnect' },
     );
 
   return (

@@ -141,7 +141,7 @@ test.describe('Member logins', () => {
     await expect(page.getByRole('button', { name: '×', exact: true })).toHaveCount(1);
 
     await page.getByRole('button', { name: '×', exact: true }).click();
-    await expect(page.getByRole('dialog')).toContainText('Delete tag "sam-pull"?');
+    await expect(page.getByRole('heading', { name: 'Delete tag "sam-pull"?' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
 
     await expect(page.getByText('sam-pull')).toHaveCount(0);

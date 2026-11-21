@@ -158,8 +158,9 @@ function OutboxModalContainer({ onClose }) {
   function handleDiscard(item) {
     onClose();
     openConfirm(
-      `Discard this change? ${item.personName}${item.exerciseName ? ` — ${item.exerciseName}` : ''}: ${item.detail}. It won't be sent, and it can't be recovered.`,
+      `${item.personName}${item.exerciseName ? ` — ${item.exerciseName}` : ''}: ${item.detail}. It won't be sent, and it can't be recovered.`,
       () => discardOutboxItem(queryClient, item.id),
+      { title: 'Discard this change?', confirmLabel: 'Discard' },
     );
   }
 
@@ -173,10 +174,14 @@ function OutboxModalContainer({ onClose }) {
     // Zero at risk with a non-empty list is a real state, not an edge case: it means everything
     // showing is already undeliverable (a definitive rejection, or a dependency that is gone), so
     // "discard 0 changes" would be both wrong and alarming. Say what is actually true instead.
+    const title =
+      atRisk === 0
+        ? 'Clear the sync list?'
+        : `Discard ${atRisk === 1 ? '1 unsynced change' : `${atRisk} unsynced changes`}?`;
     const message =
       atRisk === 0
-        ? "Clear the sync list? Nothing in it is still waiting to reach the server, so this only removes changes that can't be sent."
-        : `Discard ${atRisk === 1 ? '1 change' : `${atRisk} changes`} that ${atRisk === 1 ? "hasn't" : "haven't"} synced yet? They won't be sent, and they can't be recovered.`;
+        ? "Nothing in it is still waiting to reach the server, so this only removes changes that can't be sent."
+        : `${atRisk === 1 ? "It won't be sent, and it can't" : "They won't be sent, and they can't"} be recovered.`;
     openConfirm(
       message,
       () => {
@@ -185,6 +190,7 @@ function OutboxModalContainer({ onClose }) {
         clearOutboxMutations(queryClient);
         return clearOutbox();
       },
+      { title, confirmLabel: atRisk === 0 ? 'Clear' : 'Discard' },
     );
   }
 

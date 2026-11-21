@@ -8,7 +8,7 @@ import { useUI } from '../../context/UIContext';
 import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin, setLoginRole } from '../../api/logins';
 import { planIncludes } from '../../utils/planFeatures';
 import { planCopy } from '../billing/planCopy';
-import { managerLabel } from '../../utils/accountVocab';
+import { accountVocab, managerLabel } from '../../utils/accountVocab';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 /**
@@ -122,11 +122,14 @@ export default function LoginsSection({ plan, vocab, refreshPeople, isOwner = tr
   // Turning it ON asks first, and says exactly what it grants -- including the one thing it does
   // not. Turning it OFF takes access away and needs no confirmation.
   function confirmTrust(row) {
+    // "a trusted member" on a family account, "an assistant" on Pro -- the account's own word.
+    const role = accountVocab(vocab).manager;
+    const article = /^[aeiou]/i.test(role) ? 'an' : 'a';
     openConfirm(
-      `Let ${row.personName} log for everyone? They'll be able to log, edit and delete workouts for `
-        + `everyone in this ${vocab?.account ?? 'household'} except you. You can turn this off at any time.`,
+      `They'll be able to log, edit and delete workouts for everyone in this `
+        + `${vocab?.account ?? 'household'} except you. You can turn this off at any time.`,
       () => changeRole(row, 'MANAGER'),
-      { confirmLabel: `Make ${roleWord.toLowerCase()}` },
+      { title: `Make ${row.personName} ${article} ${role}?`, confirmLabel: `Make ${roleWord.toLowerCase()}` },
     );
   }
 
@@ -158,14 +161,16 @@ export default function LoginsSection({ plan, vocab, refreshPeople, isOwner = tr
    *    honest thing is to say so before the owner acts, not after.
    */
   function confirmRemove(row) {
-    const message = row.status === 'ACTIVE'
-      ? `Remove ${row.personName}'s login? ${row.personName} and all of their workouts stay in this `
-        + `household — only their ability to sign in goes away. If they're offline right now, `
-        + `anything they haven't synced yet may not make it.`
-      : `Withdraw the invite for ${row.personName}? The link in their email stops working.`;
+    const active = row.status === 'ACTIVE';
+    const message = active
+      ? `${row.personName} and all of their workouts stay in this household — only their ability `
+        + `to sign in goes away. If they're offline right now, anything they haven't synced yet `
+        + `may not make it.`
+      : `The link in their email will stop working.`;
     // Not "Delete": this dialog's whole job is telling the owner nothing is deleted.
     openConfirm(message, () => removeLogin(row), {
-      confirmLabel: row.status === 'ACTIVE' ? 'Remove login' : 'Withdraw invite',
+      title: active ? `Remove ${row.personName}'s login?` : `Withdraw ${row.personName}'s invite?`,
+      confirmLabel: active ? 'Remove login' : 'Withdraw invite',
     });
   }
 

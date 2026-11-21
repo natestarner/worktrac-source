@@ -206,8 +206,8 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
 
     // Destructive, so it confirms first rather than firing on the tap.
     await page.getByRole('button', { name: 'Clear all queued changes' }).click();
-    await expect(page.getByText(/Discard 1 change that hasn't synced yet/)).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Discard 1 unsynced change?' })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Discard', exact: true }).click();
 
     await expect(page.getByText(/waiting to sync/)).toBeHidden();
 

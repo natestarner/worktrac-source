@@ -153,6 +153,7 @@ describe('AdminActivity', () => {
     expect(openConfirm).toHaveBeenCalledWith(
       expect.stringContaining('3 test account(s), 42 activity event(s), and 1 pending registration(s)'),
       expect.any(Function),
+      { title: 'Delete e2e test data?' },
     );
     // Nothing deleted yet -- only confirming actually calls the delete endpoint.
     expect(deleteTestData).not.toHaveBeenCalled();

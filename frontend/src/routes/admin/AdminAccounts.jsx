@@ -259,12 +259,12 @@ function CompModal({ account, onClose, onDone }) {
       // Names the consequence before the admin acts, the same way the revoke-login confirm does.
       // Nothing is deleted and nothing is revoked: the pause is a status, and re-granting restores
       // every login with no re-invitation.
-      `Remove ${household}'s free plan? Any member logins pause until they have a paid plan again. ` +
+      'Any member logins pause until they have a paid plan again. ' +
         'No workouts are deleted, and re-granting restores their logins.',
       () => run(() => revokeComp(account.id), `Removed ${household}'s free plan.`),
       // Not "Remove grant" -- that is the button in this modal that opened the dialog, and one
       // accessible name containing the other makes every getByRole on it ambiguous.
-      { confirmLabel: 'Remove it' },
+      { title: `Remove ${household}'s free plan?`, confirmLabel: 'Remove it' },
     );
   }
 

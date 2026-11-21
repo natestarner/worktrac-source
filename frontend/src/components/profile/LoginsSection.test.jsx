@@ -259,7 +259,8 @@ describe('LoginsSection', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
-    const [message] = openConfirm.mock.calls[0];
+    const [message, , options] = openConfirm.mock.calls[0];
+    expect(options.title).toBe(`Remove ${ROWS[3].personName}'s login?`);
     expect(message).toMatch(/workouts stay/i);
     expect(message).toMatch(/haven't synced/i);
   });
@@ -272,8 +273,9 @@ describe('LoginsSection', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
-    const [message] = openConfirm.mock.calls[0];
-    expect(message).toMatch(/link in their email stops working/i);
+    const [message, , options] = openConfirm.mock.calls[0];
+    expect(options.title).toBe(`Withdraw ${ROWS[2].personName}'s invite?`);
+    expect(message).toMatch(/link in their email will stop working/i);
     expect(message).not.toMatch(/haven't synced/i);
   });
 
@@ -441,7 +443,9 @@ describe('LoginsSection trusted logins', () => {
     const [message, , options] = openConfirm.mock.calls[0];
     expect(message).toMatch(/log, edit and delete workouts for everyone/i);
     expect(message).toMatch(/except you/i);
-    expect(options).toEqual({ confirmLabel: 'Make trusted' });
+    expect(options).toEqual({ title: 'Make Jess a trusted member?', confirmLabel: 'Make trusted' });
+    // The title asks the question, so the body must not ask it again.
+    expect(message).not.toMatch(/\?/);
     await waitFor(() => expect(setLoginRole).toHaveBeenCalledWith(2, 'MANAGER'));
     expect(showToast).toHaveBeenCalledWith('Jess can now log for everyone.');
     await waitFor(() => expect(listLogins).toHaveBeenCalledTimes(2));
@@ -463,7 +467,7 @@ describe('LoginsSection trusted logins', () => {
 
     const [message, , options] = openConfirm.mock.calls[0];
     expect(message).toMatch(/everyone in this practice except you/i);
-    expect(options).toEqual({ confirmLabel: 'Make assistant' });
+    expect(options).toEqual({ title: 'Make Jess an assistant?', confirmLabel: 'Make assistant' });
     expect(screen.queryByRole('checkbox', { name: /Trusted/ })).not.toBeInTheDocument();
   });
 
