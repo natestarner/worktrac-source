@@ -15,4 +15,18 @@ describe('capacitor.config.json', () => {
   it('keeps CapacitorHttp off', () => {
     expect(config.plugins.CapacitorHttp.enabled).toBe(false);
   });
+
+  // @capgo/capacitor-social-login bundles every provider's SDK unless told otherwise, and with no
+  // `providers` block builds 1.0-1.3 shipped Facebook's login SDK unused: dead code, a larger app,
+  // and a third-party privacy manifest merged into ours. The plugin reads this block during
+  // `cap sync` (its capacitor:sync:before hook) and leaves a `false` provider's SDK out entirely.
+  // Apple and Google are the two sign-ins Huddle offers (lib/native/socialSignIn.js).
+  it('bundles only the sign-in providers Huddle offers', () => {
+    expect(config.plugins.SocialLogin?.providers).toEqual({
+      google: true,
+      apple: true,
+      facebook: false,
+      twitter: false,
+    });
+  });
 });
