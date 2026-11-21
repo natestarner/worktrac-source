@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useIsRestoring, useQueryClient } from '@tanstack/react-query';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
@@ -20,6 +20,8 @@ import PullToRefresh from './PullToRefresh';
 import { jumpAndSettle } from './jumpAndSettle';
 import { useGrowingList } from './useGrowingList';
 import BackLink from '../shared/BackLink';
+import ChartHelp from '../shared/ChartHelp';
+import { RECORD_BADGES_HELP } from './historyHelp';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
 import Skeleton from '../shared/Skeleton';
@@ -33,7 +35,7 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { IconCalendar, IconChevronRight, IconDownload, IconHelp, IconInfo, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
+import { IconCalendar, IconChevronRight, IconDownload, IconInfo, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
 import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 
 // Whether a searched date ends before the Free window's first visible day, while the server says
@@ -731,31 +733,12 @@ function RecordLegend() {
           {prSpec(type)?.badgeLabel}
         </span>
       ))}
-      {/* An icon, not the former text link, so the legend stays one compact line instead of
-          growing a fourth, wordier item every time it's on screen. Shrunk to 28px the same way
-          ChartHelp's trigger is -- below the 44px touch target, acceptable for the same reason:
-          the worst case is a missed tap on a link to more explanation, and there is nothing
-          destructive beside it to hit by mistake. `aria-label` carries the exact former link
-          text, so this is still "How records work" to a screen reader and to the existing
-          getByRole('link', { name: 'How records work' }) coverage -- see frontend-core.md's rule
-          on converting a text control to an icon one. */}
-      <Link
-        to="/app/help#history"
-        aria-label="How records work"
-        title="How records work"
-        className="pressable pressable-subtle"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 28,
-          height: 28,
-          borderRadius: 'var(--radius-full)',
-          color: 'var(--color-accent-text)',
-        }}
-      >
-        <IconHelp size={15} aria-hidden="true" />
-      </Link>
+      {/* The app's one "?" (ChartHelp), opening the same sheet every other "?" opens. It was a
+          link that left History for the handbook until 2026-11-20; the sheet now carries the short
+          answer and links on to the handbook for the rest. Its accessible name is still the former
+          link's text, "How records work" (RECORD_BADGES_HELP.label). It sits OUTSIDE the
+          aria-hidden spans above, so it stays reachable inside this role="note" key. */}
+      <ChartHelp help={RECORD_BADGES_HELP} />
     </div>
   );
 }

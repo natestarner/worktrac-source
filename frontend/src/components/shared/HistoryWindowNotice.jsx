@@ -2,7 +2,7 @@ import { useState } from 'react';
 import PlusUpsell from './PlusUpsell';
 import HistoryWindowModal from './HistoryWindowModal';
 import { fullHistorySentence } from './historyWindowCopy';
-import { IconHelp } from './icons';
+import { HelpButton } from './ChartHelp';
 import { planIncludes } from '../../utils/planFeatures';
 
 // "There is more here than you can see." The one way History, PRs and Trends say so, so all three
@@ -48,15 +48,9 @@ export default function HistoryWindowNotice({ plan, historyWindow, lead }) {
           // chrome. A bare alert icon with no context is a puzzle the person has to solve, and
           // .app-chrome is one contiguous sticky box whose contents are load-bearing -- adding to
           // it has broken pointer handling across unrelated screens before.
-          <button
-            type="button"
-            onClick={() => setExplaining(true)}
-            aria-label="About your full history"
-            className="pressable"
-            style={infoButtonStyle}
-          >
-            <IconHelp size={18} />
-          </button>
+          // The same "?" as every other one in the app (ChartHelp's HelpButton). Its explanation is
+          // richer than a ChartHelp `help` object holds, so it opens HistoryWindowModal instead.
+          <HelpButton label="About your full history" expanded={explaining} onClick={() => setExplaining(true)} />
         }
       >
         {/* No mark here, deliberately. The convention is that it leads a phrase NAMING the product
@@ -81,17 +75,3 @@ const wrapStyle = { marginBottom: 'var(--space-4)' };
 // --color-muted rather than the accent: the "See Plus" link sitting beside it is this box's call to
 // action, and two competing accents in one small notice is how something calm starts reading as an
 // advertisement. 44px square is the touch-target floor -- the app is used on an iPad mid-workout.
-const infoButtonStyle = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  color: 'var(--color-muted)',
-  cursor: 'pointer',
-  minWidth: 44,
-  minHeight: 44,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-};

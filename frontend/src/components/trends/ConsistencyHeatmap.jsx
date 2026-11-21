@@ -60,7 +60,7 @@ export default function ConsistencyHeatmap({ workoutDays }) {
   // The grid always ends at today, so on a phone narrow enough to scroll it, the interesting
   // edge is the right one -- open there rather than making someone swipe past 6 months of the
   // past to reach the present. jsdom lays out nothing, so scrollWidth is always 0 there; this is
-  // a real-browser-only effect, proven in e2e (trends.spec.ts), same as ChartHelp's clamp.
+  // a real-browser-only effect, proven in e2e (trends.spec.ts).
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollLeft = node.scrollWidth;

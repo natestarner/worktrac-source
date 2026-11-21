@@ -51,8 +51,8 @@ export default function WeeklyMetricChart({ weeks, metric, onMetricChange, defau
 
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
-      {/* The "?" is the last item in the header on every chart, so its right-anchored panel
-          always opens inside the card rather than off the edge of a phone screen. */}
+      {/* The "?" is the last item in the header on every chart. It opens a sheet (ChartHelp), so
+          nothing below it -- here, the metric switcher -- is ever covered by an open explanation. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 8px 8px' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>
           {spec.isWeight ? `${spec.label} lifted per week (${defaultUnit})` : `${spec.label} per week`}
