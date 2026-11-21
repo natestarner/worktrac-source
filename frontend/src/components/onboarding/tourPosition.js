@@ -4,10 +4,10 @@
 // tested for it, and e2e/tests/onboarding-tour.spec.ts is what proves it against a real browser at
 // the three layouts described in the plan.
 
-// Gap kept between the spotlight's hole and the card, same idea as ChartHelp's own gap.
+// Gap kept between the spotlight's hole and the card.
 export const TOUR_GAP = 12;
 // Gap kept between the card and the edge of the (usable) viewport when it has to be nudged back
-// on -- identical value to ChartHelp.jsx's own VIEWPORT_MARGIN.
+// on.
 export const VIEWPORT_MARGIN = 8;
 // How far the spotlight's hole extends past the target's own box on every side.
 export const SPOTLIGHT_PADDING = 8;

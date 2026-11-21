@@ -402,15 +402,16 @@ session totals — the chart shows no difference between them, which is what thi
 - **The `?` labels must stay mutually non-containing** — the four Trends ones are on screen at
   once (the PRs one is checked with them), and Playwright matches an accessible name as a
   substring. Also asserted, as an exact count.
-- **Don't delete `ChartHelp`'s measure-and-nudge effect, and don't replace it with a CSS clamp.**
-  It exists because `WeeklyMetricChart`'s header used to wrap on a phone, moving its `?` mid-row
-  so a right-anchored panel landed 45px off the left edge with the text clipped. Where the trigger
-  ends up depends on the wrap point, so no static rule gets it right. jsdom has no layout — the
-  bounding-box test in `trends.spec.ts` is the only guard.
-
-  **That header no longer wraps** (2026-09-20): the switcher moved to its own full-width row when
-  workouts became its fourth option, so every Trends `?` now sits at its card's right edge. The
-  effect stays anyway — it is the general guard, the next wrapping header re-arms it silently, and
-  the cost of keeping it is one measurement per open.
-- **Keep the panel unmounted while closed.** Its copy repeats phrases other specs on this screen
-  select by; an always-mounted panel breaks them.
+- **The explanation is a sheet, not an anchored panel** (2026-11-20, #441). `ChartHelp` opens
+  `Modal`: a bottom sheet under 600px wide, centred above. The panel it replaced hung below the
+  `?`, and the row below the weekly chart's `?` is its metric switcher: open, it covered all four
+  pills at 375px and two at 768px and 1280px, and a tap on a covered pill did nothing. **Don't
+  bring back a hanging panel or a tooltip** for this copy — a few sentences is a sheet on a phone by
+  platform convention, and a sheet cannot cover a control it doesn't also dim. Its exits are
+  Modal's (X, Escape; the backdrop is inert, as everywhere). `trends.spec.ts` measures the sheet at
+  390px; jsdom has no layout.
+- **Every `?` in the app is `ChartHelp`** (History's record key and the PRs board use it too), or
+  its exported `HelpButton` where the explanation is richer than a `help` object (the Free-window
+  note, which opens `HistoryWindowModal`). Don't hand-roll a third `?`.
+- **Keep the dialog unmounted while closed.** Its copy repeats phrases other specs on this screen
+  select by; an always-mounted copy breaks them.

@@ -155,7 +155,7 @@ export default function ProductTour() {
 
     const cardRect = cardEl.getBoundingClientRect();
     // jsdom computes no layout, so this is always 0 there -- leave the current frame alone rather
-    // than "correcting" a card whose real size is unknown (see ChartHelp.jsx's identical guard).
+    // than "correcting" a card whose real size is unknown.
     if (cardRect.width === 0) return;
 
     let target = null;

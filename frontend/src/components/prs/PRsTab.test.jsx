@@ -473,7 +473,7 @@ describe('PRsTab record picker', () => {
 
     await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'What this board is measuring' }));
-    expect(screen.getByRole('note')).toHaveTextContent('It is a session total, not one set.');
+    expect(screen.getByRole('dialog', { name: 'Volume' })).toHaveTextContent('It is a session total, not one set.');
   });
 });
 

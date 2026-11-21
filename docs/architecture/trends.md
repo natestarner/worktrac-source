@@ -130,10 +130,9 @@ full-width row. That also makes it match the five-pill exercise switcher directl
 had been solving the same problem the same way since #139. Worth noting the *reason* it was missed:
 the guidance lived in the component being reused, not in the calling site being edited.
 
-One thing this moved without breaking: the Trends `?` buttons no longer sit in a wrapping header,
-which is the case `ChartHelp`'s measure-and-nudge effect was built for. The effect stays — see
-`.claude/rules/trends.md` — but its live trigger on this screen is gone, so a future wrapping
-header is what would re-arm it.
+One thing this moved that it should not have: the switcher's new row sat directly under the
+weekly chart's `?`, and the help panel then hung straight down over it (#441). That was fixed on
+2026-11-20 by making every `?` open a sheet instead; see "The 2026-08-17 addition: a "?" on every chart" below.
 
 ### Why "at least N reps" for rep maxes
 
@@ -218,13 +217,16 @@ Two things about it are less obvious than they look:
 
 - **It opens on tap, not hover.** This is an iPad-in-the-gym app; hover does not exist there, and
   on iOS a hover-opened panel sticks after a tap. One mechanism covers both input types.
-- **The panel's position has to be measured, not predicted.** `WeeklyMetricChart`'s header wraps on
-  a phone, which moves its `?` from the card's right edge into the middle of a row — and a panel
-  anchored to that trigger's right edge started 45px off the left of a 390px screen with every line
-  clipped. Where the trigger lands depends on the wrap point, which varies with viewport,
-  orientation and the metric's label, so `ChartHelp` measures the mounted panel and nudges it back
-  on screen. jsdom computes no layout, so `trends.spec.ts`'s bounding-box test is the only thing
-  that can catch a regression here.
+- **It opens a sheet, not a panel hung from the button** (since 2026-11-20, #441). The panel it
+  replaced was anchored below the `?` and had to be measured and nudged back on screen whenever a
+  header wrapped. Then the weekly metric switcher got its own row directly under the `?`, and an
+  open panel covered its pills: all four on a 375px phone, two on an iPad and a desktop, with a tap
+  on a covered pill doing nothing. Several sentences of explanation is a bottom sheet on a phone by
+  platform convention (UIKit turns a popover into one at compact width; Material keeps tooltips to
+  a few words), so `ChartHelp` now opens `Modal` — a sheet under 600px, a centred dialog above —
+  and every other `?` in the app (History's record key, the PRs board, the Free-window note) opens
+  the same way. A sheet cannot fall off the screen or cover a control it doesn't also dim, so the
+  measuring went with the panel. `trends.spec.ts` checks the sheet's geometry at 390px.
 
 ## Muscles worked (the muscle map)
 

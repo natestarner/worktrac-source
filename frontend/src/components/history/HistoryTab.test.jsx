@@ -676,7 +676,15 @@ describe('HistoryTab record legend', () => {
     renderHistoryTab();
 
     expect(await screen.findByRole('note')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'How records work' })).toHaveAttribute('href', '/app/help#history');
+    // The same "?" as every other one: it opens the record-badge sheet in place, and the sheet links
+    // on to the handbook (it was a link straight to the handbook until 2026-11-20).
+    fireEvent.click(screen.getByRole('button', { name: 'How records work' }));
+    const sheet = screen.getByRole('dialog', { name: 'Record badges' });
+    expect(sheet).toHaveTextContent('beat your previous best');
+    expect(within(sheet).getByRole('link', { name: 'More about History in the Help page' })).toHaveAttribute(
+      'href',
+      '/app/help#history',
+    );
   });
 
   // ⚠️ Only the EARLIER session's set takes the records; the later one merely ties it and takes

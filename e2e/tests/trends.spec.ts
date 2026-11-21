@@ -112,11 +112,9 @@ test.describe('Trends analytics', () => {
   // Every chart on this tab answers a question that LOOKS obvious and isn't -- most of all the
   // line chart, whose dots are one per SESSION (not per day) and whose meaning changes with the
   // metric switcher, two of whose five options are session totals rather than a best set.
-  test('every chart has a "?" that explains its own datapoints in plain English', async ({ page, request, isMobile }) => {
-    // At phone width an open "?" panel covers the weekly metric switcher, and this spec taps a metric
-    // with the panel open (desktop places the panel clear of it). Same in Chrome at phone size, so it
-    // is layout, not Safari. Whether the panel should get out of the way on phones is an open question.
-    test.skip(isMobile, 'an open help panel covers the metric switcher at phone width');
+  test('every chart has a "?" that explains its own datapoints in plain English', async ({ page, request }) => {
+    // Runs at every size again (it skipped on phones until 2026-11-20, #441): the explanation is a
+    // sheet now, so an open one can no longer half-cover the weekly metric switcher.
     await registerHousehold(page, request, 'Nate');
 
     await pickExercise(page, 'Barbell Bench Press');
@@ -126,8 +124,8 @@ test.describe('Trends analytics', () => {
     await page.getByRole('link', { name: 'Trends' }).click();
 
     // All three are present and, crucially, closed -- their copy repeats phrases the rest of this
-    // file selects by, so an always-mounted panel would break the specs above. It was four until
-    // workouts-per-week stopped being a chart of its own and became a metric on the weekly
+    // file selects by, so an always-mounted explanation would break the specs above. It was four
+    // until workouts-per-week stopped being a chart of its own and became a metric on the weekly
     // switcher, which took its "?" with it.
     const consistencyHelp = page.getByRole('button', { name: 'What the consistency grid shows' });
     const weeklyHelp = page.getByRole('button', { name: 'What the weekly totals chart shows' });
@@ -138,58 +136,73 @@ test.describe('Trends analytics', () => {
     await expect(page.getByRole('button', { name: 'What the workouts chart shows' })).toHaveCount(0);
     await expect(page.getByText(/One dot per workout session/)).toBeHidden();
 
+    // Each "?" opens its explanation as a dialog; it closes from its X or Escape.
+    const sheet = page.getByRole('dialog');
+    async function open(trigger: typeof consistencyHelp) {
+      await trigger.click();
+      await expect(sheet).toBeVisible();
+      return sheet;
+    }
+    async function close() {
+      await page.keyboard.press('Escape');
+      await expect(sheet).toHaveCount(0);
+    }
+
     // --- The heatmap says it ignores the range toggle, which nothing else on screen does ---
-    await consistencyHelp.click();
-    await expect(page.getByText(/always the last 6 months/)).toBeVisible();
+    await expect(await open(consistencyHelp)).toContainText(/always the last 6 months/);
+    // The X is the visible way out (Escape is the keyboard one).
+    await sheet.getByRole('button', { name: 'Close' }).click();
+    await expect(sheet).toHaveCount(0);
 
     // --- The weekly bars follow their own metric switcher, and open on Workouts ---
     const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
 
-    // Workouts is the default, so this is the first panel a new household sees here. What it has
-    // to say is the same thing the standalone chart's "?" said: a bar is SESSIONS, not exercises
-    // and not sets.
-    await weeklyHelp.click();
-    await expect(page.getByText(/always the last 6 months/)).toBeHidden(); // the first one closed
-    await expect(page.getByText(/counts separate workout sessions/)).toBeVisible();
+    // Workouts is the default, so this is the first explanation a new household sees here. What it
+    // has to say is the same thing the standalone chart's "?" said: a bar is SESSIONS, not
+    // exercises and not sets.
+    await expect(await open(weeklyHelp)).toContainText(/counts separate workout sessions/);
+    await close();
 
+    // The explanation follows the switcher, and every pill is reachable right after the "?" was
+    // used -- the anchored panel this replaced covered them.
     await weeklyMetric.getByRole('button', { name: 'Volume', exact: true }).click();
-    await weeklyHelp.click();
-    await expect(page.getByText(/Volume is weight × reps/)).toBeVisible();
-    await expect(page.getByText(/counts separate workout sessions/)).toBeHidden();
+    const volume = await open(weeklyHelp);
+    await expect(volume).toContainText(/Volume is weight × reps/);
+    await expect(volume).not.toContainText(/counts separate workout sessions/);
+    await close();
     await weeklyMetric.getByRole('button', { name: 'Sets', exact: true }).click();
-    await weeklyHelp.click();
-    await expect(page.getByText(/Every set you logged that week counts once/)).toBeVisible();
+    await expect(await open(weeklyHelp)).toContainText(/Every set you logged that week counts once/);
+    await close();
 
     // --- The line chart: one dot per session, and what the dot measures follows the metric ---
-    await progressHelp.click();
-    await expect(page.getByText(/One dot per workout session/)).toBeVisible();
-    await expect(page.getByText(/Two sessions in the same day give you two dots/)).toBeVisible();
-    await expect(page.getByText(/best single set, scored by estimated 1RM/)).toBeVisible();
+    const progress = await open(progressHelp);
+    await expect(progress).toContainText(/One dot per workout session/);
+    await expect(progress).toContainText(/Two sessions in the same day give you two dots/);
+    await expect(progress).toContainText(/best single set, scored by estimated 1RM/);
     // The PR rule the chart gives no other clue about: green is judged on one measure regardless
     // of the metric, so a PR dot need not be the high point of the line you are looking at. It
     // must NOT be described as an estimated 1RM -- that measure is a rep count for a bodyweight
     // exercise and seconds for a hold (StatsService#comparableValue).
-    await expect(page.getByText(/not always the highest point on this chart/)).toBeVisible();
-    await expect(page.getByText(/rep count for a bodyweight exercise/)).toBeVisible();
-
-    // Escape closes it, the same exit Modal offers.
-    await page.keyboard.press('Escape');
+    await expect(progress).toContainText(/not always the highest point on this chart/);
+    await expect(progress).toContainText(/rep count for a bodyweight exercise/);
+    await close();
     await expect(page.getByText(/One dot per workout session/)).toBeHidden();
 
     // A session TOTAL has to say so -- reading "Volume" as a best set is the misunderstanding
     // this whole affordance exists to prevent.
     const exerciseMetric = page.getByRole('group', { name: 'Exercise metric' });
     await exerciseMetric.getByRole('button', { name: 'Volume', exact: true }).click();
-    await progressHelp.click();
-    await expect(page.getByText(/session total, not one set/)).toBeVisible();
-    await expect(page.getByText(/best single set, scored by estimated 1RM/)).toBeHidden();
+    const total = await open(progressHelp);
+    await expect(total).toContainText(/session total, not one set/);
+    await expect(total).not.toContainText(/best single set, scored by estimated 1RM/);
+    await close();
 
     // ...and a best-set metric has to say THAT, including that it is often a different set.
-    await progressHelp.click();
     await exerciseMetric.getByRole('button', { name: 'Top weight', exact: true }).click();
-    await progressHelp.click();
-    await expect(page.getByText(/heaviest weight you touched that session/)).toBeVisible();
-    await expect(page.getByText(/session total, not one set/)).toBeHidden();
+    const top = await open(progressHelp);
+    await expect(top).toContainText(/heaviest weight you touched that session/);
+    await expect(top).not.toContainText(/session total, not one set/);
+    await close();
   });
 
   // Only a real browser can prove either half of this: jsdom lays nothing out, so scrollWidth is
@@ -230,13 +243,11 @@ test.describe('Trends analytics', () => {
     expect(labelBox.x, 'the weekday label is not pinned near the left edge').toBeLessThanOrEqual(containerBox.x + 30);
   });
 
-  // Only a real browser can prove this: jsdom computes no layout, so ChartHelp's clamping effect
-  // is a no-op in every unit test and this is the sole place the geometry is checked.
-  test('a help panel stays fully on screen on a phone, wherever its "?" ended up', async ({ page, request }) => {
-    // 390px is an iPhone in portrait. It matters because WeeklyMetricChart's header WRAPS at this
-    // width, moving its "?" from the card's right edge into the middle of a row -- and a panel
-    // hung off the right of a mid-row trigger started 45px off the left of the screen, with the
-    // first characters of every line clipped.
+  // Only a real browser can prove this: jsdom computes no layout. On a phone every "?" opens a
+  // bottom sheet that sits wholly on screen (#441: the anchored panel it replaced landed over the
+  // weekly metric pills and could run off the edge).
+  test('a "?" opens a sheet that sits fully on screen on a phone', async ({ page, request }) => {
+    // 390px is an iPhone in portrait.
     await page.setViewportSize({ width: 390, height: 844 });
     await registerHousehold(page, request, 'Nate');
 
@@ -257,14 +268,22 @@ test.describe('Trends analytics', () => {
       await trigger.scrollIntoViewIfNeeded();
       await trigger.click();
 
-      const panel = page.getByRole('note');
-      await expect(panel).toBeVisible();
-      const box = await panel.boundingBox();
-      expect(box, `${label}: panel has no box`).not.toBeNull();
-      expect(box!.x, `${label}: panel runs off the left edge`).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width, `${label}: panel runs off the right edge`).toBeLessThanOrEqual(390);
+      const sheet = page.getByRole('dialog');
+      await expect(sheet).toBeVisible();
+      // Measure only once the entrance animation has finished: until its first frame paints, the
+      // sheet sits a full sheet-height below where it settles (e2e-tests.md, "Locator gotchas").
+      await expect
+        .poll(() => sheet.evaluate((el) => el.getAnimations().length === 0 && getComputedStyle(el).transform === 'none'))
+        .toBe(true);
+      const box = (await sheet.boundingBox())!;
+      expect(box.x, `${label}: sheet runs off the left edge`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${label}: sheet runs off the right edge`).toBeLessThanOrEqual(390.5);
+      expect(box.y, `${label}: sheet runs off the top`).toBeGreaterThanOrEqual(0);
+      // A bottom sheet: anchored to the bottom of the screen, not hung from the "?".
+      expect(Math.round(box.y + box.height), `${label}: not a bottom sheet`).toBeGreaterThanOrEqual(843);
 
       await page.keyboard.press('Escape');
+      await expect(sheet).toHaveCount(0);
     }
   });
 

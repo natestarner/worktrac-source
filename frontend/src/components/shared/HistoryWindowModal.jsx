@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import Modal from './Modal';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import Button from './Button';
 import { PLUS_BENEFITS } from '../billing/planCopy';
 import { windowLabel } from './historyWindowCopy';
@@ -21,13 +22,15 @@ import { useBillingChannel } from '../../hooks/useBillingChannel';
 // not to, and an upgrade taken on a complete picture is the only kind worth having.
 export default function HistoryWindowModal({ historyWindow, onClose }) {
   const navigate = useNavigate();
+  // A sheet on a phone and a centred dialog above, like every other "?" (ChartHelp's COMPACT).
+  const compact = useMediaQuery('(max-width: 599px)');
   // 'none' = the App Store app outside the US storefront: the explanation stays, the way to buy goes.
   const channel = useBillingChannel();
   const hidden = historyWindow?.hiddenSessions ?? 0;
   const since = historyWindow?.earliestHiddenAt;
 
   return (
-    <Modal width={360} onClose={onClose} title="Your full history">
+    <Modal align={compact ? 'bottom' : 'center'} width={420} onClose={onClose} title="Your full history">
       <p style={leadStyle}>
         On Free, History, PRs and Trends cover {windowLabel(historyWindow?.windowStart)}. Your full
         history {since ? `goes back to ${formatDate(since)} and holds` : 'holds'}{' '}
