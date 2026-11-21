@@ -31,13 +31,22 @@
 // pill's mark used to render.
 import { MARK_CIRCLES } from './huddleMarkGeometry';
 
-export default function HuddleMark({ size = 128, hairline = 'var(--brand-mark-hairline)' }) {
+// `className` lets a caller animate the circles with CSS (SocialSignIn's signing-in overlay) without
+// a second drawing of the mark.
+export default function HuddleMark({ size = 128, hairline = 'var(--brand-mark-hairline)', className }) {
   // The artwork's own aspect ratio, from the viewBox below. Callers pass one number and cannot
   // accidentally squash it.
   const height = Math.round((size * 115) / 129);
 
   return (
-    <svg width={size} height={height} viewBox="162 135 129 115" aria-hidden="true" focusable="false">
+    <svg
+      className={className}
+      width={size}
+      height={height}
+      viewBox="162 135 129 115"
+      aria-hidden="true"
+      focusable="false"
+    >
       {/* MARK_CIRCLES is in the mark's own space; this viewBox predates that module, so shift
           into it rather than re-derive every caller's framing. */}
       <g transform="translate(166 139)">
