@@ -57,7 +57,7 @@ test.describe('Log workout', () => {
 
     await page.locator('.header-bar').getByRole('button').click();
     await page.getByRole('menuitem', { name: 'Profile' }).click();
-    await expect(page.getByText('PRIMARY')).toBeVisible();
+    await expect(page.getByTestId('people-list').getByText('Owner', { exact: true })).toBeVisible();
 
     await page.screenshot({ path: 'test-results/profile-tab.png' });
   });

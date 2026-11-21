@@ -314,7 +314,7 @@ controller's refusals (Stripe-paying, comped, another device mid-purchase, a mem
 
 ### Phase 2: App and web (about 4 days)
 `PurchasesPlugin.swift` and `purchases.js`; the `store` channel through the five upgrade surfaces
-that already read the channel (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,
+that already read the channel (`PlusUpsell`, `PlanBadge`, `BillingTab`, `PeopleSection`,
 `HistoryWindowModal`); Restore Purchases; the two "billed elsewhere" states; deletion wording; Help,
 Terms, Privacy. Tests: unit tests with the plugin mocked; a web e2e and parity test for a seeded
 App Store household (it sees "billed through the App Store" and the web checkout refuses it); a

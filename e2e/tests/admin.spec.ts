@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, pickExercise } from './support/exercises';
+import { openPersonSheet } from './support/peopleList';
 
 // App Settings and Profile are both reached via the account-holder dropdown in the
 // header, not a tab -- scope to .header-bar (the only button living there) rather than
@@ -59,8 +60,8 @@ test.describe('App Settings', () => {
     await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Sam/ })).toBeVisible();
 
     await openProfile(page);
-    await page.getByRole('button', { name: 'Remove' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Remove Sam' }).click();
+    await page.getByRole('dialog', { name: 'Remove Sam?' }).getByRole('button', { name: 'Delete' }).click();
     await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Sam/ })).toHaveCount(0);
 
     // Switch default unit to kg.
@@ -106,10 +107,12 @@ test.describe('App Settings', () => {
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await openProfile(page);
-    await page.getByRole('button', { name: 'Remove' }).click();
+    // In Sam's sheet, apart from the login controls -- the one remove there that deletes data.
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Remove Sam' }).click();
     await expect(page.getByRole('heading', { name: 'Remove Sam?' })).toBeVisible();
-    await expect(page.getByRole('dialog')).toContainText('This permanently deletes all of their sessions, sets, routines, and setup values.');
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Remove Sam?' });
+    await expect(confirm).toContainText('This permanently deletes all of their sessions, sets, routines, and setup values.');
+    await confirm.getByRole('button', { name: 'Delete' }).click();
     // Scoped to .person-pill-bar for the same reason as the earlier /Sam/ checks in this
     // file: an unscoped match can also catch the header's account-holder dropdown trigger
     // or a per-person settings control showing the same name elsewhere on screen.

@@ -304,7 +304,7 @@ const linkStyle = {
   cursor: 'pointer',
 };
 
-// Matches ImportDataModal's and LoginsSection's field label -- not the uppercase section-label
+// Matches ImportDataModal's and PeopleSection's field label -- not the uppercase section-label
 // idiom, which belongs to <SectionLabel> and marks a heading above a group of content.
 const fieldLabelStyle = {
   display: 'block',

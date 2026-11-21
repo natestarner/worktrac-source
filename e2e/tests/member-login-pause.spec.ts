@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold, setBillingPlan } from './support/auth';
+import { openPersonSheet, peopleList, personTag, signedInRows } from './support/peopleList';
 
 /**
  * Member logins are a Plus feature. Dropping to Free PAUSES them; going back to Plus resumes them.
@@ -69,10 +70,10 @@ async function plusHouseholdWithAMember(page: Page, request: APIRequestContext) 
 
   const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
   await openProfile(page);
-  await page.getByRole('button', { name: 'Enable login' }).click();
+  await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
   await page.getByPlaceholder('them@example.com').fill(memberEmail);
   await page.getByRole('button', { name: 'Send invite' }).click();
-  await expect(page.getByText('INVITED')).toBeVisible();
+  await expect(personTag(page, 'Invited')).toBeVisible();
 
   const { inviteId, token } = await latestInvite(request, ownerEmail);
   await logout(page);
@@ -149,19 +150,18 @@ test.describe('A member login when the household leaves Plus', () => {
 
     // Sam is still here, and still shows as holding a login -- nothing was revoked.
     //
-    // ⚠️ Scoped to the Logins list, not a bare page-wide getByText: PersonPillBar renders every
+    // ⚠️ Scoped to the People list, not a bare page-wide getByText: PersonPillBar renders every
     // person's name as its own button once a household has 2+ people (frontend-core.md's sticky
     // chrome), so an unscoped getByText('Sam') is ambiguous the instant both it and this list's
     // own "Sam" row have mounted -- ambiguous on every run, not intermittently, but only reliably
-    // hit locally once LoginsSection's separate listLogins() fetch resolves. Locally that lands
+    // hit locally once the list's separate listLogins() fetch resolves. Locally that lands
     // late enough that this assertion often already succeeded against the pill alone; lower's
     // slower round trip closes that window, making the strict-mode violation the norm there
     // instead of the exception. The sibling "resumes the same login" test above already had to
     // solve the identical ambiguity by scoping to `.app-chrome`.
     await openProfile(page);
-    const loginsList = page.getByTestId('logins-list');
-    await expect(loginsList.getByText('Sam', { exact: true })).toBeVisible();
-    await expect(loginsList.getByText('HAS LOGIN')).toHaveCount(2);
+    await expect(peopleList(page).getByText('Sam', { exact: true })).toBeVisible();
+    await expect(signedInRows(page)).toHaveCount(2);
   });
 
   /**
