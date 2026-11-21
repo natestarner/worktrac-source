@@ -29,7 +29,16 @@ describe('web Apple: the popup opens inside the tap', () => {
     });
     adapter = await import('./socialSignIn');
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Every tap re-arms Apple in the background, and nothing in a test waits for it. Each test gets a
+    // fresh module (resetModules) but window.AppleID is shared, so a re-arm still running when a test
+    // ends calls the NEXT test's init mock. On a slow CI runner (2026-11-21) test 1's did: it
+    // satisfied test 2's "init called twice" before test 2's own re-arm had finished, so test 2's
+    // second tap wasn't armed ("called 1 times"), and that tap later used up test 3's rejection
+    // ("resolved instead of rejecting"). Reproduced exactly by holding test 1's re-arm until test 2's
+    // mocks were in place. prepareSignIn returns the arming in flight (or arms once more), so this
+    // drains it while this test's mocks are still the ones installed.
+    await adapter.prepareSignIn('apple').catch(() => {});
     appendChild.mockRestore();
     delete window.AppleID;
   });
