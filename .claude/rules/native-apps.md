@@ -168,6 +168,11 @@ noticed by `openExternal`'s `onClose`, never by a page or a visibility event.
 
 - **`ios.allowsLinkPreview: false`.** WKWebView's default previews a link on long press, and the
   tab bar is links, so a long press on History previewed an internal `capacitor://localhost` page.
+- **`plugins.SocialLogin.providers`: Apple and Google on; Facebook and Twitter off.**
+  `@capgo/capacitor-social-login` bundles every provider's SDK unless told otherwise, so builds
+  1.0-1.3 shipped Facebook's login SDK unused. Its `capacitor:sync:before` hook reads this block and
+  comments the disabled SDKs out of its own `Package.swift` (a sync log should say so); a new
+  provider needs `true` here before its SDK ships at all.
 - Capacitor sets `scrollView.bounces = false` itself. Nothing here needs the bounce:
   `PullToRefresh` measures finger distance, not overscroll.
 - `capacitorConfig.test.js` pins the values with their reasons.

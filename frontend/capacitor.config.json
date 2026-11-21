@@ -5,6 +5,9 @@
   "ios": { "allowsLinkPreview": false },
   "plugins": {
     "CapacitorHttp": { "enabled": false },
-    "Keyboard": { "resize": "native" }
+    "Keyboard": { "resize": "native" },
+    "SocialLogin": {
+      "providers": { "google": true, "facebook": false, "apple": true, "twitter": false }
+    }
   }
 }
