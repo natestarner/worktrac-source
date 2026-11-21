@@ -132,7 +132,8 @@ describe('OfflineBanner', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear all queued changes' }));
 
-      expect(await screen.findByText(/Discard 1 change that hasn't synced yet/)).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Discard 1 unsynced change?' })).toBeInTheDocument();
+      expect(screen.getByText("It won't be sent, and it can't be recovered.")).toBeInTheDocument();
       expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
 
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -144,9 +145,9 @@ describe('OfflineBanner', () => {
       const { queryClient } = await openOutboxWithOneQueuedSet();
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear all queued changes' }));
-      await screen.findByText(/Discard 1 change that hasn't synced yet/);
+      await screen.findByRole('heading', { name: 'Discard 1 unsynced change?' });
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
       });
 
       await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(0));
@@ -157,9 +158,9 @@ describe('OfflineBanner', () => {
       const { queryClient } = await openOutboxWithOneQueuedSet();
 
       fireEvent.click(screen.getByRole('button', { name: 'Discard Bench Press logged 135 lb × 5' }));
-      expect(await screen.findByText(/Discard this change\?/)).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Discard this change?' })).toBeInTheDocument();
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
       });
 
       await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(0));

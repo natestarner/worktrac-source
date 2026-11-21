@@ -177,9 +177,13 @@ export function UIProvider({ children }) {
    * above a button that would otherwise read "Delete". A button contradicting the sentence
    * directly above it is worse than no explanation at all: it is the word people actually read
    * before they tap, and it would make an owner hesitate over an action that costs nothing.
+   *
+   * `title` is the dialog's header -- the question being asked ("Delete this set?"). Every caller
+   * passes one: without it the dialog is a bare paragraph under a lone X, which reads as
+   * unfinished. The `message` is then only the consequence, so the two must not repeat each other.
    */
-  const openConfirm = useCallback((message, onConfirm, { confirmLabel } = {}) => {
-    setConfirmDialog({ message, onConfirm, confirmLabel: confirmLabel ?? 'Delete' });
+  const openConfirm = useCallback((message, onConfirm, { confirmLabel, title } = {}) => {
+    setConfirmDialog({ message, onConfirm, confirmLabel: confirmLabel ?? 'Delete', title });
   }, []);
   const closeConfirm = useCallback(() => setConfirmDialog(null), []);
   // Side effects must never live inside a setState updater function -- React (under

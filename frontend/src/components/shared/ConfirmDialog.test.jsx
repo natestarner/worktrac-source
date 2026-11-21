@@ -29,6 +29,29 @@ function renderHarness(onConfirm) {
 // deleteSetMutation.mutate(...)) is what makes any of this observable: runConfirm awaits
 // whatever onConfirm returns, so a fire-and-forget onConfirm would resolve the await -- and
 // close the dialog -- on the next microtask regardless of these assertions.
+// Every caller passes a title. Without one the dialog was a bare paragraph under a lone X, which
+// read as unfinished; with one the question is the header and the message is the consequence.
+describe('ConfirmDialog title', () => {
+  function TitledHarness() {
+    const { openConfirm } = useUI();
+    return (
+      <>
+        <button onClick={() => openConfirm('It will no longer count toward your history.', vi.fn(), { title: 'Delete this set?' })}>open</button>
+        <ConfirmDialog />
+      </>
+    );
+  }
+
+  it('shows the title as the dialog heading and names the dialog by it', async () => {
+    render(<UIProvider><TitledHarness /></UIProvider>);
+    fireEvent.click(screen.getByText('open'));
+
+    expect(await screen.findByRole('heading', { name: 'Delete this set?' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Delete this set?' })).toBeInTheDocument();
+    expect(screen.getByText('It will no longer count toward your history.')).toBeInTheDocument();
+  });
+});
+
 describe('ConfirmDialog pending state', () => {
   it('stays open with Delete disabled+spinning until onConfirm settles, and keeps Cancel clickable', async () => {
     let resolveDelete;

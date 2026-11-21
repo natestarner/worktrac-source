@@ -124,7 +124,7 @@ test.describe('CSV import', () => {
 
     await expect(page.getByText('undo-me.csv')).toBeVisible();
     await page.getByRole('button', { name: 'Undo' }).click();
-    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Undo import' }).click();
 
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page.getByText('No workouts logged yet for Casey.')).toBeVisible();

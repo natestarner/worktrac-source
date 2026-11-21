@@ -179,8 +179,9 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
               >
                 <IconButton
                   onClick={() => openConfirm(
-                      `Remove ${entry.exerciseName}? The ${entry.sets.length} set${entry.sets.length === 1 ? '' : 's'} you logged for it in this workout will be deleted.`,
+                      `The ${entry.sets.length} set${entry.sets.length === 1 ? '' : 's'} you logged for it in this workout will be deleted.`,
                       () => handleRemove(entry),
+                      { title: `Remove ${entry.exerciseName}?` },
                     )}
                   label="Remove"
                   icon={IconTrash}

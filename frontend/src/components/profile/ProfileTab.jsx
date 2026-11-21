@@ -155,7 +155,11 @@ export default function ProfileTab() {
                 <OfflineDisabledWrap message="Removing a person needs a connection.">
                   <button
                     onClick={() =>
-                      openConfirm(`Remove ${p.name}? This deletes all of their sessions, sets, routines, and setup values.`, () => handleRemovePerson(p))
+                      openConfirm(
+                        "This permanently deletes all of their sessions, sets, routines, and setup values. This can't be undone.",
+                        () => handleRemovePerson(p),
+                        { title: `Remove ${p.name}?` },
+                      )
                     }
                     style={deleteLinkStyle}
                   >

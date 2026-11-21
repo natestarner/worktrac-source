@@ -241,14 +241,18 @@ function TestDataCleanupButton({ onDeleted }) {
     try {
       const preview = await previewTestData();
       const message =
-        `Delete ${preview.accountCount} test account(s), ${preview.registrationEventCount} ` +
+        `This deletes ${preview.accountCount} test account(s), ${preview.registrationEventCount} ` +
         `activity event(s), and ${preview.pendingRegistrationCount} pending registration(s) ` +
-        `matching e2e-*@example.com? This cannot be undone.`;
-      openConfirm(message, async () => {
-        await deleteTestData();
-        showToast('Deleted all e2e test data.');
-        onDeleted();
-      });
+        `matching e2e-*@example.com. This cannot be undone.`;
+      openConfirm(
+        message,
+        async () => {
+          await deleteTestData();
+          showToast('Deleted all e2e test data.');
+          onDeleted();
+        },
+        { title: 'Delete e2e test data?' },
+      );
     } finally {
       setChecking(false);
     }
