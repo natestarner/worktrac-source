@@ -140,9 +140,10 @@ export default function AppSettingsTab() {
     const sets = `${batch.setCount} ${batch.setCount === 1 ? 'set' : 'sets'}`;
     const workouts = `${batch.sessionCount} ${batch.sessionCount === 1 ? 'workout' : 'workouts'}`;
     openConfirm(
-      `Remove the ${sets} and ${workouts} this import added to ${batch.personName}'s history? `
+      `This removes the ${sets} and ${workouts} it added to ${batch.personName}'s history. `
         + 'Exercises, tags and notes it created stay.',
       () => guardedUndoImport(batch),
+      { title: 'Undo this import?', confirmLabel: 'Undo import' },
     );
   }
 
@@ -605,7 +606,7 @@ export default function AppSettingsTab() {
                 {(!isMember || t.deletable) && (
                 <OfflineDisabledWrap message="Deleting a tag needs a connection.">
                   <button
-                    onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
+                    onClick={() => openConfirm("It will be removed from every exercise it's applied to.", () => guardedDeleteTag(t), { title: `Delete tag "${t.name}"?` })}
                     style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 15, cursor: 'pointer' }}
                   >
                     &times;

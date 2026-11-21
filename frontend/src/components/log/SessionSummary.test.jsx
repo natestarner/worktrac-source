@@ -59,7 +59,8 @@ describe('SessionSummary', () => {
   // understated what it does -- and it is also the only one that destroys more than one thing.
   it('warns that removing an entry deletes the sets, and counts them', () => {
     const messages = [];
-    useUI.mockReturnValue({ openConfirm: (msg) => messages.push(msg) });
+    const titles = [];
+    useUI.mockReturnValue({ openConfirm: (msg, _fn, opts) => { messages.push(msg); titles.push(opts?.title); } });
     const entries = [
       {
         exerciseId: 1,
@@ -76,7 +77,8 @@ describe('SessionSummary', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
-    expect(messages[0]).toBe('Remove Bench Press? The 2 sets you logged for it in this workout will be deleted.');
+    expect(titles[0]).toBe('Remove Bench Press?');
+    expect(messages[0]).toBe('The 2 sets you logged for it in this workout will be deleted.');
   });
 
   it('singularises the warning for a single set', () => {
@@ -89,7 +91,7 @@ describe('SessionSummary', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
-    expect(messages[0]).toBe('Remove Bench Press? The 1 set you logged for it in this workout will be deleted.');
+    expect(messages[0]).toBe('The 1 set you logged for it in this workout will be deleted.');
   });
 
   it('removing a fully-synced entry deletes each of its sets, via the durable DELETE_SET write', async () => {

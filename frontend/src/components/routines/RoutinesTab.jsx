@@ -318,7 +318,7 @@ export default function RoutinesTab() {
                   <OfflineDisabledWrap message="Deleting a routine needs a connection.">
                     <ReadOnlyWrap personId={activePersonId}>
                       <button
-                        onClick={() => openConfirm(`Delete "${r.name}"? This can't be undone.`, () => handleDelete(r))}
+                        onClick={() => openConfirm("This routine will be permanently deleted. This can't be undone.", () => handleDelete(r), { title: `Delete "${r.name}"?` })}
                         style={deleteLinkStyle}
                       >
                         Delete

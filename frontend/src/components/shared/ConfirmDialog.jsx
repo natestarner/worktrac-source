@@ -17,9 +17,23 @@ export default function ConfirmDialog() {
     }
   }
 
+  const { title } = confirmDialog;
+
+  // With a title the question is the header and the message is the consequence, set as ordinary
+  // body text. The untitled fallback keeps the old look (the message IS the question, so it stays
+  // bold and names the dialog) -- every caller passes a title today, so it is only a safety net.
   return (
-    <Modal width={320} labelledBy="confirm-dialog-message" onClose={closeConfirm}>
-      <div id="confirm-dialog-message" style={{ fontSize: 'var(--text-md)', fontWeight: 'var(--weight-semibold)', marginBottom: 'var(--space-6)' }}>
+    <Modal width={320} title={title} labelledBy={title ? undefined : 'confirm-dialog-message'} onClose={closeConfirm}>
+      <div
+        id="confirm-dialog-message"
+        style={{
+          fontSize: title ? 'var(--text-base)' : 'var(--text-md)',
+          fontWeight: title ? 'var(--weight-normal)' : 'var(--weight-semibold)',
+          color: title ? 'var(--color-muted)' : 'var(--color-text)',
+          lineHeight: 1.5,
+          marginBottom: 'var(--space-6)',
+        }}
+      >
         {confirmDialog.message}
       </div>
       <div style={{ display: 'flex', gap: 'var(--space-3)' }}>

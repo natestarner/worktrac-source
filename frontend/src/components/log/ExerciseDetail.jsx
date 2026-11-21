@@ -375,12 +375,13 @@ export default function ExerciseDetail({
   function handleRequestDelete() {
     setShowConfigureModal(false);
     openConfirm(
-      `Delete "${exercise.name}"? Already-logged sets for it are kept, but it will disappear from your picker.`,
+      'Sets already logged for it are kept, but it will no longer appear in your exercise list.',
       deleteExercise.run(async () => {
         await removeExercise(exercise.id);
         if (onPersonalizationChanged) await onPersonalizationChanged();
         onBack();
       }),
+      { title: `Delete "${exercise.name}"?` },
     );
   }
 
@@ -1739,8 +1740,9 @@ export default function ExerciseDetail({
                           <ReadOnlyWrap personId={personId}>
                             <IconButton
                               onClick={() => openConfirm(
-                                  'Delete this set? It stops counting toward your history, records and trends.',
+                                  'It will no longer count toward your history, records or trends.',
                                   () => handleDeleteSet(set),
+                                  { title: 'Delete this set?' },
                                 )}
                               label="Delete"
                               icon={IconTrash}
