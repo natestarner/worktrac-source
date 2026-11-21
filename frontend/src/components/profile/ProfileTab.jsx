@@ -1,16 +1,12 @@
 import { useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useAuth } from '../../context/AuthContext';
-import { useGatedMutation } from '../../hooks/useGatedMutation';
-import { useUI } from '../../context/UIContext';
-import { removePerson } from '../../api/people';
-import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ChangePasswordSection from './ChangePasswordSection';
 import SignInMethodsSection from './SignInMethodsSection';
-import LoginsSection from './LoginsSection';
+import PeopleSection from './PeopleSection';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import BackLink from '../shared/BackLink';
 import { useGoBack } from '../../hooks/useGoBack';
@@ -26,28 +22,10 @@ export default function ProfileTab() {
   // Family nouns when the account carries none -- an auth snapshot written before `vocab` existed
   // is the common case for a browser that has not reloaded across the deploy.
   const vocab = accountVocab(account?.vocab);
-  const { openConfirm } = useUI();
   const goBack = useGoBack();
   const primary = people.find((p) => p.isPrimary);
   const self = people.find((p) => String(p.id) === String(selfPersonId));
-  const [editingPerson, setEditingPerson] = useState(null);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
-  const { run } = useGatedMutation();
-
-  // Removing a person deletes their whole training history -- the one Tier-3 write where a silent
-  // failure is most alarming, since the row simply staying put reads as "it didn't take" rather
-  // than "it errored". Now gated and reported like every other one.
-  const handleRemovePerson = run(
-    async (person) => {
-      await removePerson(person.id);
-      refreshPeople();
-    },
-    {
-      offlineMessage: 'Removing a person needs a connection.',
-      errorMessage: "Couldn't remove that person.",
-    },
-  );
-
   return (
     <div>
       <BackLink onClick={goBack}>&larr; Back</BackLink>
@@ -61,11 +39,11 @@ export default function ProfileTab() {
       <SectionLabel>{isNotOwner ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
         <Field label="Name" value={isNotOwner ? self?.name : primary?.name} />
-        {/* AccountRole spelled out in the same plain language LoginsSection and the handbook use
+        {/* AccountRole spelled out in the same plain language the People list and the handbook use
             ("Enable login", never "OWNER"/"MEMBER") -- this is the one place a person can just
             look up which they are, rather than inferring it from which controls are missing. */}
         {/* ⚠️ Deliberately NOT routed through accountVocab. This names the ROLE, not the account
-            type, and "Member"/"Account owner" is the same plain language LoginsSection and the
+            type, and "Member"/"Account owner" is the same plain language the People list and the
             handbook use -- making this one screen say "Client" while the handbook says "Member"
             trades a small gain here for a contradiction across two documents. The account-shaped
             nouns below DO move with the tier, because those describe the account. */}
@@ -123,56 +101,14 @@ export default function ProfileTab() {
           AccountController's DELETE_ACCOUNT); this only stops the client offering it. */}
       {!isMember && (
         <>
-      <SectionLabel>People</SectionLabel>
-      <div style={cardStyle}>
-        {people.map((p, i) => (
-          <div
-            key={p.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '14px 0',
-              borderBottom: i < people.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</div>
-              {p.isPrimary && <span style={badgeStyle}>PRIMARY</span>}
-            </div>
-            <div style={{ display: 'flex', gap: 14 }}>
-              {/* Hidden, not disabled, on the one row a trusted member may not edit -- the owner's.
-                  Nothing they could do would ever enable it (member-access.md's "Hide" column). */}
-              {canWritePerson(p.id) && (
-                <OfflineDisabledWrap message="Editing needs a connection.">
-                  <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
-                    Edit
-                  </button>
-                </OfflineDisabledWrap>
-              )}
-              {/* Removing a person deletes their whole history: REMOVE_PEOPLE, owner-only. */}
-              {isOwner && !p.isPrimary && (
-                <OfflineDisabledWrap message="Removing a person needs a connection.">
-                  <button
-                    onClick={() =>
-                      openConfirm(
-                        "This permanently deletes all of their sessions, sets, routines, and setup values. This can't be undone.",
-                        () => handleRemovePerson(p),
-                        { title: `Remove ${p.name}?` },
-                      )
-                    }
-                    style={deleteLinkStyle}
-                  >
-                    Remove
-                  </button>
-                </OfflineDisabledWrap>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <LoginsSection plan={account?.plan} vocab={vocab} refreshPeople={refreshPeople} isOwner={isOwner} />
+      <PeopleSection
+        plan={account?.plan}
+        vocab={vocab}
+        people={people}
+        refreshPeople={refreshPeople}
+        isOwner={isOwner}
+        canWritePerson={canWritePerson}
+      />
 
       {/* DELETE_ACCOUNT is the owner's alone; a trusted member never sees it. */}
       {isOwner && (
@@ -206,7 +142,6 @@ export default function ProfileTab() {
         </>
       )}
 
-      {editingPerson && <EditPersonModal person={editingPerson} onClose={() => setEditingPerson(null)} />}
       {showDeleteAccount && <DeleteAccountModal onClose={() => setShowDeleteAccount(false)} />}
     </div>
   );
@@ -229,16 +164,7 @@ const cardStyle = {
   marginBottom: 24,
 };
 
-const badgeStyle = {
-  fontSize: 11,
-  fontWeight: 'var(--weight-bold)',
-  color: 'var(--color-muted)',
-  background: 'var(--color-subtle-bg)',
-  padding: '3px 8px',
-  borderRadius: 999,
-};
 
-const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 
 const transparencyStyle = {

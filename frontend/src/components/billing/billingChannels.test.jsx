@@ -6,7 +6,7 @@ import BillingTab from './BillingTab';
 import PlanBadge from './PlanBadge';
 import PlusUpsell from '../shared/PlusUpsell';
 import HistoryWindowModal from '../shared/HistoryWindowModal';
-import LoginsSection from '../profile/LoginsSection';
+import PeopleSection from '../profile/PeopleSection';
 import { listLogins } from '../../api/logins';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
@@ -147,10 +147,10 @@ describe("'none' -- an app with no store plugin", () => {
     listLogins.mockResolvedValue(LOGIN_ROWS);
     renderWithQuery(
       <MemoryRouter>
-        <LoginsSection plan="FREE" />
+        <PeopleSection plan="FREE" people={LOGIN_ROWS.map((r) => ({ id: r.personId, name: r.personName }))} />
       </MemoryRouter>,
     );
-    expect(await screen.findByText('Part of Plus')).toBeInTheDocument();
+    expect(await screen.findByText('Logins for other people are part of Plus.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Unlock with Plus' })).not.toBeInTheDocument();
   });
 });
@@ -396,12 +396,13 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     listLogins.mockResolvedValue(LOGIN_ROWS);
     renderWithQuery(
       <MemoryRouter>
-        <LoginsSection plan="FREE" />
+        <PeopleSection plan="FREE" people={LOGIN_ROWS.map((r) => ({ id: r.personId, name: r.personName }))} />
       </MemoryRouter>,
     );
     const link = await screen.findByRole('link', { name: 'Unlock with Plus' });
     expect(link).toHaveAttribute('href', '/app/billing');
-    expect(screen.queryByText('Part of Plus')).not.toBeInTheDocument();
+    // Once, above the list -- not repeated on every row without a login.
+    expect(screen.getAllByRole('link', { name: 'Unlock with Plus' })).toHaveLength(1);
   });
 
   // A trainer at the band's ceiling in the App Store app: Billing sends them to the store's own

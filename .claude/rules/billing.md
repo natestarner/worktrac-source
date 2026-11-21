@@ -536,7 +536,7 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
 | `store` | An app with a store plugin (iOS today) | `BillingTab` sells through `lib/native/purchases.js`: prepare, the store's sheet, `sync`, then `finish` |
 | `none` | An app with no store plugin (Android, until it has one) | **No** price, purchase button, "Go Plus" badge, "See Plus" link, portal or Pro upgrade |
 
-- **The gate lives INSIDE the surfaces** (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,
+- **The gate lives INSIDE the surfaces** (`PlusUpsell`, `PlanBadge`, `BillingTab`, `PeopleSection`,
   `HistoryWindowModal`), never at their call sites; the others only ask "is it `none`?".
   `billingChannels.test.jsx` is where each channel's case belongs.
 - **The store prices; we never do.** `useStoreCatalog` asks our backend which product ids this

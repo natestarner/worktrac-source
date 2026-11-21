@@ -63,7 +63,7 @@ owner's own**, and owns nothing about the account — no billing, no deletion, n
 no account-wide export, no removing people, no deciding who else holds the role. A family calls it a
 **trusted member** (a second parent sharing the iPad); a trainer calls it an **assistant**. It is
 deliberately **not** called `COACH`, because Team's OWNER is the one a club calls a coach. The owner
-assigns it from Profile → Logins. Full table and the reasoning: `.claude/rules/coaching.md`.
+assigns it from Profile → People (the person's sheet). Full table and the reasoning: `.claude/rules/coaching.md`.
 
 - ⚠️ **The client's `isMember` alone no longer means "not the owner".** Anything that was
   `isMember ? <the viewer's own identity> : <the owner's>` must be `isMember || isManager` —
@@ -206,13 +206,40 @@ Do not extend `ReadOnlyWrap` to cover the first: it asks `canWritePerson(personI
 `true` for a shared catalog row, and its message ("You can only change your own workouts") would be
 a lie about one.
 
-**#2's client half:** `LoginsSection` takes `plan` (`AccountDto.plan`, chrome only — same
+**#2's client half:** `PeopleSection` takes `plan` (`AccountDto.plan`, chrome only — same
 fail-open-on-unknown as `PlusUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
-`/app/billing` reading **"Unlock with Plus"** whenever `plan === 'FREE'`, reusing the header pill's
-own `.plan-badge--upgrade` class rather than a new style. Not `OfflineDisabledWrap`ped — it is a
+`/app/billing` reading **"Unlock with Plus"** whenever `plan === 'FREE'` — once above the list and
+inside each person's sheet, never repeated on every row — reusing the header pill's own
+`.plan-badge--upgrade` class rather than a new style. Not `OfflineDisabledWrap`ped — it is a
 navigation, not a write, same as `PlanBadge`'s "Go Plus". "Unlock with Plus" is mutually
 non-containing with the header badge's "Go Plus"/"Plus" (`frontend-core.md`), which sits in the same
 DOM on this screen.
+
+### Profile's People list is ONE list: people and their logins together
+
+`components/profile/PeopleSection.jsx`. It replaced two sections, People (rename/remove) and Logins
+(invite/trust/unlock/remove login), that listed the same people twice. Both were already shown to
+exactly the same viewers (owner + trusted member), so merging changed no permission; every control
+is still decided per control, in `permissionsFor`.
+
+- **Each row says, without opening anything, how that person signs in and what they may do**: a
+  detail line (`Signs in as …` / `Invite sent to …` / `No login`) and tags (You, Owner/Primary,
+  Trusted, Invited, Locked). Everything that CHANGES is in that person's sheet. Don't move a fact
+  back behind the sheet; that is what the merge was for.
+- **The roster renders from `people` (the auth snapshot), never from `listLogins`.** The login
+  read is live and fails offline; when it does, the rows lose only their login line and the intro
+  says "Login details need a connection." The old Logins section rendered nothing on a failed read,
+  which is fine for a feature section and wrong for the household's only roster.
+- **⚠️ "Remove login" and "Remove {name}" now share a sheet.** They used to be in different sections
+  precisely because one deletes nothing and the other deletes every session, set and routine the
+  person has. What keeps them apart now is the sheet's separate blocks (Login vs Danger zone), the
+  sentence beside each, and their confirms. Never shorten either label to bare "Remove".
+- **The add button is "Add a person", not "+ Add person".** The person bar keeps that label and is
+  on this same screen for 2+ people; ~20 specs click it by name and Playwright matches by substring.
+  An optional email in `AddPersonModal` (`offerLogin`) turns the add into `addAndInviteLogin` — one
+  request, same orphan-person reason as before.
+- e2e drives it through `e2e/tests/support/peopleList.ts` (`openPersonSheet`, `signedInRows`,
+  `personTag`), always scoped to `people-list` because the person bar repeats every name.
 
 ### The offline limit that has no fix, only honesty
 

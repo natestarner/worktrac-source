@@ -14,7 +14,7 @@ export const PLAN_FEATURES = {
   // Deliberately empty rather than a subset of PLUS: everything Free actually gets is ungated, so
   // none of it is a feature in this map's sense. Mirrors BillingPlan.FREE.features().
   FREE: [],
-  // MANAGER_ROLE is the owner's "Trusted" toggle on a login (LoginsSection) -- a second adult who
+  // MANAGER_ROLE is the owner's "Trusted" toggle on a login (PeopleSection) -- a second adult who
   // logs for everyone. Plus and Pro both, mirroring BillingPlan.PLUS_FEATURES.
   PLUS: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'MANAGER_ROLE'],
   // Everything Plus has, plus what makes Pro a trainer product. A capability lands in this list in

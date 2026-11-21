@@ -2,6 +2,7 @@ import { APIRequestContext, Page, expect, test } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
+import { closePersonSheet, openPersonSheet, personTag } from './support/peopleList';
 
 // A "trusted" login (AccountRole.MANAGER, made assignable on Plus): a second adult sharing the iPad
 // who logs for themselves AND the kids, but never over the owner's own workouts. TrustedLoginTest
@@ -50,19 +51,24 @@ test.describe('Trusted logins', () => {
     await addPerson(page, 'Leo');
     const jess = await addMemberLogin(page, request, ownerEmail, 'Jess');
 
-    // The owner's toggle, through the real Profile screen. A reload first so Logins reflects the
+    // The owner's toggle, through the real Profile screen. A reload first so the list reflects the
     // login the test route just made.
     await page.reload();
     await page.locator('.header-bar').getByRole('button', { name: /^Nate/ }).click();
     await page.getByRole('menuitem', { name: 'Profile' }).click();
-    const logins = page.getByTestId('logins-list');
-    const toggle = logins.getByRole('checkbox', { name: 'Trusted: Jess' });
+    // Nobody is trusted yet, and the list says so without opening anything.
+    await expect(personTag(page, 'Trusted')).toHaveCount(0);
+    const sheet = await openPersonSheet(page, 'Jess');
+    const toggle = sheet.getByRole('checkbox', { name: 'Trusted: Jess' });
     await expect(toggle).not.toBeChecked();
     await toggle.click();
     // It asks first, and says what it grants.
     await expect(page.getByText(/log, edit and delete workouts for everyone in this household except you/)).toBeVisible();
     await page.getByRole('button', { name: 'Make trusted' }).click();
     await expect(toggle).toBeChecked();
+    // ...and the row behind the sheet now carries it, at a glance.
+    await closePersonSheet(sheet);
+    await expect(personTag(page, 'Trusted')).toHaveCount(1);
 
     // Jess signs in on the shared iPad.
     await loginAs(page, jess.email, jess.password);

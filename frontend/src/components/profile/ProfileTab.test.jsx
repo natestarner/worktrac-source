@@ -2,13 +2,20 @@ import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileTab from './ProfileTab';
-import { removePerson, updatePerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
-vi.mock('../../api/people', () => ({ removePerson: vi.fn(), updatePerson: vi.fn() }));
+// The list itself has its own tests (PeopleSection.test.jsx). Here: whether ProfileTab shows it at
+// all, and what it tells it about the viewer.
+const peopleSectionProps = vi.fn();
+vi.mock('./PeopleSection', () => ({
+  default: (props) => {
+    peopleSectionProps(props);
+    return <div data-testid="people-section">{props.people.map((p) => p.name).join(', ')}</div>;
+  },
+}));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 // Not loaded yet: every component renders exactly what it did before sign in with Apple/Google.
@@ -24,8 +31,6 @@ describe('ProfileTab', () => {
     onlineManager.setOnline(true);
     refreshPeople = vi.fn().mockResolvedValue();
     openConfirm = vi.fn((message, onConfirm) => onConfirm());
-    removePerson.mockResolvedValue();
-    updatePerson.mockResolvedValue({ id: 2, name: 'Sam' });
     useUI.mockReturnValue({ openConfirm });
     useAuth.mockReturnValue({
       user: { id: 1, email: 'nate@example.com' },
@@ -53,11 +58,13 @@ describe('ProfileTab', () => {
     expect(screen.getByText('Account owner')).toBeInTheDocument();
   });
 
-  it('lists everyone on the account with a PRIMARY badge on the primary person', () => {
+  it('lists everyone on the account in the People list, as the owner', () => {
     render(<ProfileTab />);
 
-    expect(screen.getByText('Samuel')).toBeInTheDocument();
-    expect(screen.getByText('PRIMARY')).toBeInTheDocument();
+    expect(screen.getByTestId('people-section')).toHaveTextContent('Nate, Samuel');
+    const props = peopleSectionProps.mock.calls.at(-1)[0];
+    expect(props.isOwner).toBe(true);
+    expect(props.refreshPeople).toBe(refreshPeople);
   });
 
   it('navigates back when Back is clicked and there is somewhere to go back to', () => {
@@ -81,43 +88,11 @@ describe('ProfileTab', () => {
     expect(navigate).toHaveBeenCalledWith('/app/log', { replace: true });
   });
 
-  it('only shows a Remove option for non-primary people', () => {
-    render(<ProfileTab />);
-
-    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
-  });
-
-  it('removes a non-primary person after confirming', async () => {
-    render(<ProfileTab />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-
-    await waitFor(() => expect(removePerson).toHaveBeenCalledWith(2));
-    expect(refreshPeople).toHaveBeenCalled();
-  });
-
-  it('opens an edit modal for a person, including the primary person, and saves the new name', async () => {
-    render(<ProfileTab />);
-
-    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
-    fireEvent.click(editButtons[0]);
-
-    const input = screen.getByDisplayValue('Nate');
-    fireEvent.change(input, { target: { value: 'Nathaniel' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(updatePerson).toHaveBeenCalledWith(1, 'Nathaniel'));
-    expect(refreshPeople).toHaveBeenCalled();
-  });
-
-  it('disables Edit, Remove, and Delete account while offline', () => {
+  it('disables Delete account while offline', () => {
     render(<ProfileTab />);
 
     act(() => onlineManager.setOnline(false));
 
-    screen.getAllByRole('button', { name: 'Edit' }).forEach((btn) => expect(btn).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
 
     onlineManager.setOnline(true);
@@ -161,9 +136,7 @@ describe('ProfileTab', () => {
     it('hides the household roster and every control on it', () => {
       render(<ProfileTab />);
 
-      expect(screen.queryByText('People')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('people-section')).not.toBeInTheDocument();
     });
 
     it('hides the danger zone entirely', () => {
@@ -202,11 +175,15 @@ describe('ProfileTab', () => {
       expect(screen.getByText(/They cannot see or set your password/)).toBeInTheDocument();
     });
 
-    it('can edit everyone but the owner, and remove nobody', () => {
+    // The list decides each control from these two answers (PeopleSection.test.jsx covers what
+    // it does with them): not the owner, and able to write everyone but the owner's own person.
+    it('sees the People list as a non-owner who can edit everyone but the owner', () => {
       render(<ProfileTab />);
-      // Jess and Leo, not Nate.
-      expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
-      expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+      const props = peopleSectionProps.mock.calls.at(-1)[0];
+      expect(props.isOwner).toBe(false);
+      expect(props.canWritePerson(1)).toBe(false);
+      expect(props.canWritePerson(2)).toBe(true);
+      expect(props.canWritePerson(3)).toBe(true);
     });
 
     it('never sees the Danger zone', () => {
