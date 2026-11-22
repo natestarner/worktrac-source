@@ -1,6 +1,7 @@
 ---
 paths:
   - "backend/src/main/java/com/worktrac/backend/user/**"
+  - "backend/src/main/java/com/worktrac/backend/account/AccountDelet*.java"
   - "backend/src/main/java/com/worktrac/backend/email/**"
   - "backend/src/main/java/com/worktrac/backend/emaildelivery/**"
   - "backend/src/main/java/com/worktrac/backend/registrationaudit/**"
@@ -123,6 +124,29 @@ banks use, so a change somebody did not make gets noticed.
   notice that never went out must reach a person.
 - The event carries its time as epoch millis, not an `Instant`: the outbox's ObjectMapper has no
   java.time module.
+
+### Deleting a household emails every login that had a way in
+
+`account.AccountDeletedEvent` → `EmailService.sendAccountDeleted` (`email.account-deleted`), one
+outbox row per login, published at the end of `AccountDeletionService.deleteAccount`, inside its
+transaction. Same reasoning as the security notices: deletion takes the password or a fresh Apple /
+Google sign-in, so one nobody meant is a stolen credential, and for every OTHER member it is the only
+explanation of why the app stopped letting them in.
+
+- **Emails are captured BEFORE the deletes; `loginRemains` is asked AFTER the reap.** Before, there
+  is nothing left to ask who the household's logins were; after, `existsByEmail` tells truthfully
+  whether a login was kept because it belongs to another household. The email says which.
+- **A refused or rolled-back deletion sends nothing**, because the row is in the transaction.
+  `AccountDeletionTest#aRefusedDeletionEmailsNobody` is red only if the email ESCAPES the transaction
+  (a listener sending directly); where the publish sits inside it does not matter.
+- **Billing is said to the deleter only.** A web plan was cancelled with it (the Stripe outbox row
+  beside this one); an **App Store subscription is still billing** and only the subscriber can stop
+  it, so the email says where to cancel. Members never paid.
+- **No "Open Huddle" for a login that no longer exists**: it would open a sign-in that can only
+  fail. `simple-notice.html`'s button sits between `<!--CTA-->` markers for this. The only address
+  offered is support's (`support@huddle.fitness`, what the marketing site publishes), never a link
+  that signs in.
+- `ACCOUNT_DELETED_EMAIL_FAILED` is in `ALERTABLE`.
 
 ## Two levels of email truth — never conflate
 

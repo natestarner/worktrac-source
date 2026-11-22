@@ -62,6 +62,12 @@ public enum RegistrationEventType {
     SECURITY_NOTICE_EMAIL_SENT,
     SECURITY_NOTICE_EMAIL_FAILED,
 
+    // "Your Huddle account was deleted" (account.AccountDeletedEvent), to every login that had a way
+    // into the household. Alertable for the same reason as the security notices: a deletion nobody
+    // meant is a stolen credential, and this email is how its holder finds out.
+    ACCOUNT_DELETED_EMAIL_SENT,
+    ACCOUNT_DELETED_EMAIL_FAILED,
+
     // Level 1: did ACS accept the send?
     VERIFICATION_EMAIL_SENT,
     VERIFICATION_EMAIL_FAILED,

@@ -933,6 +933,8 @@ export default function HelpTab() {
               )}
             </>
           )}
+          {/* backend AccountDeletedEvent: every login with a way in is emailed. */}
+          {' '}Afterward, everyone with a login to it gets an email saying it was deleted.
         </p>
         {signInNames && (
           <p>
