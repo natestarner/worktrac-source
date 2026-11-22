@@ -139,8 +139,9 @@ function HistoryTabContent({ initialExerciseFilter }) {
     const tab = tabRef.current;
     if (!tab || typeof ResizeObserver === 'undefined') return undefined;
     const measure = () => {
-      const row = tab.querySelector('.set-pill-row');
-      if (row) setRowWidth(Math.round(row.getBoundingClientRect().width));
+      // A row laid out at no width (the tab hidden, or not drawn yet) says nothing: keep the last.
+      const width = tab.querySelector('.set-pill-row')?.getBoundingClientRect().width;
+      if (width > 0) setRowWidth(Math.round(width));
     };
     const observer = new ResizeObserver(measure);
     observer.observe(tab);
