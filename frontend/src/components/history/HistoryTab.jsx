@@ -19,6 +19,7 @@ import PastSessionModal from './PastSessionModal';
 import PullToRefresh from './PullToRefresh';
 import { jumpAndSettle } from './jumpAndSettle';
 import { useGrowingList } from './useGrowingList';
+import { DEFAULT_ROW_WIDTH, estimatedSessionBlockHeight } from './blockHeightEstimate';
 import BackLink from '../shared/BackLink';
 import ChartHelp from '../shared/ChartHelp';
 import { RECORD_BADGES_HELP } from './historyHelp';
@@ -129,6 +130,23 @@ function HistoryTabContent({ initialExerciseFilter }) {
   const queryClient = useQueryClient();
   const isRestoring = useIsRestoring();
   const tabRef = useRef(null);
+  // The width a row of set pills gets, for the blocks' height estimate (blockHeightEstimate.js): an
+  // iPad fits twice the pills of a phone, so a wrong width is a wrong estimate, and in Safari a wrong
+  // estimate moves the page when the block is first drawn. Measured from a drawn row, again whenever
+  // the tab resizes (a rotation, or a page of workouts being drawn); unchanged, it re-renders nothing.
+  const [rowWidth, setRowWidth] = useState(DEFAULT_ROW_WIDTH);
+  useEffect(() => {
+    const tab = tabRef.current;
+    if (!tab || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      // A row laid out at no width (the tab hidden, or not drawn yet) says nothing: keep the last.
+      const width = tab.querySelector('.set-pill-row')?.getBoundingClientRect().width;
+      if (width > 0) setRowWidth(Math.round(width));
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(tab);
+    return () => observer.disconnect();
+  }, []);
   const refreshAllHistory = useCallback(
     () => refreshHistory(queryClient, activePersonId, null, { full: true }),
     [queryClient, activePersonId],
@@ -492,6 +510,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
             onEdit={handleEdit}
             onOptions={openExerciseOptions}
             setSessionRef={setSessionRef}
+            rowWidth={rowWidth}
           />
         ))}
 
@@ -565,13 +584,16 @@ const SessionBlock = memo(function SessionBlock({
   onEdit,
   onOptions,
   setSessionRef,
+  rowWidth,
 }) {
   return (
     <div
       ref={(el) => setSessionRef(session.id, el)}
       className="history-block"
       // The one per-block style left inline: it differs per workout. See .history-block.
-      style={{ containIntrinsicSize: `auto ${estimatedSessionBlockHeight(entries.length)}px` }}
+      style={{
+        containIntrinsicSize: `auto ${estimatedSessionBlockHeight(entries, rowWidth, (entry) => tagsByExerciseId.get(entry.exerciseId)?.length > 0)}px`,
+      }}
     >
       <div className="history-block-header">
         <div className="history-block-label">{sessionHeaderLabel(session)}</div>
@@ -764,16 +786,8 @@ const controlsBlockStyle = {
 
 // The workout blocks' styles are classes in index.css ("History's workout list"), not style
 // objects: React applies an inline style one property at a time, which was ~40% of the script time
-// drawing a page of workouts. Only what differs per workout stays inline.
-//
-// An off-screen block takes its size from `containIntrinsicSize` until it is drawn (see
-// .history-block). The `auto` keyword keeps its real size once it has been drawn. The estimate
-// matters for a long jump, such as "View this exercise's history" scrolling to a workout far down:
-// blocks above the target that were never drawn are only estimates, and a bad estimate lands the
-// scroll off target. Fitted to lower's measurements at 390px: one exercise ~153px, four ~370px.
-function estimatedSessionBlockHeight(exerciseCount) {
-  return 80 + 72 * exerciseCount;
-}
+// drawing a page of workouts. Only what differs per workout stays inline: its estimated height
+// (blockHeightEstimate.js).
 
 const outlineButtonStyle = { flex: 1 };
 
