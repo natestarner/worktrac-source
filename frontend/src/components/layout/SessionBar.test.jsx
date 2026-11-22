@@ -343,17 +343,21 @@ describe('SessionBar end workout', () => {
 
     await endTheWorkout();
 
-    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
-    expect(sheet.getByText('A new best on Bench Press today.')).toBeInTheDocument();
+    // Read as the paragraph's whole text: the lit words are their own <em>, and RTL's getByText
+    // matches only an element's direct text.
+    const dialog = await screen.findByRole('dialog', { name: 'Workout done' });
+    const headline = dialog.querySelector('.brand-card__headline');
+    expect(headline).toHaveTextContent(/^A new best on Bench Press\.$/);
+    expect(headline.querySelector('em')).toHaveTextContent('Bench Press');
   });
 
   it('shows the numbers alone when History is not on this device', async () => {
     render(<SessionBar />);
     await endTheWorkout();
 
-    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
-    expect(sheet.getByText('sets')).toBeInTheDocument();
-    expect(sheet.queryByText(/today\.|this week|in a row|since /)).not.toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'Workout done' });
+    expect(within(dialog).getByText('sets')).toBeInTheDocument();
+    expect(dialog.querySelector('.brand-card__headline')).toBeNull();
   });
 
   // The household question shows only while it is unanswered, and only to someone who can act on

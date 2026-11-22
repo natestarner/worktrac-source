@@ -28,7 +28,8 @@ const BENCH = (weight, reps = 5) => [1, 'Bench Press', weight, reps];
 const SQUAT = (weight, reps = 5) => [2, 'Back Squat', weight, reps];
 
 // History's order: newest first.
-const headline = (sessions, opts = {}) => workoutHeadline(historyDigests(sessions), { ...OPTS, ...opts });
+// The sentence alone; the emphasis is pinned separately below.
+const headline = (sessions, opts = {}) => workoutHeadline(historyDigests(sessions), { ...OPTS, ...opts })?.text ?? null;
 
 describe('workoutHeadline', () => {
   it('says nothing when History is not on this device, rather than compare against nothing', () => {
@@ -52,14 +53,14 @@ describe('workoutHeadline', () => {
 
   it('leads with a new best on an exercise done before', () => {
     expect(headline([today([BENCH(120)]), workout('2026-10-07', [BENCH(100)])])).toBe(
-      'A new best on Bench Press today.',
+      'A new best on Bench Press.',
     );
   });
 
   it('counts several new bests rather than naming one', () => {
     expect(
       headline([today([BENCH(120), SQUAT(200)]), workout('2026-10-07', [BENCH(100), SQUAT(180)])]),
-    ).toBe('New bests on 2 exercises today.');
+    ).toBe('New bests on 2 exercises.');
   });
 
   // A first-ever set beats nothing, so it is a baseline, not a record (the PR celebration's rule).
@@ -95,7 +96,7 @@ describe('workoutHeadline', () => {
   it('reads a workout that has not synced yet, from the live copy', () => {
     const live = { id: null, startedAt: '2026-10-14T12:00:00Z', entries: today([BENCH(120)]).entries };
     const digests = historyDigests([workout('2026-10-07', [BENCH(100)])], { live });
-    expect(workoutHeadline(digests, { ...OPTS, workoutId: null })).toBe('A new best on Bench Press today.');
+    expect(workoutHeadline(digests, { ...OPTS, workoutId: null })?.text).toBe('A new best on Bench Press.');
   });
 
   // formatDateLabel answers "Yesterday" for yesterday -- a heading's capital. Dated against the real
@@ -110,12 +111,28 @@ describe('workoutHeadline', () => {
     const at = (startedAt, weight, id) => ({ ...workout('2026-01-01', [BENCH(weight)], id), startedAt });
     const sessions = [at(local(0, 0), 120, 99), at(local(-1, 13), 130, 2), at(local(-1, 9), 100, 1)];
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    expect(workoutHeadline(historyDigests(sessions), { ...OPTS, zone, now: Date.now() })).toBe(
+    expect(workoutHeadline(historyDigests(sessions), { ...OPTS, zone, now: Date.now() })?.text).toBe(
       'Bench Press is up 20% since yesterday.',
     );
   });
 
   it('otherwise says plainly where this one falls, and never reports a drop', () => {
     expect(headline([today([BENCH(90)]), workout('2026-09-21', [BENCH(100)])])).toBe('Your first workout this week.');
+  });
+
+  // The card lights the words that carry the news in the mark's amber. Always a piece of the
+  // sentence itself, or the card would have nothing to light.
+  it('names the words the card lights up, from inside the sentence', () => {
+    const cases = [
+      [[today([BENCH(120)]), workout('2026-10-07', [BENCH(100)])], 'Bench Press'],
+      [[today([BENCH(100)])], 'Everything from here'],
+      [[today([BENCH(120)]), workout('2026-09-21', [BENCH(130)]), workout('2026-09-01', [BENCH(100)])], 'up 20%'],
+      [[today([BENCH(90)]), workout('2026-09-21', [BENCH(100)])], null],
+    ];
+    for (const [sessions, emphasis] of cases) {
+      const result = workoutHeadline(historyDigests(sessions), OPTS);
+      expect(result.emphasis).toBe(emphasis);
+      if (emphasis) expect(result.text).toContain(emphasis);
+    }
   });
 });

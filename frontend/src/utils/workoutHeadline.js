@@ -43,6 +43,13 @@ import { formatDateLabel } from './datetime';
 const ALL_WEEKS = 260;
 const MIN_GAIN = 0.01;
 
+// A headline is its sentence and, optionally, the words in it the card lights up in the mark's amber
+// (`emphasis`, always a substring of `text`). Words, not markup: WorkoutDoneSheet does the splitting,
+// so this stays plain data a test can compare.
+function line(text, emphasis = null) {
+  return { text, emphasis };
+}
+
 function ordinal(n) {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
@@ -58,7 +65,7 @@ export function workoutHeadline(digests, { workoutId, ready, zone, now, windowSt
 
   const workoutCount = digests.reduce((n, digest) => n + digest.workouts.length, 0);
   if (workoutCount === 1 && hiddenSessions === 0) {
-    return 'Your first workout is in. Everything from here is measured against today.';
+    return line('Your first workout is in. Everything from here is measured against today.', 'Everything from here');
   }
 
   const trendOpts = { weeks: ALL_WEEKS, zone, now, windowStart };
@@ -70,8 +77,9 @@ export function workoutHeadline(digests, { workoutId, ready, zone, now, windowSt
 
   // 1. A new best on something done before.
   const records = perExercise.filter((e) => e.index > 0 && e.today.isPr);
-  if (records.length === 1) return `A new best on ${records[0].name} today.`;
-  if (records.length > 1) return `New bests on ${records.length} exercises today.`;
+  // No "today": the card carries the date.
+  if (records.length === 1) return line(`A new best on ${records[0].name}.`, records[0].name);
+  if (records.length > 1) return line(`New bests on ${records.length} exercises.`, `${records.length} exercises`);
 
   // 2. The biggest rise on an earlier workout of the same exercise. est1rmLb is the trend point's
   //    comparable best whatever the exercise's kind (exerciseTrend), so a ratio of two is unitless.
@@ -87,7 +95,8 @@ export function workoutHeadline(digests, { workoutId, ready, zone, now, windowSt
     // formatDateLabel says "Yesterday" for yesterday, which is a heading's capital, not a sentence's.
     const since = formatDateLabel(best.since);
     const sinceInSentence = since === 'Yesterday' ? 'yesterday' : since;
-    return `${best.name} is up ${Math.round(best.gain * 100)}% since ${sinceInSentence}.`;
+    const up = `up ${Math.round(best.gain * 100)}%`;
+    return line(`${best.name} is ${up} since ${sinceInSentence}.`, up);
   }
 
   // 3. The week.
@@ -95,14 +104,14 @@ export function workoutHeadline(digests, { workoutId, ready, zone, now, windowSt
   const thisWeek = overview.workoutsThisWeek;
   const earlier = overview.weeks.slice(0, -1).map((w) => w.workoutCount);
   if (thisWeek >= 2 && earlier.some((n) => n > 0) && earlier.every((n) => n < thisWeek)) {
-    return `${thisWeek} workouts this week, your most yet.`;
+    return line(`${thisWeek} workouts this week, your most yet.`, 'your most yet');
   }
   if (overview.currentStreakWeeks >= 2) {
-    return `${overview.currentStreakWeeks} weeks in a row with a workout.`;
+    return line(`${overview.currentStreakWeeks} weeks in a row with a workout.`, `${overview.currentStreakWeeks} weeks in a row`);
   }
 
   // 4. Plainly, where this one falls. A workout begun before midnight on Sunday is last week's, so
   //    this week may hold none -- and "your 0th workout" is not a sentence.
   if (thisWeek === 0) return null;
-  return thisWeek === 1 ? 'Your first workout this week.' : `Your ${ordinal(thisWeek)} workout this week.`;
+  return line(thisWeek === 1 ? 'Your first workout this week.' : `Your ${ordinal(thisWeek)} workout this week.`);
 }

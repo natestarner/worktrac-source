@@ -114,8 +114,9 @@ forEachConnectivityMode<Record<string, never>>('the workout-done sheet names a n
 
   assert: async (page) => {
     const sheet = page.getByRole('dialog', { name: 'Workout done' });
-    await expect(sheet.getByText('A new best on Barbell Bench Press today.', { exact: true })).toBeVisible();
-    await sheet.getByRole('button', { name: 'Done' }).click();
+    await expect(sheet.locator('.brand-card__headline')).toHaveText('A new best on Barbell Bench Press.');
+    // The X: a one-person household is asked "Who else trains with you?" in Done's place.
+    await sheet.getByRole('button', { name: 'Close' }).click();
     await expect(sheet).toBeHidden();
   },
 });

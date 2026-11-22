@@ -58,6 +58,24 @@ const SHEET_MAX_WIDTH = 420;
 const DIALOG_WIDTH = 380;
 const CARD_DATE = { weekday: 'short', month: 'short', day: 'numeric' };
 
+// The sentence, with its `emphasis` (a substring of it, or null) set in the highlight colour.
+function Headline({ text, emphasis }) {
+  const at = emphasis ? text.indexOf(emphasis) : -1;
+  return (
+    <p className="brand-card__headline">
+      {at < 0 ? (
+        text
+      ) : (
+        <>
+          {text.slice(0, at)}
+          <em>{emphasis}</em>
+          {text.slice(at + emphasis.length)}
+        </>
+      )}
+    </p>
+  );
+}
+
 export default function WorkoutDoneSheet({ personId, summary, onClose }) {
   const compact = useMediaQuery('(max-width: 599px)');
   const { people, account } = useAuth();
@@ -98,6 +116,11 @@ export default function WorkoutDoneSheet({ personId, summary, onClose }) {
             {today}
           </div>
         </div>
+        {/* The one true thing worth saying about this workout (utils/workoutHeadline.js), chosen
+            at the End tap, with the words that carry the news in the mark's amber. Absent whenever
+            nothing can honestly be said -- History not on this device, say -- and then the card
+            is the numbers alone. */}
+        {summary?.headline && <Headline {...summary.headline} />}
         <div className="brand-card__stats">
           {tiles.map((tile) => (
             <div key={tile.label} className="brand-card__stat">
