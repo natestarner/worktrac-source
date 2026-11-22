@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
+import { openPersonSheet } from './support/peopleList';
 
 // The account dropdown is reached by scoping to .header-bar rather than matching the account
 // holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
@@ -130,7 +131,7 @@ test.describe('billing', () => {
   // got refused by a toast -- exactly the "control the server will refuse must not be offered"
   // shape member-access.md calls out. The client already knows the plan, so it swaps the row's
   // control for a link to Plus instead of a doomed round trip.
-  test('a Free household is offered Plus on the Logins row instead of Enable login', async ({ page, request }) => {
+  test('a Free household is offered Plus on the People list instead of Enable login', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
@@ -141,15 +142,16 @@ test.describe('billing', () => {
     await openAccountMenu(page);
     await page.getByRole('menuitem', { name: 'Profile' }).click();
 
-    await expect(page.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Unlock with Plus' }).click();
+    const sheet = await openPersonSheet(page, 'Sam');
+    await expect(sheet.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
+    await sheet.getByRole('link', { name: 'Unlock with Plus' }).click();
     await expect(page).toHaveURL(/\/app\/billing/);
 
     await setBillingPlan(request, email, 'PLUS');
     await page.goto('/app/profile');
 
     await expect(page.getByRole('link', { name: 'Unlock with Plus' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Enable login' })).toBeVisible();
+    await expect((await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' })).toBeVisible();
   });
 
   // The handbook is a route inside the app precisely so it works with no signal, and it now has to

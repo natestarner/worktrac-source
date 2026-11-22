@@ -6,7 +6,7 @@ import { initialBillingChannel, resolveBillingChannel } from '../lib/native';
 // final state on its first frame. Whether the store actually has something to sell is a separate
 // question, answered (and failed closed) by hooks/useStoreCatalog on the billing screen.
 //
-// Read by the upgrade surfaces themselves (PlusUpsell, PlanBadge, BillingTab, LoginsSection,
+// Read by the upgrade surfaces themselves (PlusUpsell, PlanBadge, BillingTab, PeopleSection,
 // HistoryWindowModal), never by their callers -- so "one way to ask for an upgrade" also means one
 // place that decides whether asking is allowed.
 export function useBillingChannel() {

@@ -327,7 +327,7 @@ const introStyle = {
 // has something to shrink and ellipsize. overflow:hidden here also resolves this span's automatic
 // flex min-width to 0, which is what lets it shrink below the email's full width instead of
 // pushing the button (and the text bleeding out of it) past the card's edge. Same pattern as
-// LoginsSection.jsx's emailStyle. The full address is still the button's accessible name and its
+// the old LoginsSection's emailStyle. The full address is still the button's accessible name and its
 // `title`, so nothing is lost -- only the on-screen line is shortened.
 const buttonLabelStyle = {
   display: 'block',

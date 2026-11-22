@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { loginAs, registerHousehold, setBillingPlan } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
+import { closePersonSheet, openPersonSheet, peopleList, personTag, signedInRows } from './support/peopleList';
 
 /**
  * The invite round trip, through the real UI: an owner enables a login, the invitee opens the link
@@ -75,10 +76,10 @@ async function giveSamALogin(page: Page, request: APIRequestContext) {
   const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 
   await openProfile(page);
-  await page.getByRole('button', { name: 'Enable login' }).click();
+  await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
   await page.getByPlaceholder('them@example.com').fill(memberEmail);
   await page.getByRole('button', { name: 'Send invite' }).click();
-  await expect(page.getByText('INVITED')).toBeVisible();
+  await expect(personTag(page, 'Invited')).toBeVisible();
 
   const { inviteId, token } = await latestInvite(request, ownerEmail);
   await logout(page);
@@ -101,9 +102,9 @@ test.describe('Enabling a member login', () => {
 
     await openProfile(page);
 
-    // Sam has no login yet, so the owner is offered one.
-    await expect(page.getByText('Logins', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Enable login' }).click();
+    // Sam has no login yet -- the row says so at a glance -- so the owner is offered one.
+    await expect(peopleList(page).getByText('No login', { exact: true })).toBeVisible();
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
 
     // The disclosure is on screen BEFORE the address field -- this is where somebody decides to
     // hand a login to a child, so it is where it has to be said.
@@ -116,8 +117,8 @@ test.describe('Enabling a member login', () => {
     await page.getByRole('button', { name: 'Send invite' }).click();
 
     // Pending, not active -- the membership does not exist until the invitee acts.
-    await expect(page.getByText('INVITED')).toBeVisible();
-    await expect(page.getByText('HAS LOGIN')).toHaveCount(1); // the owner's own, unchanged
+    await expect(personTag(page, 'Invited')).toBeVisible();
+    await expect(signedInRows(page)).toHaveCount(1); // the owner's own, unchanged
 
     // Sam opens the link on the same device.
     const { inviteId, token } = await latestInvite(request, ownerEmail);
@@ -137,7 +138,7 @@ test.describe('Enabling a member login', () => {
     await expect(page.getByText(/Nate owns this household/)).toBeVisible();
     await expect(page.getByText(/cannot see or set your password/)).toBeVisible();
     // Household management is hidden for a member, not greyed out.
-    await expect(page.getByText('Logins', { exact: true })).toHaveCount(0);
+    await expect(peopleList(page)).toHaveCount(0);
     await expect(page.getByText('Danger zone')).toHaveCount(0);
   });
 
@@ -150,10 +151,10 @@ test.describe('Enabling a member login', () => {
     const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 
     await openProfile(page);
-    await page.getByRole('button', { name: 'Enable login' }).click();
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
     await page.getByPlaceholder('them@example.com').fill(memberEmail);
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByText('INVITED')).toBeVisible();
+    await expect(personTag(page, 'Invited')).toBeVisible();
 
     const { inviteId, token } = await latestInvite(request, ownerEmail);
     await logout(page);
@@ -166,8 +167,9 @@ test.describe('Enabling a member login', () => {
     await logout(page);
     await loginAs(page, ownerEmail, 'password123');
     await openProfile(page);
-    await expect(page.getByText('HAS LOGIN')).toHaveCount(2);
-    await expect(page.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
+    await expect(signedInRows(page)).toHaveCount(2);
+    const samSheet = await openPersonSheet(page, 'Sam');
+    await expect(samSheet.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
   });
 
   // A link that is stale, truncated or already used says one thing, and it is the same thing --
@@ -209,12 +211,12 @@ test.describe('Enabling a member login', () => {
     await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     await openProfile(page);
-    await page.getByRole('button', { name: 'Enable login' }).click();
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
     await page.getByPlaceholder('them@example.com').fill(samEmail);
     await page.getByRole('button', { name: 'Send invite' }).click();
     // ⚠️ The owner sees exactly what they would for an unknown address. An owner-visible
     // difference here is the user-enumeration oracle the whole invite design exists to avoid.
-    await expect(page.getByText('INVITED')).toBeVisible();
+    await expect(personTag(page, 'Invited')).toBeVisible();
 
     const { inviteId, token } = await latestInvite(request, ownerEmail);
     await logout(page);
@@ -288,10 +290,10 @@ test.describe('Enabling a member login', () => {
     await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     await openProfile(page);
-    await page.getByRole('button', { name: 'Enable login' }).click();
+    await (await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Enable login' }).click();
     await page.getByPlaceholder('them@example.com').fill(samEmail);
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByText('INVITED')).toBeVisible();
+    await expect(personTag(page, 'Invited')).toBeVisible();
 
     // Nate stays signed in and opens Sam's link on his own device.
     const { inviteId, token } = await latestInvite(request, ownerEmail);
@@ -306,7 +308,7 @@ test.describe('Enabling a member login', () => {
     await page.getByRole('button', { name: `Stay signed in as ${ownerEmail}` }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await openProfile(page);
-    await expect(page.getByText('INVITED')).toBeVisible();
+    await expect(personTag(page, 'Invited')).toBeVisible();
 
     // The other door: signing out of Nate's session must land on the JOIN form, not bounce to
     // /login. /join sits outside ProtectedRoute and logout() does not navigate, so the link stays
@@ -344,15 +346,18 @@ test.describe('Enabling a member login', () => {
     await openProfile(page);
 
     // The confirm names both things that are not obvious.
-    await page.getByRole('button', { name: 'Remove login' }).click();
-    const confirm = page.getByRole('dialog');
+    const sheet = await openPersonSheet(page, 'Sam');
+    await sheet.getByRole('button', { name: 'Remove login' }).click();
+    const confirm = page.getByRole('dialog', { name: "Remove Sam's login?" });
     await expect(confirm).toContainText(/workouts stay/i);
     await expect(confirm).toContainText(/haven't synced/i);
     await confirm.getByRole('button', { name: 'Remove login' }).click();
 
-    // Sam is still in the household, with no login.
-    await expect(page.getByText('HAS LOGIN')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Enable login' })).toBeVisible();
+    // Sam is still in the household, with no login -- on the row and in the sheet.
+    await expect(signedInRows(page)).toHaveCount(1);
+    await expect(peopleList(page).getByText('No login', { exact: true })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Enable login' })).toBeVisible();
+    await closePersonSheet(sheet);
 
     // ...and their password opens nothing.
     await logout(page);
@@ -380,11 +385,13 @@ test.describe('Enabling a member login', () => {
 
     // Two people hold a login here -- the owner and Sam -- but only ONE of them can be removed.
     //
-    // ⚠️ 'Remove login', not 'Remove': the People roster on this same screen has its own Remove,
-    // which deletes the person and everything they logged. Matching the bare word counts both and
-    // this assertion silently stops meaning anything.
-    await expect(page.getByText('HAS LOGIN')).toHaveCount(2);
-    await expect(page.getByRole('button', { name: 'Remove login' })).toHaveCount(1);
+    // ⚠️ 'Remove login', not 'Remove': each sheet also has "Remove {name}", which deletes the
+    // person and everything they logged. Matching the bare word counts both and this assertion
+    // silently stops meaning anything.
+    await expect(signedInRows(page)).toHaveCount(2);
+    await expect((await openPersonSheet(page, 'Sam')).getByRole('button', { name: 'Remove login' })).toHaveCount(1);
+    await page.getByRole('dialog', { name: 'Sam', exact: true }).getByRole('button', { name: 'Close' }).click();
+    await expect((await openPersonSheet(page, 'Nate')).getByRole('button', { name: 'Remove login' })).toHaveCount(0);
   });
 
   /**

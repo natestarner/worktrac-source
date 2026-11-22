@@ -959,8 +959,9 @@ export default function HelpTab() {
           kid with their own phone can have their own sign-in instead.
         </p>
         <p>
-          <T>Profile</T> &rarr; <T>Logins</T>, then <T>Enable login</T> next to their name. You
-          enter their email address and they get a link. If that address is new to Huddle they
+          <T>Profile</T> &rarr; <T>People</T>, tap their name, then <T>Enable login</T>. (Adding
+          someone new? Put their email in when you add them.) You enter their email address and they
+          get a link. If that address is new to Huddle they
           choose a password; if they already use Huddle they sign in with the password they
           already have, and this household is added to their account alongside their own. Until
           they accept, their row says <T>Invited</T>. This is a Plus feature.
@@ -990,7 +991,8 @@ export default function HelpTab() {
             account-level permissions withheld. Change one, change this. */}
         <Note title="Trusted: another adult who logs for everyone">
           <p>
-            Sharing the iPad with a partner? Turn on <T>Trusted</T> next to their login (Plus). They
+            Sharing the iPad with a partner? Tap their name under <T>People</T> and turn on{' '}
+            <T>Trusted</T> (Plus); their row then shows it. They
             can then log, edit and delete workouts for <strong>everyone in the household except
             you</strong> &mdash; your own workouts and settings stay yours, and they see them
             read-only. They can also add people and fix names.

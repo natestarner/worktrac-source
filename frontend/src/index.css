@@ -1306,6 +1306,177 @@ input[type='search']::-webkit-search-results-decoration {
   white-space: nowrap;
 }
 
+/* --- Profile's People list (components/profile/PeopleSection.jsx) -----------
+   One row per person: who they are, how they sign in and what they may do, readable without
+   opening anything. The tags are the at-a-glance half; the sheet behind "Edit" is where anything
+   changes. Tags are smaller and quieter than .chip (which is a filter control) so a row with
+   three of them still reads as one line of facts, not a toolbar. */
+
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-3) 0;
+  border: none;
+  border-bottom: 1px solid var(--color-subtle-bg);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.person-row:last-child {
+  border-bottom: none;
+}
+
+button.person-row {
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  button.person-row:hover .person-row__edit {
+    text-decoration: underline;
+  }
+}
+
+.person-row__avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-subtle-bg);
+  color: var(--color-accent-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+
+.person-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-row__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.person-row__detail {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-row__edit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+}
+
+.person-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--color-subtle-bg);
+  color: var(--color-muted);
+}
+
+.person-tag--trusted {
+  background: var(--color-highlight-bg);
+  border-color: var(--color-highlight-border);
+  color: var(--color-highlight-text);
+}
+
+.person-tag--invited {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-accent-text);
+}
+
+.person-tag--locked {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-text);
+}
+
+/* The sheet behind a row: one block per kind of setting, each with its own heading. */
+.person-sheet__block {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-subtle-bg);
+}
+
+.person-sheet__block:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.person-sheet__text {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.person-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.person-sheet__notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* 44px tall so the whole line is the touch target on an iPad mid-workout; the label wraps the
+   checkbox, so tapping the words toggles it too. Inset on a tint so it reads as a setting OF the
+   login above it, not a new item. */
+.person-sheet__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-subtle-bg);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.person-sheet__toggle strong {
+  color: var(--color-text);
+}
+
 /* ===========================================================================
    App chrome + responsive layout.
 
