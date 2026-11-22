@@ -6,7 +6,9 @@ import { noteWorkoutEnded } from '../../lib/reviewPrompt';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useSessionRecap } from '../../hooks/useSessionRecap';
+import { LIVE_WORKOUT_ID, VIEWER_ZONE, useStatsFromHistory } from '../../hooks/useStatsFromHistory';
 import { formatSessionRecap, sessionElapsedMs } from '../../utils/sessionRecap';
+import { workoutHeadline } from '../../utils/workoutHeadline';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
@@ -15,6 +17,10 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   const { clearRestTimer } = useUI();
   const { setRestTimer } = useAppState();
   const { exerciseCount, setCount, startedAt } = useSessionRecap(personId);
+  // The PRs board's and Trends' own fold, with this workout still live in it -- read for the
+  // workout-done sheet's one-line headline (utils/workoutHeadline.js says why it must be read now,
+  // before the End takes the workout's unsynced sets out of the live fold).
+  const stats = useStatsFromHistory(personId);
 
   // Counted once, on the render the modal opens, and handed to onEnded so the workout-done sheet
   // that follows shows the SAME numbers rather than recounting against a cache the end-workout
@@ -28,6 +34,18 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     // restore this finished session and -- because it carries a real id -- have it treated as live.
     // See endedSessions.js; useLiveSession consults this marker.
     const endedId = queryClient.getQueryData(queryKeys.liveSession(personId))?.id;
+    // Before anything below changes the caches the fold reads. The workout's trend points carry its
+    // id, or LIVE_WORKOUT_ID while it has none -- the same id the fold gave it.
+    const headline = recap
+      ? workoutHeadline(stats.digests, {
+          workoutId: endedId ?? LIVE_WORKOUT_ID,
+          ready: stats.status === 'ready',
+          zone: VIEWER_ZONE,
+          now: Date.now(),
+          windowStart: stats.historyWindow?.windowStart ?? null,
+          hiddenSessions: stats.historyWindow?.hiddenSessions ?? 0,
+        })
+      : null;
     markSessionEnded(personId, endedId);
     // No id yet -- the workout's sets have not synced, so its session does not exist on this device
     // under any id. Record the sets instead, so the session they create is marked ended the moment
@@ -52,7 +70,7 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     // App Store rating ask itself waits until that sheet closes (SessionBar). On the schedule in
     // lib/reviewPrompt.js (3rd workout, then every 5th); a no-op on the web.
     const reviewDue = noteWorkoutEnded({ setCount });
-    onEnded({ summary: recap ? summary : null, reviewDue });
+    onEnded({ summary: recap ? { ...summary, headline } : null, reviewDue });
   }
 
   return (

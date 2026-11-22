@@ -10,6 +10,10 @@ import { endWorkout } from '../../api/sessions';
 import { tryForceUpdate } from '../../lib/swUpdate';
 import { askForReviewAfterWorkout, noteWorkoutEnded } from '../../lib/reviewPrompt';
 import { useAuth } from '../../context/AuthContext';
+import { useStatsFromHistory } from '../../hooks/useStatsFromHistory';
+import { historyDigests } from '../../utils/statsFromHistory';
+import { queryClient } from '../../lib/queryClient';
+import { queryKeys } from '../../api/queryKeys';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -25,6 +29,10 @@ vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 // matters here is that whatever it reports reaches the modal and the toast.
 vi.mock('../../hooks/useSessionRecap', () => ({ useSessionRecap: vi.fn() }));
 vi.mock('../../hooks/useRestTimerPreference', () => ({ useRestTimerPreference: vi.fn() }));
+// The fold behind the sheet's headline, mocked like useSessionRecap: its assembly is
+// useStatsFromHistory's own concern, its choice of words utils/workoutHeadline.test.js's. What
+// matters here is that it is read at the End tap and reaches the sheet.
+vi.mock('../../hooks/useStatsFromHistory', () => ({ useStatsFromHistory: vi.fn(), LIVE_WORKOUT_ID: null, VIEWER_ZONE: 'UTC' }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 vi.mock('../../lib/reviewPrompt', () => ({ noteWorkoutEnded: vi.fn(() => false), askForReviewAfterWorkout: vi.fn() }));
@@ -68,6 +76,7 @@ beforeEach(() => {
   useRestTimerPreference.mockReturnValue([true, vi.fn()]);
   useSessionRecap.mockReturnValue({ exerciseCount: 3, setCount: 12, startedAt: liveSession.startedAt });
   useAuth.mockReturnValue({ people: [{ id: 7 }], account: { id: 1 }, refreshPeople: vi.fn() });
+  useStatsFromHistory.mockReturnValue({ digests: [], status: 'loading', historyWindow: null });
   // The household ask's "It's just me" answer is remembered per account on the device.
   localStorage.clear();
 });
@@ -311,6 +320,40 @@ describe('SessionBar end workout', () => {
     expect(sheet.getByText('minutes')).toBeInTheDocument();
     // The sheet replaces the toast; it does not add to it.
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  // The headline is chosen at the End tap, from the fold with this workout (session 55) still in
+  // it, and handed to the sheet -- never recomputed there, where the workout has left the live fold.
+  it('leads the sheet with the headline read at the End tap', async () => {
+    const set = (weight) => [{ weight, reps: 5, durationSeconds: null, unit: 'lb' }];
+    const bench = (id, startedAt, weight) => ({
+      id, startedAt, endedAt: null, manual: false,
+      entries: [{ exerciseId: 1, exerciseName: 'Bench Press', note: null, sets: set(weight) }],
+    });
+    const now = new Date().toISOString();
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    useStatsFromHistory.mockReturnValue({
+      digests: historyDigests([bench(55, now, 120), bench(54, weekAgo, 100)]),
+      status: 'ready',
+      historyWindow: null,
+    });
+    // The End reads the ended workout's id from the live-session cache, as it always has.
+    queryClient.setQueryData(queryKeys.liveSession(7), liveSession);
+    render(<SessionBar />);
+
+    await endTheWorkout();
+
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.getByText('A new best on Bench Press today.')).toBeInTheDocument();
+  });
+
+  it('shows the numbers alone when History is not on this device', async () => {
+    render(<SessionBar />);
+    await endTheWorkout();
+
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.getByText('sets')).toBeInTheDocument();
+    expect(sheet.queryByText(/today\.|this week|in a row|since /)).not.toBeInTheDocument();
   });
 
   // The household question shows only while it is unanswered, and only to someone who can act on

@@ -1,6 +1,6 @@
 import { APIRequestContext, Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, logSetAt, pickExercise } from './support/exercises';
 import { delayNetwork, holdNetwork } from './support/faults';
 import { expectHistoryMatchesServer } from './support/historyConvergence';
 import { pinOfflineViaSettings, unpinOfflineViaSettings, waitForOutboxDrain } from './support/offline';
@@ -80,6 +80,43 @@ forEachConnectivityMode<{ personName: string }>('ending a workout reports what w
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
 
     await expectWorkoutDoneSheet(page);
+  },
+});
+
+// The sheet's headline -- the one true thing worth saying -- in every mode. This is the claim
+// utils/workoutHeadline.js is built around: it must be read at the End tap, while the workout is
+// still live in the fold. Degraded, the workout's sets have not synced, so it has no id and exists
+// only as the live copy; read after the End, it would be in neither the live fold nor History, and
+// the sheet would have nothing to say about it (or say something about the workout before).
+forEachConnectivityMode<Record<string, never>>('the workout-done sheet names a new best', {
+  setup: async (page, request) => {
+    await registerHousehold(page, request, 'Head');
+    // A baseline workout, on the server and in the device's History before the mode is entered.
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSetAt(page, 100, 5);
+    await endWorkout(page);
+    await waitForOutboxDrain(page);
+    await page.getByLabel('Sections').getByRole('link', { name: 'History' }).click();
+    await expect(page.locator('.history-block').getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+    await page.getByLabel('Sections').getByRole('link', { name: 'Log' }).click();
+    return {};
+  },
+
+  navigate: async (page) => {
+    await pickExercise(page, 'Barbell Bench Press');
+  },
+
+  act: async (page) => {
+    await logSetAt(page, 120, 5);
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+  },
+
+  assert: async (page) => {
+    const sheet = page.getByRole('dialog', { name: 'Workout done' });
+    await expect(sheet.getByText('A new best on Barbell Bench Press today.', { exact: true })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Done' }).click();
+    await expect(sheet).toBeHidden();
   },
 });
 
