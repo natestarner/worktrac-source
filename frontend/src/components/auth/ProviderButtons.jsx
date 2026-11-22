@@ -27,9 +27,13 @@ const LABELS = { apple: 'Apple', google: 'Google', test: 'Test provider' };
  *
  * A provider whose script can't load (offline, a content blocker) just drops out; nothing else on
  * the screen depends on it.
+ *
+ * `lastUsed` (Log in and Register only) marks the provider this device signed in with last
+ * ("Last used", lib/lastSignInMethod.js). It is DESCRIPTION, not part of the button's name, so
+ * "Continue with Apple" stays exactly that for screen readers, voice control and every test.
  */
 export default function ProviderButtons({
-  onToken, onError, disabled = false, only, verb = 'Continue with', size = 'default',
+  onToken, onError, disabled = false, only, verb = 'Continue with', size = 'default', lastUsed = null,
 }) {
   const providers = useMemo(() => {
     const all = availableSignInProviders();
@@ -43,32 +47,42 @@ export default function ProviderButtons({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       {providers
         .filter((p) => !unavailable.includes(p))
-        .map((provider) =>
-          provider === 'google' && googleUsesRenderedButton() ? (
-            <GoogleRenderedButton
-              key={provider}
-              verb={verb}
-              disabled={disabled}
-              onToken={(token) => onToken('google', token)}
-              onUnavailable={() => setUnavailable((list) => [...list, 'google'])}
-            />
-          ) : (
-            <ProviderButton
-              key={provider}
-              provider={provider}
-              verb={verb}
-              size={size}
-              disabled={disabled}
-              onToken={onToken}
-              onError={onError}
-            />
-          ),
-        )}
+        .map((provider) => {
+          const badgeId = lastUsed === provider ? `provider-last-used-${provider}` : undefined;
+          return (
+            <div key={provider} className="provider-button-slot">
+              {provider === 'google' && googleUsesRenderedButton() ? (
+                <GoogleRenderedButton
+                  verb={verb}
+                  disabled={disabled}
+                  describedBy={badgeId}
+                  onToken={(token) => onToken('google', token)}
+                  onUnavailable={() => setUnavailable((list) => [...list, 'google'])}
+                />
+              ) : (
+                <ProviderButton
+                  provider={provider}
+                  verb={verb}
+                  size={size}
+                  disabled={disabled}
+                  describedBy={badgeId}
+                  onToken={onToken}
+                  onError={onError}
+                />
+              )}
+              {badgeId && (
+                <span id={badgeId} className="provider-last-used" data-testid="provider-last-used">
+                  Last used
+                </span>
+              )}
+            </div>
+          );
+        })}
     </div>
   );
 }
 
-function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
+function ProviderButton({ provider, verb, size, disabled, describedBy, onToken, onError }) {
   const [busy, setBusy] = useState(false);
 
   // Ready the provider now, so the tap itself opens its sheet with nothing to wait for first
@@ -102,6 +116,7 @@ function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
       className={large ? 'btn btn-lg btn-full pressable' : 'pressable'}
       onClick={handleClick}
       disabled={disabled || busy}
+      aria-describedby={describedBy}
       style={large ? colors : { ...baseStyle, ...colors }}
     >
       {provider === 'apple' && <AppleLogo size={size === 'large' ? 20 : 16} />}
@@ -113,7 +128,7 @@ function ProviderButton({ provider, verb, size, disabled, onToken, onError }) {
 
 // Google's own button, drawn by Google Identity Services (its branding rules want theirs on the
 // web). It owns the click, so `disabled` is shown by dimming it and blocking pointer events.
-function GoogleRenderedButton({ verb, disabled, onToken, onUnavailable }) {
+function GoogleRenderedButton({ verb, disabled, describedBy, onToken, onUnavailable }) {
   const ref = useRef(null);
   const onTokenRef = useRef(onToken);
   onTokenRef.current = onToken;
@@ -133,6 +148,7 @@ function GoogleRenderedButton({ verb, disabled, onToken, onUnavailable }) {
     <div
       ref={ref}
       aria-label={`${verb} Google`}
+      aria-describedby={describedBy}
       style={{
         display: 'flex',
         justifyContent: 'center',
