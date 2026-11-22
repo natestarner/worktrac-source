@@ -1,5 +1,31 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
+
+// Resolves once the element has kept its position for three frames in a row (the same rule as the
+// app's jumpAndSettle), and fails, rather than hanging, if it is still moving after 120 frames.
+// Returns where it settled, and the viewport's height.
+async function holdsStill(locator: Locator) {
+  return locator.evaluate(
+    (el) =>
+      new Promise<{ top: number; bottom: number; viewport: number }>((resolve, reject) => {
+        let last = Number.NaN;
+        let still = 0;
+        let frames = 0;
+        const tick = () => {
+          const top = el.getBoundingClientRect().top;
+          still = Math.abs(top - last) < 1 ? still + 1 : 0;
+          last = top;
+          if (still >= 3) {
+            const r = el.getBoundingClientRect();
+            return resolve({ top: r.top, bottom: r.bottom, viewport: window.innerHeight });
+          }
+          if (++frames > 120) return reject(new Error(`still moving after ${frames} frames (top ${top}px)`));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
 
 // A long History. It draws its newest workouts first and more as the list scrolls
 // (useGrowingList.js), and each workout block carries `content-visibility: auto` (HistoryTab.jsx) so
@@ -88,8 +114,22 @@ test('a long History skips off-screen workouts and still lands a long jump on ta
   // draw from.
   await expect(edits).toHaveCount(180);
   await expect(page.getByTestId('history-more')).toHaveCount(0);
-  await targetBlock.getByRole('button', { name: 'View options for Barbell Row' }).scrollIntoViewIfNeeded();
-  await targetBlock.getByRole('button', { name: 'View options for Barbell Row' }).click();
+  // Tap the target only once it holds still, the way a person does (#440). Scrolling to it draws
+  // the blocks around it for the first time, and each one swaps its estimated height for its real
+  // one a frame later. Safari has no scroll anchoring, so the button slides with them (60px in this
+  // data). And in mobile WebKit, Playwright's own scroll (scrollIntoViewIfNeeded, or the one inside
+  // click()) does not reach the page until the next input event -- the click itself. So the scroll,
+  // the drawing and the slide all landed DURING the press: it pressed on the button and released
+  // 60px further on, which is a click on the card around it, and nothing opened (4/40 locally, up
+  // to 3/3 on lower). Scroll from inside the page instead, where it takes effect at once, wait for
+  // the button to hold still, and only then click, with nothing left for click() to scroll.
+  const options = targetBlock.getByRole('button', { name: 'View options for Barbell Row' });
+  await expect(async () => {
+    await options.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const at = await holdsStill(options);
+    expect(at.top >= 0 && at.bottom <= at.viewport, `settled partly off screen: ${JSON.stringify(at)}`).toBe(true);
+  }).toPass({ timeout: 15000 });
+  await options.click();
   await page.getByRole('button', { name: /View this exercise.s history/ }).click();
 
   // Wait for the smooth scroll to settle, then the workout must be on screen, near the top.

@@ -1,8 +1,10 @@
 # Moving the backend to Central US
 
-> **STATUS (2026-11-20): both environments run in Central US.** Lower cut over at ~22:05 UTC and prod
-> at 23:08 UTC. The old East US apps are still running as the rollback; Phase 3 (deleting them) is
-> due from 2026-11-27. Do the phases in order. Write the date and the outcome under each step as it is done. Why this move: `latency.md`. Who does what: steps marked
+> **STATUS: DONE (2026-11-22).** Both environments have run in Central US since 2026-11-20 (lower
+> cut over at ~22:05 UTC, prod at 23:08 UTC). On 2026-11-22 the old East US apps, their alert rules,
+> `worktrac-env` and the legacy `*.starnerconsulting.co` API DNS records were deleted, and the API
+> TTLs went back to 30 minutes. **There is no East US rollback any more.** This file is now the
+> record of how it was done. Why this move: `latency.md`. Who does what: steps marked
 > **[you]** need Azure write access, the DNS registrar or App Store Connect, which Claude doesn't
 > have. Claude does the deploy-repo PRs and all the checking.
 
@@ -94,8 +96,8 @@ the old app stays up as the rollback until the move is proven.
       name.
     - **The only other use:** the deploy workflow's health check, which #473 removed.
 
-    They are simply not added in the new environment, and their CNAMEs can go once the old apps are
-    deleted. The *frontend* names `worktrac-app.` / `worktrac-dev.starnerconsulting.co` are a separate
+    They are simply not added in the new environment. Their CNAMEs and `asuid.` TXT records were
+    deleted on 2026-11-22 (at GoDaddy, which hosts `starnerconsulting.co`'s DNS, not Namecheap). The *frontend* names `worktrac-app.` / `worktrac-dev.starnerconsulting.co` are a separate
     matter: they are still bound on the Static Web Apps and listed in `CORS_ALLOWED_ORIGINS`. This move
     doesn't touch them, and retiring them is its own change.
 
@@ -159,7 +161,7 @@ the old app stays up as the rollback until the move is proven.
     No drift, no unexpected exceptions.
   - server-side `/me` p50: 314 -> 16 ms
   - email delivery events delivered to the new address (Event Grid: 0 failed deliveries)
-- **1.5 [you] Delete the old lower app** after a few quiet days (see Phase 3).
+- **1.5 [you] Delete the old lower app.** DONE 2026-11-22 (Phase 3).
 
 ## Phase 2 — production — cut over 2026-11-20 23:08 UTC
 
@@ -186,8 +188,7 @@ the old app stays up as the rollback until the move is proven.
     TTL is 5 minutes.
 - **2.5 Compare.** DONE: server-side `/me` p50 372 -> 17 ms. No errors, 5xx or slow syncs on the new
   app after the cutover. The owner's iOS 1.3.0 app worked.
-- **2.6 [you] Delete the old prod app** once a week has passed with no rollback (Phase 3), and
-  restore the 30-minute TTL.
+- **2.6 [you] Delete the old prod app and restore the 30-minute TTL.** DONE 2026-11-22 (Phase 3).
 
 ## Phase 3 — cleanup
 
@@ -199,7 +200,9 @@ Done 2026-11-20 (worktrac-source cleanup PR, worktrac-deploy cleanup PR):
   'worktrac-backend-<env>'`, so a window spanning the move reads as one series. `latency.md` records
   the measured result; `backend-core.md`'s N+1 rule no longer claims the regions differ.
 
-**[you] From 2026-11-27**, once a week has passed with no rollback, one command at a time:
+**[you] DONE 2026-11-22**, two days after the cutover rather than the planned week: prod and lower
+had been clean since (no errors or 5xx, 0 restarts) and the owner's app worked. Run one command at a
+time:
 ```powershell
 az containerapp delete -g worktrac-rg -n worktrac-backend-lower --yes
 ```
@@ -212,9 +215,19 @@ foreach ($r in 'worktrac-backend-prod-5xx','worktrac-backend-prod-restarts','wor
 ```powershell
 az containerapp env delete -g worktrac-rg -n worktrac-env --yes
 ```
-- Deleting `worktrac-env` takes its four managed certificates with it, including the two legacy
-  `*.starnerconsulting.co` API names; their CNAMEs can then be removed from that domain's DNS.
+- Deleting `worktrac-env` took its four managed certificates with it, including the two legacy
+  `*.starnerconsulting.co` API names. Checked before it ran: the environment held no apps, jobs,
+  storage or Dapr components, only those certificates. The alert command touches only the old app's
+  six rules; the DB alerts, the `-cus` rules and the `huddle-prod-alerts` action group stay.
 - `interactive-timeline-env` is another project's environment; leave it alone.
+- GoDaddy (`starnerconsulting.co`): deleted the CNAMEs `worktrac-api` and `worktrac-api-dev` and the
+  TXT records `asuid.worktrac-api` and `asuid.worktrac-api-dev`. **Kept** `worktrac-app` and
+  `worktrac-dev`: they are still bound to the frontend Static Web Apps (item 10).
 - Namecheap: put the `api` and `api.dev` TTLs back to 30 minutes.
-- Afterwards, `rg -n "worktrac-backend-(prod|lower)|worktrac-env"` across both repos should find
-  only history.
+- Afterwards, a search for `worktrac-backend-(prod|lower)` / `worktrac-env` without the `-cus`
+  suffix finds only history and test fixtures, and `eastus` appears nowhere outside `docs/`.
+
+**Verified 2026-11-22 after cleanup:** `worktrac-rg` has one Container Apps environment
+(`worktrac-env-cus`) with two certificates; the legacy API names return NXDOMAIN from GoDaddy and
+from public DNS; `api.huddle.fitness` and `api.dev.huddle.fitness` answer 200 with a 30-minute TTL;
+prod logged no errors in the hour after.
