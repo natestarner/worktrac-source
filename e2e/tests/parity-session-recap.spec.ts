@@ -1,4 +1,4 @@
-import { APIRequestContext, expect, test } from '@playwright/test';
+import { APIRequestContext, Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { delayNetwork, holdNetwork } from './support/faults';
@@ -7,7 +7,9 @@ import { pinOfflineViaSettings, unpinOfflineViaSettings, waitForOutboxDrain } fr
 import { forEachConnectivityMode } from './support/parity';
 
 // Ending a workout now names what was actually done -- "2 exercises · 3 sets" -- in the confirm
-// modal and again in the toast, instead of only reporting the state transition.
+// modal and again in the workout-done sheet that follows, instead of only reporting the state
+// transition. The sheet's tiles come from the confirm's own count (handed over, never recounted),
+// which is what these assert in every mode.
 //
 // This is asserted across every connectivity mode rather than online alone, because the obvious
 // implementation is wrong everywhere except online. A live session's id stays `null` for a person's
@@ -21,6 +23,20 @@ import { forEachConnectivityMode } from './support/parity';
 // uses: server entries plus the pending log-set mutations, which are the ONLY record of those sets
 // while degraded. No branch on connectivity is involved, which is why this adds no row to
 // resilience.md's register -- and why the assertion below must never grow one either.
+// Two exercises and three sets, as tiles, then Done -- which must close it in every mode (its close
+// also runs the deferred rating ask and forced update, neither of which may depend on the network).
+async function expectWorkoutDoneSheet(page: Page) {
+  const sheet = page.getByRole('dialog', { name: 'Workout done' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('2', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('exercises', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('3', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('sets', { exact: true })).toBeVisible();
+  await sheet.getByRole('button', { name: 'Done' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+}
+
 forEachConnectivityMode<{ personName: string }>('ending a workout reports what was logged', {
   critical: true,
   setup: async (page, request) => {
@@ -62,8 +78,50 @@ forEachConnectivityMode<{ personName: string }>('ending a workout reports what w
 
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
 
-    await expect(page.getByText('Workout ended — 2 exercises · 3 sets.')).toBeVisible();
+    await expectWorkoutDoneSheet(page);
   },
+});
+
+// The sheet's household ask, end to end. Online only, deliberately not a parity spec: adding a
+// person is a Tier-3 write (gated, never queued), so offline the button is disabled by the same
+// OfflineDisabledWrap as the person bar's -- a divergence the register already covers.
+test.describe('The workout-done sheet asks who else trains with you', () => {
+  test('adds the second person from the sheet, and stops asking once there is one', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Solo');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+
+    const sheet = page.getByRole('dialog', { name: 'Workout done' });
+    await expect(sheet.getByText('Who else trains with you?', { exact: true })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Add a person' }).click();
+
+    // The sheet hands over to the add-person dialog rather than stacking a second one on it.
+    await expect(sheet).toBeHidden();
+    const addDialog = page.getByRole('dialog', { name: 'Add a person' });
+    await addDialog.getByPlaceholder('Name').fill('Partner');
+    await addDialog.getByRole('button', { name: 'Add' }).click();
+    await expect(addDialog).toBeHidden();
+
+    // Added, and switched to -- the same as adding from the person bar.
+    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Partner/ })).toBeVisible();
+
+    // A second workout: the question has been answered, so the sheet no longer asks it.
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText('Who else trains with you?', { exact: true })).toHaveCount(0);
+    await sheet.getByRole('button', { name: 'Done' }).click();
+    await expect(sheet).toBeHidden();
+  });
 });
 
 // The bug report this guards: log some sets, delete them all, end the workout -- the recap must
@@ -100,6 +158,8 @@ test.describe('Session recap after deleting everything logged', () => {
 
     await dialog.getByRole('button', { name: 'End workout' }).click();
     await expect(page.getByText('Workout ended. Logging a set anytime starts a new one.')).toBeVisible();
+    // Nothing to summarise, so no sheet: congratulating an empty workout is worse than the sentence.
+    await expect(page.getByRole('dialog', { name: 'Workout done' })).toHaveCount(0);
   });
 
   // The same flow, pinned to the timing that made the spec above fail on lower -- and each time it
@@ -226,7 +286,7 @@ test.describe('Session recap around a late live-session answer', () => {
     const dialog = page.getByRole('dialog', { name: 'End this workout?' });
     await expect(dialog.getByText('2 exercises · 3 sets')).toBeVisible();
     await dialog.getByRole('button', { name: 'End workout' }).click();
-    await expect(page.getByText('Workout ended — 2 exercises · 3 sets.')).toBeVisible();
+    await expectWorkoutDoneSheet(page);
 
     await unpinOfflineViaSettings(page);
     await waitForOutboxDrain(page);

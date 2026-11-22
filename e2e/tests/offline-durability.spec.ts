@@ -189,9 +189,11 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await page.reload();
     await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
 
+    // Not endWorkout(): its closing of the workout-done sheet is a click this spec cannot afford
+    // between the End and the reload. The sheet is in memory only, so the reload closes it anyway.
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Workout done' })).toBeVisible();
 
     // Reload IMMEDIATELY -- inside the persister's throttle window, which is exactly what a silent
     // tryForceUpdate does after a deploy. Deliberately no wait: waiting is what hid this.

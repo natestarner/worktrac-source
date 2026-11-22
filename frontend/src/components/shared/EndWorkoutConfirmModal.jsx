@@ -2,7 +2,7 @@ import { queryClient, enqueueOutboxWrite, pendingLiveSetCreates, END_WORKOUT_MUT
 import { queryKeys } from '../../api/queryKeys';
 import { markCreatesEnded, markSessionEnded } from '../../lib/endedSessions';
 import { tryHaptic } from '../../lib/haptics';
-import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
+import { noteWorkoutEnded } from '../../lib/reviewPrompt';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useSessionRecap } from '../../hooks/useSessionRecap';
@@ -16,10 +16,11 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   const { setRestTimer } = useAppState();
   const { exerciseCount, setCount, startedAt } = useSessionRecap(personId);
 
-  // Computed once, on the render the modal opens, and handed to onEnded so the toast that follows
-  // formats from the SAME derivation rather than recomputing against a cache the end-workout write
-  // has already begun clearing. `null` whenever there is nothing worth reporting.
-  const recap = formatSessionRecap({ exerciseCount, setCount, elapsedMs: sessionElapsedMs(startedAt) });
+  // Counted once, on the render the modal opens, and handed to onEnded so the workout-done sheet
+  // that follows shows the SAME numbers rather than recounting against a cache the end-workout
+  // write has already begun clearing. `recap` is null whenever there is nothing worth reporting.
+  const summary = { exerciseCount, setCount, elapsedMs: sessionElapsedMs(startedAt) };
+  const recap = formatSessionRecap(summary);
 
   function handleEnd() {
     // Record the ended id SYNCHRONOUSLY before touching the query cache. The cache clear below only
@@ -47,10 +48,11 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     // Fired here rather than in onEnded so it lands on the tap that ends the workout, and so it
     // stays tied to the act itself rather than to whatever the caller does afterwards.
     tryHaptic('complete');
-    onEnded(recap);
-    // After the recap, never before it: the App Store rating sheet, on the schedule in
-    // lib/reviewPrompt.js (3rd workout, then every 5th). A no-op on the web.
-    askForReviewAfterWorkout({ setCount });
+    // Counted here, at the tap, so a reload with the workout-done sheet open cannot lose it; the
+    // App Store rating ask itself waits until that sheet closes (SessionBar). On the schedule in
+    // lib/reviewPrompt.js (3rd workout, then every 5th); a no-op on the web.
+    const reviewDue = noteWorkoutEnded({ setCount });
+    onEnded({ summary: recap ? summary : null, reviewDue });
   }
 
   return (

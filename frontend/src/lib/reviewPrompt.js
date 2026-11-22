@@ -29,8 +29,9 @@ export const ASK_EVERY = 5;
 export const MIN_DAYS_BETWEEN_ASKS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Long enough for the End dialog to close and the recap toast to be read before Apple's sheet
-// covers the screen.
+// Measured from the workout-done sheet closing, not from the End tap: long enough for the sheet to
+// slide away before Apple's sheet covers the screen. Asking at the End tap put Apple's sheet on top
+// of ours, over the numbers it exists to show.
 export const ASK_DELAY_MS = 1500;
 
 function read() {
@@ -70,9 +71,13 @@ export function noteWorkoutEnded({ setCount, now = Date.now() }) {
   return due;
 }
 
-/** Called once per "End workout" tap. Fire and forget: nothing waits on it and it never throws. */
-export function askForReviewAfterWorkout({ setCount }) {
-  if (!noteWorkoutEnded({ setCount })) return;
+/**
+ * Called as the workout-done sheet closes, with what noteWorkoutEnded answered at the End tap. The
+ * count is taken at the tap (synchronously, so a reload with the sheet open cannot lose it); only
+ * the ask waits for the sheet. Fire and forget: nothing waits on it and it never throws.
+ */
+export function askForReviewAfterWorkout({ due }) {
+  if (!due) return;
   setTimeout(() => {
     requestAppReview();
   }, ASK_DELAY_MS);

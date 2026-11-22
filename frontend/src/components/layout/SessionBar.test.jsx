@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SessionBar from './SessionBar';
 import { useAppState } from '../../context/AppStateContext';
@@ -8,6 +8,8 @@ import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { useSessionRecap } from '../../hooks/useSessionRecap';
 import { endWorkout } from '../../api/sessions';
 import { tryForceUpdate } from '../../lib/swUpdate';
+import { askForReviewAfterWorkout, noteWorkoutEnded } from '../../lib/reviewPrompt';
+import { useAuth } from '../../context/AuthContext';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -25,6 +27,9 @@ vi.mock('../../hooks/useSessionRecap', () => ({ useSessionRecap: vi.fn() }));
 vi.mock('../../hooks/useRestTimerPreference', () => ({ useRestTimerPreference: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
+vi.mock('../../lib/reviewPrompt', () => ({ noteWorkoutEnded: vi.fn(() => false), askForReviewAfterWorkout: vi.fn() }));
+// The workout-done sheet reads the household (for its "who else trains with you?" ask).
+vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 function baseAppState(overrides = {}) {
   return {
@@ -62,6 +67,7 @@ beforeEach(() => {
   useLiveSession.mockReturnValue({ session: liveSession, refetch: vi.fn() });
   useRestTimerPreference.mockReturnValue([true, vi.fn()]);
   useSessionRecap.mockReturnValue({ exerciseCount: 3, setCount: 12, startedAt: liveSession.startedAt });
+  useAuth.mockReturnValue({ people: [{ id: 7 }], refreshPeople: vi.fn() });
 });
 
 afterEach(() => {
@@ -245,19 +251,41 @@ describe('SessionBar end workout', () => {
     expect(appState.setRestTimer).toHaveBeenCalledWith({});
   });
 
-  it('is a forced-reload trigger point', async () => {
+  // A forced update reloads the page, so with a workout-done sheet to show it waits for the sheet
+  // to close -- at the End tap it would reload the page out from under the sheet.
+  it('is a forced-reload trigger point, once the workout-done sheet closes', async () => {
     render(<SessionBar />);
 
     await endTheWorkout();
+    expect(await screen.findByRole('dialog', { name: 'Workout done' })).toBeInTheDocument();
+    expect(tryForceUpdate).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(tryForceUpdate).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(tryForceUpdate).toHaveBeenCalledTimes(1);
     expect(tryForceUpdate.mock.calls[0][1]).toBe(7);
+    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+  });
+
+  // The App Store rating sheet is counted at the End tap but asked for only once ours has closed,
+  // so Apple's never covers the numbers. Escape is one of the sheet's exits, and must do the same.
+  it('asks for a rating only after the sheet closes, and only when the End tap said it was due', async () => {
+    noteWorkoutEnded.mockReturnValueOnce(true);
+    render(<SessionBar />);
+
+    await endTheWorkout();
+    const sheet = await screen.findByRole('dialog', { name: 'Workout done' });
+    expect(askForReviewAfterWorkout).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(sheet, { key: 'Escape' });
+
+    expect(askForReviewAfterWorkout).toHaveBeenCalledWith({ due: true });
   });
 
   // Ending a workout used to report only a state transition ("Workout ended.") while the session's
-  // own numbers sat unused in the cache. The confirm modal is where they are certain to be read; a
-  // 3.2s toast after the fact is easy to miss with a phone already back in a pocket.
-  it('shows what was actually done, in the modal and again in the toast', async () => {
+  // own numbers sat unused in the cache. The confirm modal names them before the tap; the sheet
+  // after it, as tiles, from the SAME count -- not a recount against a cache the End has cleared.
+  it('shows what was actually done, in the modal and again in the sheet', async () => {
     const showToast = vi.fn();
     useUI.mockReturnValue(baseUI({ showToast }));
     // Anchored to now, not to `liveSession`'s fixed date: the duration is measured against the real
@@ -271,8 +299,52 @@ describe('SessionBar end workout', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalled());
-    expect(showToast.mock.calls[0][0]).toBe('Workout ended — 3 exercises · 12 sets · 47 min.');
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.getByText('3')).toBeInTheDocument();
+    expect(sheet.getByText('exercises')).toBeInTheDocument();
+    expect(sheet.getByText('12')).toBeInTheDocument();
+    expect(sheet.getByText('sets')).toBeInTheDocument();
+    expect(sheet.getByText('47 min')).toBeInTheDocument();
+    // The sheet replaces the toast; it does not add to it.
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  // The household question shows only while it is unanswered, and only to someone who can act on
+  // it: a member cannot add people (MANAGE_PEOPLE is owner-only).
+  it('asks who else trains with you while the household is one person', async () => {
+    render(<SessionBar />);
+    await endTheWorkout();
+
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.getByText('Who else trains with you?')).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
+  });
+
+  it('does not ask once the household has a second person', async () => {
+    useAuth.mockReturnValue({ people: [{ id: 7 }, { id: 8 }] });
+    render(<SessionBar />);
+    await endTheWorkout();
+
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+  });
+
+  // Adding a person swaps the sheet for the add-person dialog rather than stacking a second
+  // dialog on it, and closing that dialog is the sheet's close -- so the deferred work still runs
+  // exactly once.
+  it('hands over to the add-person dialog, whose close is the sheet’s close', async () => {
+    render(<SessionBar />);
+    await endTheWorkout();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a person' }));
+    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+    const addDialog = await screen.findByRole('dialog', { name: 'Add a person' });
+
+    fireEvent.click(within(addDialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Add a person' })).not.toBeInTheDocument();
+    expect(tryForceUpdate).toHaveBeenCalledTimes(1);
   });
 
   // A workout with nothing in it is real -- a mis-tap on "Log set" that was then deleted, or a
@@ -291,5 +363,8 @@ describe('SessionBar end workout', () => {
 
     await waitFor(() => expect(showToast).toHaveBeenCalled());
     expect(showToast.mock.calls[0][0]).toBe('Workout ended. Logging a set anytime starts a new one.');
+    // No sheet to wait for, so the forced update keeps its old place at the End tap.
+    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+    expect(tryForceUpdate).toHaveBeenCalledTimes(1);
   });
 });

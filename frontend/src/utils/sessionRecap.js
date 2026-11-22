@@ -3,8 +3,8 @@
 // moment into an acknowledgement of what was actually done.
 //
 // Pure and hook-free (modelled on utils/formulas.js and components/trends/exerciseMetrics.js) so
-// the wording can be unit tested without rendering anything, and so the modal and the toast are
-// formatting from ONE derivation rather than two that can drift.
+// the wording can be unit tested without rendering anything, and so the End dialog and the
+// workout-done sheet are formatting from ONE derivation rather than two that can drift.
 //
 // Warmth here is carried by naming the work, not by praising it: "3 exercises · 12 sets · 47 min"
 // tells you something true that you would otherwise have to go and look up. A "Nice work!" would
@@ -38,6 +38,21 @@ export function formatSessionRecap({ exerciseCount = 0, setCount = 0, elapsedMs 
   const duration = formatWorkoutDuration(elapsedMs);
   if (duration) parts.push(duration);
   return parts.join(' · ');
+}
+
+// The same numbers as formatSessionRecap, as the workout-done sheet's tiles: [{ value, label }].
+// Lives beside the sentence form, and shares its pluralising and duration rules, so the sheet and
+// the End dialog can never disagree about what was done. Same null rule too: nothing logged means
+// no sheet at all (SessionBar falls back to the plain toast).
+export function sessionRecapTiles({ exerciseCount = 0, setCount = 0, elapsedMs = null } = {}) {
+  if (setCount <= 0) return null;
+  const tiles = [
+    { value: String(exerciseCount), label: exerciseCount === 1 ? 'exercise' : 'exercises' },
+    { value: String(setCount), label: setCount === 1 ? 'set' : 'sets' },
+  ];
+  const duration = formatWorkoutDuration(elapsedMs);
+  if (duration) tiles.push({ value: duration, label: 'time' });
+  return tiles;
 }
 
 // Milliseconds from a session's start to now, or null when the start is missing or nonsensical.

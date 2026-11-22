@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, logSetAt, pickExercise, setStepperPair } from './support/exercises';
+import { backToPicker, endWorkout, logSetAt, pickExercise, setStepperPair } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // ⚠️ THIS IS THE SPEC THAT KEEPS THE LOG SCREEN AND HISTORY TELLING THE SAME STORY.
@@ -127,8 +127,7 @@ forEachConnectivityMode<{ personName: string }>('the session-exercises list badg
     await logSetAt(page, 100, 10);
     // A separate, EARLIER workout: an exercise's first workout is a volume baseline, never a
     // volume record (utils/sessionVolume.js), so the workout under test needs one to beat.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The badge compares against the earlier workout through the CACHED `history`, and the modes
     // below read that cache without refetching it -- so wait until it actually holds the baseline.

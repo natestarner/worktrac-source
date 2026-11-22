@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, endWorkout, pickExercise } from './support/exercises';
 
 function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
@@ -69,8 +69,7 @@ test.describe('State survives reload and stays live without a full reload', () =
     await expect(liveSessionDot(page, 'Sam')).toHaveCount(0);
 
     // Ending the workout must clear the dot immediately too -- not just on next reload.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(liveSessionDot(page, 'Alex')).toHaveCount(0);
   });
 });

@@ -8,7 +8,9 @@ import { allowScreenSleep, keepScreenAwake } from '../../lib/native';
 import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import { formatRestTime, formatTime } from '../../utils/datetime';
+import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
+import WorkoutDoneSheet from '../shared/WorkoutDoneSheet';
 import Button from '../shared/Button';
 import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconTimer } from '../shared/icons';
@@ -34,6 +36,10 @@ export default function SessionBar() {
   const { restTimers, showToast } = useUI();
   const [restEnabled] = useRestTimerPreference(activePersonId);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
+  // The workout-done sheet's state: `{ personId, summary, reviewDue }` from the End tap, or null.
+  // Plain local state, not UIContext: the sheet is a modal, so nobody can switch person under it,
+  // and it is in memory only -- a reload closes it, which is the right outcome for a summary.
+  const [workoutDone, setWorkoutDone] = useState(null);
 
   // Editing a past session is an editor, not a live session -- and its own date/time card stays in
   // flow in LogTab, because it is a form rather than a status. Mirrors the condition the banner
@@ -72,7 +78,35 @@ export default function SessionBar() {
     };
   }, [visible]);
 
-  if (!visible) return null;
+  // Everything that used to happen at the End tap and would land ON the sheet happens as it closes:
+  // the App Store rating ask, and the forced update, which reloads the page -- at the tap it took
+  // the sheet with it. Every exit from the sheet (Done, the X, Escape, the add-person dialog) is
+  // this one callback.
+  function closeWorkoutDone() {
+    const done = workoutDone;
+    setWorkoutDone(null);
+    if (!done) return;
+    askForReviewAfterWorkout({ due: done.reviewDue });
+    // An explicit "I'm done with this session" signal -- one of the forced-reload trigger points
+    // (guarded: a no-op if the END_WORKOUT write itself, or anything else for this person, is
+    // still in flight and not yet durable). See swUpdate.js.
+    tryForceUpdate(queryClient, done.personId);
+  }
+
+  // Rendered even once the bar itself is gone: ending the workout is exactly what hides the bar,
+  // and the sheet is what follows it. Modal portals onto document.body, so its place in this tree
+  // draws nothing -- but it keeps ONE place in it (the fragment's second child, bar or no bar), so
+  // the bar coming or going under it can never remount the sheet and drop its state.
+  const doneSheet = workoutDone && <WorkoutDoneSheet summary={workoutDone.summary} onClose={closeWorkoutDone} />;
+
+  if (!visible) {
+    return (
+      <>
+        {null}
+        {doneSheet}
+      </>
+    );
+  }
 
   const restTimer = restEnabled ? restTimers[activePersonId] : null;
   const targetSeconds = restTimer?.targetSeconds || DEFAULT_REST_TARGET_SECONDS;
@@ -94,69 +128,69 @@ export default function SessionBar() {
       : `Rest ${formatRestTime(elapsed)}`;
 
   return (
-    <div className="session-bar" role="region" aria-label="Workout session">
-      <div className="session-bar-progress" style={{ width: `${progress * 100}%` }} aria-hidden="true" />
-      <div className="session-bar-row">
-        <span className="session-bar-status">
-          Session in progress
-          {session.startedAt ? ` \u00b7 started ${formatTime(session.startedAt)}` : ''}
-        </span>
-        {restTimer && (
-          <span className="session-bar-rest" role="img" aria-label={restLabel}>
-            <IconTimer size={14} />
-            <span>{formatRestTime(elapsed)}</span>
-            {overSeconds > 0 && (
-              <span className="session-bar-over">
-                {'\u00b7 \u2212'}
-                {formatRestTime(overSeconds)}
-              </span>
-            )}
+    <>
+      <div className="session-bar" role="region" aria-label="Workout session">
+        <div className="session-bar-progress" style={{ width: `${progress * 100}%` }} aria-hidden="true" />
+        <div className="session-bar-row">
+          <span className="session-bar-status">
+            Session in progress
+            {session.startedAt ? ` \u00b7 started ${formatTime(session.startedAt)}` : ''}
           </span>
-        )}
-        {/* Muted rather than the ghost variant's accent text, exactly as "End routine" is: this is a
-            relocation of the old banner's control, not a promotion of it, and an accent-coloured
-            control here would compete with "Log set" a few pixels above. */}
-        {/* Ending a workout closes someone's live session, so it follows the same rule as every
-            other write on their data. A member watching a sibling's session tick along must not be
-            able to end it. */}
-        <ReadOnlyWrap personId={activePersonId}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowEndWorkoutConfirm(true)}
-            style={{ color: 'var(--color-muted)', flexShrink: 0 }}
-          >
-            End workout
-          </Button>
-        </ReadOnlyWrap>
-      </div>
+          {restTimer && (
+            <span className="session-bar-rest" role="img" aria-label={restLabel}>
+              <IconTimer size={14} />
+              <span>{formatRestTime(elapsed)}</span>
+              {overSeconds > 0 && (
+                <span className="session-bar-over">
+                  {'\u00b7 \u2212'}
+                  {formatRestTime(overSeconds)}
+                </span>
+              )}
+            </span>
+          )}
+          {/* Muted rather than the ghost variant's accent text, exactly as "End routine" is: this is a
+              relocation of the old banner's control, not a promotion of it, and an accent-coloured
+              control here would compete with "Log set" a few pixels above. */}
+          {/* Ending a workout closes someone's live session, so it follows the same rule as every
+              other write on their data. A member watching a sibling's session tick along must not be
+              able to end it. */}
+          <ReadOnlyWrap personId={activePersonId}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowEndWorkoutConfirm(true)}
+              style={{ color: 'var(--color-muted)', flexShrink: 0 }}
+            >
+              End workout
+            </Button>
+          </ReadOnlyWrap>
+        </div>
 
-      {showEndWorkoutConfirm && (
-        <EndWorkoutConfirmModal
-          personId={activePersonId}
-          onClose={() => setShowEndWorkoutConfirm(false)}
-          onEnded={(recap) => {
-            setShowEndWorkoutConfirm(false);
-            endRoutine();
-            // Ending a workout from the exercise screen returns this person to their Log picker.
-            backToPicker();
-            refetchLiveSession();
-            // The recap is computed in the modal and handed here, rather than recomputed: by this
-            // point handleEnd has already nulled the cached liveSession, so recomputing would
-            // report an empty workout. Falls back to the plain sentence when there was nothing to
-            // report -- ending a workout with no sets in it is a real case.
-            showToast(
-              recap
-                ? `Workout ended — ${recap}.`
-                : 'Workout ended. Logging a set anytime starts a new one.',
-            );
-            // An explicit "I'm done with this session" signal -- one of the forced-reload trigger
-            // points (guarded: a no-op if the END_WORKOUT write itself, or anything else for this
-            // person, is still in flight and not yet durable). See swUpdate.js.
-            tryForceUpdate(queryClient, activePersonId);
-          }}
-        />
-      )}
-    </div>
+        {showEndWorkoutConfirm && (
+          <EndWorkoutConfirmModal
+            personId={activePersonId}
+            onClose={() => setShowEndWorkoutConfirm(false)}
+            onEnded={({ summary, reviewDue }) => {
+              setShowEndWorkoutConfirm(false);
+              endRoutine();
+              // Ending a workout from the exercise screen returns this person to their Log picker.
+              backToPicker();
+              refetchLiveSession();
+              // The numbers were counted in the modal and handed here, rather than recounted: by this
+              // point handleEnd has already nulled the cached liveSession, so recounting would report
+              // an empty workout. A workout with nothing in it (a mis-tap, every set deleted) gets no
+              // sheet -- congratulating it would be worse than the plain sentence.
+              if (summary) {
+                setWorkoutDone({ personId: activePersonId, summary, reviewDue });
+              } else {
+                showToast('Workout ended. Logging a set anytime starts a new one.');
+                tryForceUpdate(queryClient, activePersonId);
+              }
+            }}
+          />
+        )}
+      </div>
+      {doneSheet}
+    </>
   );
 }

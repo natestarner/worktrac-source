@@ -1,6 +1,6 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, setStepperPair } from './support/exercises';
 import { holdNetwork } from './support/faults';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -81,8 +81,7 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
   await expect.poll(() => heldCreate.held()).toBe(1);
 
   const heldEnd = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live\/end$/);
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+  await endWorkout(page);
   heldLiveRead.release();
 
   const createLanded = page.waitForResponse(

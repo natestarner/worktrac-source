@@ -117,6 +117,22 @@ export async function dismissPrCelebration(page: Page) {
   }
 }
 
+// Ends the active person's workout through the bar and its confirm, then closes the workout-done
+// sheet that follows.
+//
+// USE THIS RATHER THAN CLICKING "End workout" TWICE. The sheet is a Modal, so until it closes every
+// click on the page behind it is intercepted -- the same trap as the PR celebration above. Unlike
+// that one it is awaited, not checked with isVisible(): it shows for every workout with a set in
+// it, which is every caller's, and the End tap renders it synchronously. A spec ending a workout
+// with NOTHING in it gets the plain toast and no sheet, and should not use this helper.
+export async function endWorkout(page: Page) {
+  await page.getByRole('button', { name: 'End workout' }).first().click();
+  await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Workout done' });
+  await sheet.getByRole('button', { name: 'Done' }).click();
+  await expect(sheet).toBeHidden();
+}
+
 // Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so the
 // PR celebration fires each time and must be dismissed before the next set can be logged.
 //
