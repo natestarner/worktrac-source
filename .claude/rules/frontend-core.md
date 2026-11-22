@@ -529,6 +529,15 @@ each held month's fingerprint and keeps every month the server does not resend
     this). The loop stops on any scroll, tap or key, so it never fights the person. Keep it.
   - **Blocks keep `scroll-margin-top: var(--sticky-chrome-clearance)`** so a jump doesn't park the
     workout behind the tab bar.
+  - **The estimate is fitted, and in Safari its error is how far the page moves.** A block's first
+    draw swaps the estimate for its real height, and with no scroll anchoring everything below moves
+    by the difference. `blockHeightEstimate.js` counts exercises, rows of set pills (from the
+    measured pill-row width, so an iPad's wider rows count) and note/tag lines, fitted within 2px
+    in WebKit at iPhone width. The old `80 + 72 per exercise` jumped the page 12-14 times per
+    3,600px of scrolling up, up to 239px at once; the fitted one, never more than 2px. **Change a
+    History block's layout (padding, pill size, the note clamp, a new line) → re-measure and re-fit**:
+    `blockHeightEstimate.test.js` holds the measured heights, so update them from a real WebKit
+    measurement, never by hand.
 
   `history-long-list.spec.ts` pins the outcome against a year of History: only the first page is
   drawn until the list is scrolled, the style is present, and
