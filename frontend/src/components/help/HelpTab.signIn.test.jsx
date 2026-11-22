@@ -45,6 +45,9 @@ describe('HelpTab and Sign in with Apple / Google', () => {
     renderHelp();
     expect(screen.getByText('Continue with Apple or Google')).toBeInTheDocument();
     expect(screen.getByText(/never joins two logins just/)).toBeInTheDocument();
+    // The mistake the Last used mark guards against, said where people read about signing in.
+    expect(screen.getByText(/Use the same way in each time: a different one is a\s+different login/)).toBeInTheDocument();
+    expect(screen.getByText('Last used')).toBeInTheDocument();
     expect(screen.getByText(/deleting also\s+disconnects Huddle from your Apple ID/)).toBeInTheDocument();
     expect(screen.getByText(/You already have a Huddle login for this email/)).toBeInTheDocument();
   });

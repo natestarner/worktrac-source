@@ -184,7 +184,14 @@ function armApple() {
 }
 
 async function webApple() {
-  if (!appleArmed) await armApple();
+  if (!appleArmed) {
+    try {
+      await armApple();
+    } catch (error) {
+      // Apple's script never arrived (offline, a content blocker), so there is no sheet to open.
+      throw signInFailure('apple', 'script_load_failed', error);
+    }
+  }
   const nonce = appleArmed;
   appleArmed = null;
   // Called before any await on the armed path, so Safari counts it as part of the tap.
@@ -197,12 +204,11 @@ async function webApple() {
   try {
     response = await pending;
   } catch (error) {
-    // Apple's popup reports a closed window as { error: 'popup_closed_by_user' }. Anything else
-    // carries Apple's own code into the message, so a report from a phone says what happened.
+    // Apple's popup reports a closed window as { error: 'popup_closed_by_user' }. Anything else is
+    // a failure, and keeps Apple's own code (as `code`), so a report from a phone says what happened.
     const isCancel = error?.error === 'popup_closed_by_user' || error?.error === 'user_cancelled_authorize';
-    const failure = cancellation(isCancel, error);
-    if (!isCancel && error?.error) failure.message = `Sign-in failed (${error.error})`;
-    throw failure;
+    if (isCancel) throw cancellation(true, error);
+    throw signInFailure('apple', error?.error, error);
   }
   return {
     idToken: response.authorization.id_token,
@@ -239,10 +245,12 @@ async function nativeSignIn(provider, nonce) {
         : { scopes: ['email', 'profile'], nonce: nonce.hashed },
     });
   } catch (error) {
-    throw cancellation(/cancel/i.test(String(error?.message ?? error)), error);
+    if (/cancel/i.test(String(error?.message ?? error))) throw cancellation(true, error);
+    // The plugin's own code when it gives one (iOS's ASAuthorizationError, Google's), else none.
+    throw signInFailure(provider, error?.code ? String(error.code) : undefined, error);
   }
   const result = login.result ?? {};
-  if (!result.idToken) throw new Error(`${provider} returned no ID token`);
+  if (!result.idToken) throw signInFailure(provider, 'no_id_token');
   return {
     idToken: result.idToken,
     nonce: nonce.raw,
@@ -269,6 +277,35 @@ async function testProvider(nonce) {
 function cancellation(isCancel, cause) {
   const error = new Error(isCancel ? 'Sign-in cancelled' : 'Sign-in failed');
   error.cancelled = Boolean(isCancel);
+  error.cause = cause;
+  return error;
+}
+
+const PROVIDER_NAMES = { apple: 'Apple', google: 'Google', test: 'The test provider' };
+
+// What a person reads when a provider's sheet fails (not when they close it: that is a cancel, and
+// says nothing). Plain words that say what to do; the provider's own code is kept apart as `code`
+// for the screen to show small, so a support message can quote it without it being the headline.
+// Codes that tell the person something they can act on get their own sentence; everything else is
+// one honest "try again".
+const FAILURE_MESSAGES = {
+  popup_blocked_by_browser: (name) =>
+    `Your browser blocked the ${name} sign-in window. Allow pop-ups for Huddle, then try again.`,
+  script_load_failed: (name) => `Couldn't reach ${name}. Check your connection and try again.`,
+};
+
+/**
+ * A provider failure in the shape every sign-in screen shows: `message` in plain words, `code` the
+ * provider's own (or ours) for support, `signInFailure` so a caller can tell it from a server error
+ * whose message is already meant for people. Never a cancel.
+ */
+export function signInFailure(provider, code, cause) {
+  const name = PROVIDER_NAMES[provider] ?? 'The sign-in service';
+  const describe = FAILURE_MESSAGES[code];
+  const error = new Error(describe ? describe(name) : `${name} couldn't finish signing you in. Please try again.`);
+  error.cancelled = false;
+  error.signInFailure = true;
+  error.code = code || 'unknown';
   error.cause = cause;
   return error;
 }

@@ -11,7 +11,10 @@ vi.mock('../../lib/native', () => ({
   prepareSignIn: () => Promise.resolve(),
   renderGoogleButton: vi.fn(),
   signInWithProvider: vi.fn(),
+  externalLinkProps: (url) => ({ href: url, target: '_blank', rel: 'noopener noreferrer' }),
 }));
+
+const LAST_USED_KEY = 'huddle-last-sign-in-method';
 
 function apiError(status, message, code) {
   return Object.assign(new Error(message), { status, code });
@@ -27,6 +30,114 @@ describe('SocialSignIn', () => {
     signInWithProvider.mockResolvedValue(token);
     signInWithIdToken = vi.fn();
     useAuth.mockReturnValue({ signInWithIdToken });
+    localStorage.removeItem(LAST_USED_KEY);
+  });
+
+  // An Apple / Google sign-up happens on the name step, and it can be reached from the Log in page,
+  // which (unlike Register) shows no Terms of its own. The agreement sits under the button that
+  // creates the account.
+  it('shows the Terms and Privacy Policy under the button that creates the account', async () => {
+    signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
+    render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+    await screen.findByLabelText('Your name');
+
+    const create = screen.getByRole('button', { name: 'Create my household' });
+    const consent = screen.getByText(/By creating your household, you agree to our/);
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
+    expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', 'https://huddle.fitness/privacy.html');
+    // Directly after the Create button in reading order, before "Back".
+    expect(create.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(consent.compareDocumentPosition(screen.getByRole('button', { name: 'Back' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('names the account in the agreement for a Pro arrival', async () => {
+    signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
+    render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} accountNoun="Account" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+    await screen.findByLabelText('Your name');
+    expect(screen.getByText(/By creating your account, you agree to our/)).toBeInTheDocument();
+  });
+
+  describe('a provider failure', () => {
+    function providerFailure(message, code) {
+      return Object.assign(new Error(message), { cancelled: false, signInFailure: true, code });
+    }
+
+    it('reads in plain words, with the provider code small underneath for support', async () => {
+      signInWithProvider.mockRejectedValue(
+        providerFailure('Your browser blocked the Apple sign-in window. Allow pop-ups for Huddle, then try again.', 'popup_blocked_by_browser'),
+      );
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Your browser blocked the Apple sign-in window. Allow pop-ups for Huddle, then try again.');
+      expect(alert).toHaveTextContent('Error code: popup_blocked_by_browser');
+      // Never the old "Couldn't sign you in: Sign-in failed (...)" doubling.
+      expect(alert).not.toHaveTextContent("Couldn't sign you in:");
+    });
+
+    it("anything that isn't a provider failure gets one plain sentence, not a developer's message", async () => {
+      signInWithProvider.mockRejectedValue(new Error('The test identity provider is not installed'));
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("Couldn't sign you in. Please try again.");
+      expect(alert).not.toHaveTextContent('not installed');
+      expect(alert).not.toHaveTextContent('Error code');
+    });
+  });
+
+  describe('"Last used"', () => {
+    it("marks the provider this device signed in with last, without changing the button's name", () => {
+      localStorage.setItem(LAST_USED_KEY, 'apple');
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+
+      const apple = screen.getByRole('button', { name: 'Continue with Apple' });
+      expect(apple).toHaveAccessibleDescription('Last used');
+      expect(screen.getAllByTestId('provider-last-used')).toHaveLength(1);
+      expect(screen.getByRole('button', { name: 'Continue with Google' })).not.toHaveAccessibleDescription();
+    });
+
+    it('marks nothing on a device that has not signed in, or last used a password', () => {
+      const { unmount } = render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      expect(screen.queryByTestId('provider-last-used')).not.toBeInTheDocument();
+      unmount();
+
+      localStorage.setItem(LAST_USED_KEY, 'password');
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      expect(screen.queryByTestId('provider-last-used')).not.toBeInTheDocument();
+    });
+
+    it('remembers a provider the server accepted, including when a household is to be picked', async () => {
+      signInWithIdToken.mockResolvedValueOnce({ accounts: [], selectionToken: 'sel' });
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+
+      await waitFor(() => expect(localStorage.getItem(LAST_USED_KEY)).toBe('google'));
+    });
+
+    it('remembers nothing for a sign-in that failed, or a new person who has not finished', async () => {
+      signInWithIdToken.mockRejectedValueOnce(apiError(401, 'Bad token'));
+      const { unmount } = render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await screen.findByRole('alert');
+      expect(localStorage.getItem(LAST_USED_KEY)).toBeNull();
+      unmount();
+
+      signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await screen.findByLabelText('Your name');
+      expect(localStorage.getItem(LAST_USED_KEY)).toBeNull();
+    });
   });
 
   it('renders nothing where no provider is configured, so the page is unchanged', () => {
