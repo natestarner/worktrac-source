@@ -499,6 +499,18 @@ the re-seed that write triggers has fired before the next call types anything. *
   captures the pre-refetch order and fails with correct data read too early. Use
   `expect.poll(() => read()).toEqual(...)`. (`locator.count()` doesn't auto-wait either, which
   fails the same way but quieter: it reports a short or empty list rather than throwing.)
+- **In mobile WebKit, Playwright's scroll does not reach the page until the next input event.**
+  After `scrollIntoViewIfNeeded()` (or the scroll inside `click()`) the page's own
+  `getBoundingClientRect()` still reads the old position, and stays there until something is
+  pressed, which is usually the click itself. So whatever the scroll causes happens DURING the
+  press. On History that is `content-visibility: auto` blocks being drawn for the first time and
+  swapping their estimated height for their real one; Safari has no scroll anchoring, so the button
+  slid 60px between press and release, the click went to the card around it, and its handler never
+  ran (#440, 4/40 locally). To tap something far down a list in WebKit: scroll from INSIDE the page
+  (`el.scrollIntoView({ block: 'center' })`), wait for it to keep its position for a few frames
+  (`history-long-list.spec.ts`'s `holdsStill`), check it is wholly on screen, then click. Not
+  polling around a product bug: a person's tap arrives after the scroll, not with it.
+  `docs/incidents/2026-11-21-history-tap-slid-away-in-webkit.md`.
 - **Use `exact: true` with `getByText`.** Toast and confirm-dialog text embeds item names, so
   substring matches collide and throw strict-mode violations.
 - New visible UI text that repeats an existing name (e.g. a link containing an exercise name) can

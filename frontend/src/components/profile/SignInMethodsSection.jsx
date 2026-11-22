@@ -114,7 +114,7 @@ export default function SignInMethodsSection() {
                 verb="Connect"
                 disabled={!online || pending}
                 onToken={connect}
-                onError={() => showToast("Couldn't reach the sign-in service. Try again.")}
+                onError={(err) => showToast(err?.signInFailure ? err.message : "Couldn't reach the sign-in service. Try again.")}
               />
             </OfflineDisabledWrap>
           </div>

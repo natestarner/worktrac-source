@@ -283,7 +283,10 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   an unfinished transaction stays in the store's queue until a later sync finishes it.
 # 77 with lib/native/purchases.js#onPurchaseIntent (+1): removing the App Store purchase-request
 #   listener during teardown failed. Nothing is lost: the plugin keeps an undelivered request.
-EXPECTED_LIB_SWALLOWS=77
+# 79 with lib/lastSignInMethod.js's read and write (+2): storage refused (private mode, a full
+#   quota) for the sign-in screens' "Last used" hint. Nothing is lost: the hint is simply not
+#   shown, and signing in must never fail over a hint.
+EXPECTED_LIB_SWALLOWS=79
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

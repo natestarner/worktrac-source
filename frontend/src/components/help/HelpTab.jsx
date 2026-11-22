@@ -143,7 +143,9 @@ export default function HelpTab() {
             is no password to choose and no code to type: Huddle asks your name and creates the
             household. If you already have a Huddle login with that email, sign in with your password
             first and connect {signInNames} from <T>Profile</T>. Huddle never joins two logins just
-            because their emails match.
+            because their emails match. Use the same way in each time: a different one is a
+            different login, with its own household. The button this device used last is marked{' '}
+            <T>Last used</T>.
           </p>
         )}
         <p>
@@ -1486,6 +1488,15 @@ export default function HelpTab() {
                   `Sign in with your password, then connect ${signInNames} in Profile. Huddle never links them on its own.`,
                 ]]
               : []),
+            [
+              // Huddle emails the login whenever its password changes or a sign-in method is
+              // connected or disconnected (backend SecurityNoticeEvent). Stated here because this
+              // is where somebody looks when that email describes a change they did not make.
+              'An email says your password or sign-in changed, and it wasn’t you',
+              signInNames
+                ? `Use “Forgot password” on the login screen, which signs out every device. If the email says ${signInNames} was connected, sign in and disconnect it in Profile → Sign in with first.`
+                : 'Use “Forgot password” on the login screen. Resetting signs out every device.',
+            ],
             [
               'Too many wrong passwords',
               'Sign-in locks for about 15 minutes. It lifts on its own, or use “Forgot password”, which gets you straight back in.',

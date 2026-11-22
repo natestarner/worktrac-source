@@ -245,6 +245,58 @@ test.describe('sign in with Apple or Google', () => {
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeEnabled();
   });
+
+  // A new account can be created from the LOG IN page (the name step), which shows no Terms of its
+  // own. The agreement sits under the button that creates it, and the links work.
+  test('a sign-up that starts on Log in shows the Terms beside the button that creates the account', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await expect(page.getByLabel('Your name')).toBeVisible();
+
+    await expect(page.getByText('By creating your household, you agree to our', { exact: false })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Terms', exact: true })).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
+    await expect(page.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', 'https://huddle.fitness/privacy.html');
+  });
+
+  // Register already has its own line under both ways in; during the name step only one may show.
+  test('Register shows one agreement during the name step, not two', async ({ page }) => {
+    await page.goto('/register');
+    await expect(page.getByText(/you agree to our/)).toHaveCount(1);
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    // Not "Your name": Register's own password form has a field by that name, so waiting on it
+    // passes before the name step exists (that made this test vacuous on its first run).
+    await expect(page.getByRole('heading', { name: 'Welcome to Huddle' })).toBeVisible();
+    await expect(page.getByText(/you agree to our/)).toHaveCount(1);
+    await expect(page.getByText('By creating your household, you agree to our', { exact: false })).toBeVisible();
+  });
+
+  // An Apple "Hide My Email" relay address matches nothing else, so tapping the OTHER provider next
+  // time makes a second, empty household. "Last used" points back at the right button, and a
+  // password sign-in takes the mark away.
+  test('"Last used" marks the provider this device signed in with, until a password sign-in', async ({ page, request }) => {
+    const badge = page.getByTestId('provider-last-used');
+
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
+    await expect(badge).toHaveCount(0);
+
+    await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    await page.getByLabel('Your name').fill('Avery');
+    await page.getByRole('button', { name: 'Create my household' }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await logout(page);
+
+    // The mark is on the button the person used, and the button keeps its name.
+    await expect(badge).toHaveText('Last used');
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toHaveAccessibleDescription('Last used');
+
+    // A password sign-in on this device (a password registration here) replaces it.
+    await registerHousehold(page, request, 'Blake');
+    await logout(page);
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
+    await expect(badge).toHaveCount(0);
+  });
 });
 
 // The bug fixed alongside this feature: a wrong password in Delete account used to sign the person

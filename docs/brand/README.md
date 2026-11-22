@@ -18,6 +18,7 @@ this repo at `../logo/v3/` relative to the repo root (i.e. beside `worktrac-sour
 | Ink on dark | `#F2EDE1` | Wordmark |
 | Hairline | `#BDB6AF` | Cream circle outline, **light grounds only** |
 | Dark surface | `#14100E` | |
+| Icon tile | `#4A4642` → `#2F2D2B` | **Not in the kit.** The home-screen icon's charcoal ground (2026-11-22), a slight top-to-bottom gradient; see below |
 
 Clear space on all sides is the large orange circle's radius (34 units on the mark's 200-unit
 canvas, ~17% of the mark's width). Minimum sizes: horizontal lockup 120px wide, vertical lockup
@@ -46,16 +47,30 @@ dark mode and dissolve the circle into the pill.
 |---|---|---|
 | `frontend/public/icon.svg`, `marketing/assets/icon.svg` | **merged by hand** from `white/huddle-icon-light-bg.svg` + `dark/huddle-icon-dark-bg.svg` | **Yes** — internal `@media`; tile and hairline switch |
 | `favicon.ico`, `favicon-{16,32,48}.png` | `white/` | No — one file |
-| `apple-touch-icon.png`, `icon-{192,512}.png`, `icon-maskable-{192,512}.png` | `white/` | No — one file |
+| `apple-touch-icon.png`, `icon-{192,512}.png`, `icon-maskable-{192,512}.png` (frontend only), and the iOS `AppIcon-1024.png` / `AppIcon-1024-dark.png` | **`e2e/tools/app-icons.mjs`**: the kit's geometry on the charcoal icon tile (below) | No — one file (iOS light and dark are deliberately the same image) |
 | `frontend/public/og-image.png` | **`dark/`** | No — a white card disappears against a white feed. (The marketing site's link preview is not from the kit: `e2e/tools/marketing-demo-shots.mjs` builds it from a product capture, `docs/marketing-site.md`) |
 | `frontend/src/assets/huddle-lockup-*.svg` | `transparent/`, **canvas cropped** — see below | **Yes** — `<picture>` + `media` picks onlight/ondark; `/login` draws the vertical one inline, animated (below) |
 | `frontend/public/email/logo.png` | `transparent/huddle-lockup-horizontal-ondark.png` | No — see the email note below |
 
 The surfaces marked "No" have no variant mechanism at all: a `.ico`, an `apple-touch-icon`, a PWA
-icon, the manifest's single `theme_color`, and `og:image` are one file each. They take the white
-tile (dark for `og-image`) and that is the end of it. The per-scheme answer for browser chrome
-lives in `frontend/index.html`'s **paired** `<meta name="theme-color">` tags, which is the only
-place it can.
+icon, the manifest's single `theme_color`, and `og:image` are one file each. The favicons take the
+white tile, `og-image` the dark one, and the home-screen icons the charcoal tile (below). The
+per-scheme answer for browser chrome lives in `frontend/index.html`'s **paired**
+`<meta name="theme-color">` tags, which is the only place it can.
+
+### The home-screen icon is charcoal, not the kit's white tile (2026-11-22)
+
+Nate compared white, cream, charcoal and the kit's near-black side by side in App Store search
+results and on the product page, in light and dark mode. Charcoal won: in search it reads as one
+set with the charcoal App Store screenshots, the white tile all but vanished on the white store
+page, and it suits both appearances, so iOS's dark icon is the same image. The tile is a slight
+gradient, `#4A4642` → `#2F2D2B`, narrower than the screenshots' ground because a full-strength one
+goes muddy at icon size. The mark is untouched and, on this dark ground, has no hairline (rule 2).
+
+It covers the iOS app icon and the web app's home-screen icons (`apple-touch-icon`, the PWA's
+192/512 and maskable). **Deliberately unchanged:** the browser-tab favicons and `icon.svg`, which
+already follow the viewer's theme, and the marketing site's icons. Regenerate with
+`node e2e/tools/app-icons.mjs`; never edit the PNGs by hand.
 
 There is no in-app theme toggle. `prefers-color-scheme` is the single source of truth, read three
 ways that stay in sync for free: CSS `@media` blocks, `<picture>`'s `media` attribute, and those

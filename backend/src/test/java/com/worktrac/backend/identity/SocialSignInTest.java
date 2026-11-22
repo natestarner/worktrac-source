@@ -11,6 +11,7 @@ import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
@@ -42,6 +43,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -564,6 +568,96 @@ class SocialSignInTest extends AbstractIntegrationTest {
         @Test
         void somethingNotConnectedIs404() throws Exception {
             disconnect(registerWithPassword(unique("pw") + "@example.com")).andExpect(status().isNotFound());
+        }
+    }
+
+    // ── the login's owner is told ──────────────────────────────────────────────────────────────
+
+    /**
+     * A stolen session can connect its own Google account, or disconnect the real one. The owner of
+     * the login is emailed either way, at the login's own address, so a change they did not make is
+     * noticed (user.SecurityNoticeEvent).
+     */
+    @Nested
+    @DisplayName("security notices")
+    class SecurityNotices {
+
+        private boolean isNotice(SecurityNoticeEvent event, String email, SecurityNoticeEvent.Kind kind) {
+            return event != null && event.email().equals(email) && event.kind() == kind
+                    && "Test".equals(event.providerName())
+                    // The real clock runs here, so "now", give or take the test's own duration.
+                    && Math.abs(event.occurredAtMillis() - clock.instant().toEpochMilli()) < 60_000;
+        }
+
+        @Test
+        void connectingEmailsTheLoginItWasConnectedTo() throws Exception {
+            String email = unique("pw") + "@example.com";
+            String session = registerWithPassword(email);
+            String nonce = newNonce();
+
+            // The provider's own email differs; the notice goes to the LOGIN's address.
+            connect(session, idToken(unique("sub"), unique("other") + "@gmail.com", true, nonce), nonce)
+                    .andExpect(status().isOk());
+
+            verify(emailService, timeout(2000)).sendSecurityNotice(
+                    argThat(e -> isNotice(e, email, SecurityNoticeEvent.Kind.SIGN_IN_CONNECTED)));
+        }
+
+        // The idempotent repeat changed nothing, so it says nothing.
+        @Test
+        void connectingTheSameIdentityAgainSendsNoSecondNotice() throws Exception {
+            String email = unique("pw") + "@example.com";
+            String session = registerWithPassword(email);
+            String subject = unique("sub");
+            String n1 = newNonce();
+            String n2 = newNonce();
+            connect(session, idToken(subject, "a@example.com", true, n1), n1).andExpect(status().isOk());
+            connect(session, idToken(subject, "a@example.com", true, n2), n2).andExpect(status().isOk());
+
+            EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+            verify(emailService, times(1)).sendSecurityNotice(
+                    argThat(e -> isNotice(e, email, SecurityNoticeEvent.Kind.SIGN_IN_CONNECTED)));
+        }
+
+        // A refused connect rolls back, and the notice rolls back with it (the outbox row is
+        // written inside the same transaction).
+        @Test
+        void aRefusedConnectSendsNothing() throws Exception {
+            String subject = unique("sub");
+            signUp(subject, unique("first") + "@example.com");
+            String email = unique("second") + "@example.com";
+            String session = registerWithPassword(email);
+            String nonce = newNonce();
+
+            connect(session, idToken(subject, "x@example.com", true, nonce), nonce).andExpect(status().isConflict());
+
+            EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+            verify(emailService, never()).sendSecurityNotice(argThat(e -> e != null && e.email().equals(email)));
+        }
+
+        @Test
+        void disconnectingEmailsTheLogin() throws Exception {
+            String email = unique("pw") + "@example.com";
+            String session = registerWithPassword(email);
+            String nonce = newNonce();
+            connect(session, idToken(unique("sub"), "x@example.com", true, nonce), nonce).andExpect(status().isOk());
+
+            disconnect(session).andExpect(status().isOk());
+
+            verify(emailService, timeout(2000)).sendSecurityNotice(
+                    argThat(e -> isNotice(e, email, SecurityNoticeEvent.Kind.SIGN_IN_DISCONNECTED)));
+        }
+
+        // Refused (the only way in), so nothing changed and nothing is said.
+        @Test
+        void aRefusedDisconnectSendsNothing() throws Exception {
+            String email = unique("nopw") + "@example.com";
+            String session = signUp(unique("sub"), email);
+
+            disconnect(session).andExpect(status().isConflict());
+
+            EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+            verify(emailService, never()).sendSecurityNotice(argThat(e -> e != null && e.email().equals(email)));
         }
     }
 

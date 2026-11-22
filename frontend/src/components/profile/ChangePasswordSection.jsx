@@ -265,7 +265,7 @@ function SetPasswordModal({ providers, onClose, onSet, setFirstPassword }) {
           verb="Confirm with"
           disabled={!online || pending || !ready}
           onToken={confirmAndSet}
-          onError={() => setLocalError("Couldn't reach the sign-in service. Try again.")}
+          onError={(err) => setLocalError(err?.signInFailure ? err.message : "Couldn't reach the sign-in service. Try again.")}
         />
       </div>
       <button type="button" onClick={onClose} style={{ ...secondaryButtonStyle, width: '100%', marginTop: 'var(--space-3)' }}>

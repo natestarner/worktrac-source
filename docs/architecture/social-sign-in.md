@@ -178,6 +178,18 @@ the sign-up step.
   full-screen "Signing you in…" overlay with the Huddle mark breathing now covers it, adds "Still
   working" after 5s, and offers "Start over" after 60s. The rules that keep it from ever trapping
   anyone are in `.claude/rules/social-sign-in.md`.
+- **Trust details on the sign-in screens (2026-11-21).** Three things well-run sign-in screens do,
+  added together:
+  - *The agreement where the account is made.* An Apple / Google sign-up is created on the name
+    step, which can be reached from Log in, and Log in showed no Terms. The step now carries "By
+    creating your household, you agree to our Terms and Privacy Policy" under its Create button.
+  - *Failures in plain words.* A blocked Apple pop-up read "Couldn't sign you in: Sign-in failed
+    (popup_blocked_by_browser)". It now says what to do ("Your browser blocked the Apple sign-in
+    window. Allow pop-ups for Huddle, then try again"), with the code small underneath for support.
+  - *"Last used" on the button this device signed in with.* Slack, Notion and Figma do this to
+    stop duplicate accounts, and Huddle has a sharper reason: an Apple "Hide My Email" address
+    matches nothing, so the other provider makes a second, empty household. The handbook says to
+    use the same way in each time.
 - **Buttons:** the Apple button follows Apple's design rules (black or white, the official
   wording, at least as prominent as Google). Shown on Login, Register, and Profile → Sign-in
   methods.
@@ -347,3 +359,12 @@ that has no password.
    or allow it once linked?
 4. **Who can use it**: everyone, or Pro only like member logins? Recommendation: everyone. It's a
    way to sign in, not a feature to sell.
+
+## Security notices (2026-11-22)
+
+A login is emailed whenever its way in changes: Apple or Google connected or disconnected, Apple
+sign-in turned off from the Apple ID side, and (beyond sign-in proper) a password changed or added.
+This is what Google, Apple and banks do, and it is the only way somebody learns about a change made
+from a stolen session. The emails say what changed, when, and what to do; a connection's remedy is
+to disconnect it, because a password reset would leave somebody else's account able to sign straight
+back in. Rules: `.claude/rules/registration-and-email.md`, "Security notices".
