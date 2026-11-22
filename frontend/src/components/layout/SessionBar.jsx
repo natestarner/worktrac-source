@@ -97,7 +97,9 @@ export default function SessionBar() {
   // and the sheet is what follows it. Modal portals onto document.body, so its place in this tree
   // draws nothing -- but it keeps ONE place in it (the fragment's second child, bar or no bar), so
   // the bar coming or going under it can never remount the sheet and drop its state.
-  const doneSheet = workoutDone && <WorkoutDoneSheet summary={workoutDone.summary} onClose={closeWorkoutDone} />;
+  const doneSheet = workoutDone && (
+    <WorkoutDoneSheet personId={workoutDone.personId} summary={workoutDone.summary} onClose={closeWorkoutDone} />
+  );
 
   if (!visible) {
     return (

@@ -8,6 +8,8 @@ import Button from './Button';
 import Modal from './Modal';
 import OfflineDisabledWrap from './OfflineDisabledWrap';
 import SectionLabel from './SectionLabel';
+import { declineHouseholdAsk, isHouseholdAskDeclined } from '../../lib/householdAsk';
+import { accountVocab } from '../../utils/accountVocab';
 
 // What "End workout" leads to: the workout's numbers, and -- while the household is one person --
 // the one question that matters most to a new account, "who else trains with you?". It replaced a
@@ -41,23 +43,36 @@ import SectionLabel from './SectionLabel';
 const SHEET_MAX_WIDTH = 420;
 const DIALOG_WIDTH = 360;
 
-export default function WorkoutDoneSheet({ summary, onClose }) {
+export default function WorkoutDoneSheet({ personId, summary, onClose }) {
   const compact = useMediaQuery('(max-width: 599px)');
-  const { people } = useAuth();
+  const { people, account } = useAuth();
   const { isMember } = useAccountAccess();
   const [addingPerson, setAddingPerson] = useState(false);
   const tiles = sessionRecapTiles(summary) ?? [];
+  const householdSize = people?.length ?? 0;
+  const vocab = accountVocab(account?.vocab);
 
-  // Only while the household is one person, and only for whoever can add one: MANAGE_PEOPLE is
-  // owner-only, and a member has no path to it (PersonPillBar hides its button for the same
-  // reason). Once a second person exists the question has been answered.
-  const askForPerson = !isMember && (people?.length ?? 0) === 1;
+  // Only while the household is one person, only for whoever can add one (MANAGE_PEOPLE is
+  // owner-only, and PersonPillBar hides its button from a member for the same reason), and only
+  // until it has been answered. A second person answers it; so does "It's just me", which is
+  // remembered -- without it, someone who trains alone was asked after every workout, forever.
+  const askForPerson = !isMember && householdSize === 1 && !isHouseholdAskDeclined(account?.id);
+
+  // On a shared device the sheet says whose workout it was, the same way "Log set for Sam" does --
+  // and, like that button, only once there is more than one person to tell apart. The title stays
+  // "Workout done" at its start either way.
+  const personName = householdSize > 1 ? people.find((p) => p.id === personId)?.name : null;
+
+  function justMe() {
+    declineHouseholdAsk(account?.id);
+    onClose();
+  }
 
   if (addingPerson) return <AddPersonModal onClose={onClose} />;
 
   return (
     <Modal
-      title="Workout done"
+      title={personName ? `Workout done for ${personName}` : 'Workout done'}
       onClose={onClose}
       align={compact ? 'bottom' : 'center'}
       width={compact ? SHEET_MAX_WIDTH : DIALOG_WIDTH}
@@ -87,13 +102,19 @@ export default function WorkoutDoneSheet({ summary, onClose }) {
         <div style={{ marginBottom: 'var(--space-5)' }}>
           <SectionLabel style={{ marginBottom: 'var(--space-2)' }}>Who else trains with you?</SectionLabel>
           <p style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
-            Add them to your household. Everyone’s numbers stay separate, and you switch with one tap.
+            Add them to your {vocab.account}. Everyone’s numbers stay separate, and you switch with one
+            tap.
           </p>
           <OfflineDisabledWrap message="Adding a person needs a connection.">
             <Button variant="primary" size="lg" fullWidth onClick={() => setAddingPerson(true)}>
               Add a person
             </Button>
           </OfflineDisabledWrap>
+          {/* The other answer to the question, and the one that makes it stop. Not offline-gated:
+              it writes only to this device. */}
+          <Button variant="ghost" fullWidth onClick={justMe} style={{ marginTop: 'var(--space-2)' }}>
+            It’s just me
+          </Button>
         </div>
       )}
 

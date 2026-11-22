@@ -67,7 +67,9 @@ beforeEach(() => {
   useLiveSession.mockReturnValue({ session: liveSession, refetch: vi.fn() });
   useRestTimerPreference.mockReturnValue([true, vi.fn()]);
   useSessionRecap.mockReturnValue({ exerciseCount: 3, setCount: 12, startedAt: liveSession.startedAt });
-  useAuth.mockReturnValue({ people: [{ id: 7 }], refreshPeople: vi.fn() });
+  useAuth.mockReturnValue({ people: [{ id: 7 }], account: { id: 1 }, refreshPeople: vi.fn() });
+  // The household ask's "It's just me" answer is remembered per account on the device.
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -320,14 +322,42 @@ describe('SessionBar end workout', () => {
     expect(sheet.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
   });
 
-  it('does not ask once the household has a second person', async () => {
-    useAuth.mockReturnValue({ people: [{ id: 7 }, { id: 8 }] });
+  // A shared device says whose workout it was, as "Log set for Sam" does -- and the question has
+  // been answered, so it is not asked.
+  it('names the person, and does not ask, once the household has a second person', async () => {
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Sam' }, { id: 8, name: 'Alex' }], account: { id: 1 } });
+    render(<SessionBar />);
+    await endTheWorkout();
+
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done for Sam' }));
+    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+  });
+
+  // Without an answer that sticks, someone who trains alone was asked after every workout.
+  it('stops asking once the answer is "It’s just me", and closes the sheet like Done', async () => {
+    const { unmount } = render(<SessionBar />);
+    await endTheWorkout();
+    fireEvent.click(await screen.findByRole('button', { name: 'It’s just me' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+    expect(tryForceUpdate).toHaveBeenCalledTimes(1);
+    unmount();
+
+    render(<SessionBar />);
+    await endTheWorkout();
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
+  });
+
+  // The question's nouns are the plan's: a trainer's account is a practice, not a household.
+  it('uses the account’s own word for the household', async () => {
+    useAuth.mockReturnValue({ people: [{ id: 7 }], account: { id: 1, vocab: { account: 'practice' } } });
     render(<SessionBar />);
     await endTheWorkout();
 
     const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
-    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
-    expect(sheet.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    expect(sheet.getByText(/Add them to your practice\./)).toBeInTheDocument();
   });
 
   // Adding a person swaps the sheet for the add-person dialog rather than stacking a second
