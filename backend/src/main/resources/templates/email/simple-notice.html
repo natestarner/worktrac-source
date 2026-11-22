@@ -26,9 +26,11 @@
 <body bgcolor="#EDE7DA">
 
 <!--
-  One template for the three membership notices: joined a household, an invite was accepted, a
-  login was removed. They differ only in heading, body and the label on one button, so they share
-  a shape rather than each carrying its own near-identical copy of this markup.
+  One template for the plain notices: the three membership ones (joined a household, an invite was
+  accepted, a login was removed) and the security ones (a password changed or added, Apple / Google
+  connected or disconnected -- EmailService.sendSecurityNotice). They differ only in heading, body
+  and the label on one button, so they share a shape rather than each carrying its own
+  near-identical copy of this markup.
 
   {{BODY}} is inserted as HTML because two of the three callers need a paragraph break in it. That
   makes escaping the CALLER's job, not this template's -- every one of them runs person, household

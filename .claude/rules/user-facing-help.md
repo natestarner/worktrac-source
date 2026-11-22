@@ -28,6 +28,8 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/account/**"
   - "frontend/src/context/**"
   - "frontend/src/components/profile/**"
+  # The security notices' remedies, which the handbook's troubleshooting table repeats.
+  - "backend/src/main/java/com/worktrac/backend/email/EmailService.java"
 ---
 
 # The end-user handbook states these rules as fact
@@ -71,6 +73,7 @@ that isn't one.
 | **in the App Store app only**: the phone says when the rest bar fills even when locked or in another app, and the screen stays on mid-workout | `hooks/useRestNotifications.js`, `lib/native/notifications.js`, `lib/native/keepAwake.js`, `SessionBar.jsx`'s keep-awake effect. App-only copy, pinned in `HelpTab.native.test.jsx` |
 | **on the web**: an iPhone or iPad can get Huddle from the App Store (linked), and any other device uses Add to Home Screen. The link is `/me`'s `client.appStoreUrl`, so with `NATIVE_APP_STORE_URL` unset the page offers only Add to Home Screen | `NativeAppProperties`, `ClientConfigDto`, the `NATIVE_APP_STORE_URL` env var. Pinned in `HelpTab.native.test.jsx` and `help.spec.ts` |
 | **where Sign in with Apple / Google is offered** (and ONLY there, from config.json's `socialSignIn`): Continue with Apple/Google creates a household with no password or code; an existing email must sign in with its password and connect from Profile (never auto-linked); deleting confirms with the provider (with Apple whenever Apple is connected, since it disconnects the Apple ID); Profile → Sign in with connects/disconnects, and disconnecting signs out every other device; Set a password | `SocialSignInService` (the existing-email refusal), `AccountDeletionService` / `ReconfirmationService` (what deletion asks for), `SocialSignInService.disconnect` (`token_version`), `lib/native/socialSignIn.js#availableSignInProviders` (where it is shown). Pinned in `HelpTab.signIn.test.jsx` |
+| **that Huddle emails you when your password or sign-in changes, and what to do if it wasn't you** (Forgot password; disconnect a connected Apple / Google first) | `user/SecurityNoticeEvent.java` (which changes are announced), `EmailService.sendSecurityNotice` (the remedies). Pinned in `HelpTab.signIn.test.jsx` |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.

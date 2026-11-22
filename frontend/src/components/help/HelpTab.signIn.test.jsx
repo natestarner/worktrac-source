@@ -47,6 +47,17 @@ describe('HelpTab and Sign in with Apple / Google', () => {
     expect(screen.getByText(/never joins two logins just/)).toBeInTheDocument();
     expect(screen.getByText(/deleting also\s+disconnects Huddle from your Apple ID/)).toBeInTheDocument();
     expect(screen.getByText(/You already have a Huddle login for this email/)).toBeInTheDocument();
+    // The security notice's remedy: a connection must be disconnected, not just reset around.
+    expect(screen.getByText(/If the email says Apple or Google was connected, sign in and disconnect it/))
+      .toBeInTheDocument();
+  });
+
+  // Huddle emails a login whenever its password or sign-in changes; the handbook says what to do
+  // when that email describes a change somebody did not make, with or without Apple / Google.
+  it('says what to do about a security email you did not expect', () => {
+    renderHelp();
+    expect(screen.getByText(/An email says your password or sign-in changed/)).toBeInTheDocument();
+    expect(screen.getByText(/Resetting signs out every device/)).toBeInTheDocument();
   });
 
   // The e2e stand-in must never be named to a reader, even where its hook is installed.

@@ -14,11 +14,13 @@ import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.ratelimit.LoginRateLimiter;
 import com.worktrac.backend.user.AuthService;
 import com.worktrac.backend.user.RegistrationService;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import com.worktrac.backend.user.dto.AuthResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,13 +65,14 @@ public class SocialSignInService {
     private final AdminProperties adminProperties;
     private final LoginRateLimiter loginRateLimiter;
     private final AccountAccessService accountAccessService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public SocialSignInService(IdTokenVerifier verifier, UserIdentityRepository identityRepository,
                                UserRepository userRepository, AuthService authService,
                                RegistrationService registrationService, AdminProperties adminProperties,
                                LoginRateLimiter loginRateLimiter, AccountAccessService accountAccessService,
-                               Clock clock) {
+                               ApplicationEventPublisher eventPublisher, Clock clock) {
         this.verifier = verifier;
         this.identityRepository = identityRepository;
         this.userRepository = userRepository;
@@ -78,6 +81,7 @@ public class SocialSignInService {
         this.adminProperties = adminProperties;
         this.loginRateLimiter = loginRateLimiter;
         this.accountAccessService = accountAccessService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -208,6 +212,10 @@ public class SocialSignInService {
 
         identityRepository.save(new UserIdentity(user, provider, identity.subject(), identity.email(), clock.instant()));
         log.info("{} connected to user {}", provider, userId);
+        // Not on the idempotent "already connected" return above: nothing changed there. Inside this
+        // transaction, so the notice commits or rolls back with the connection.
+        eventPublisher.publishEvent(SecurityNoticeEvent.of(
+                user.getEmail(), SecurityNoticeEvent.Kind.SIGN_IN_CONNECTED, provider.displayName(), clock.instant()));
         return methods(userId);
     }
 
@@ -240,6 +248,8 @@ public class SocialSignInService {
         userRepository.save(user);
         accountAccessService.invalidateUser(userId);
         log.info("{} disconnected from user {}", provider, userId);
+        eventPublisher.publishEvent(SecurityNoticeEvent.of(
+                user.getEmail(), SecurityNoticeEvent.Kind.SIGN_IN_DISCONNECTED, provider.displayName(), clock.instant()));
         // The version just MINTED -- see PasswordChangeService.changePassword for why.
         return authService.startSession(userId, user.getTokenVersion(), accountId);
     }

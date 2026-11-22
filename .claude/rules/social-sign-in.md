@@ -78,6 +78,14 @@ unknown key id, RS256 only, `alg: none` refused). Never hand-write signature or 
   attaching their own Google account to a member's login could sign in as that member.
   `MANAGE_OWN_SIGN_IN_METHODS` is held by every role for the same reason `CHANGE_OWN_PASSWORD` is.
 
+## Connecting and disconnecting email the login
+
+`SocialSignInService.connect` / `disconnect` and `AppleNotificationService`'s consent-revoked /
+account-delete publish a `user.SecurityNoticeEvent`, on the success path only (never the idempotent
+"already connected" return, never a refusal). The rules for those emails, including why a
+connection's remedy is "disconnect it" rather than "reset your password", are in
+`registration-and-email.md`, "Security notices".
+
 ## Disconnecting bumps `token_version`
 
 The usual reason to disconnect is suspecting compromise, so every session ends and the response is a

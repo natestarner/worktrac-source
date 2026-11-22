@@ -11,6 +11,7 @@ import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
 import com.worktrac.backend.user.PasswordResetConfirmedEvent;
 import com.worktrac.backend.user.RegistrationConfirmedEvent;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.VerificationCodeIssuedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,7 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
     static final String MEMBER_JOINED = "email.member-joined";
     static final String MEMBER_ACCEPTED_OWNER = "email.member-accepted-owner";
     static final String MEMBER_REVOKED = "email.member-revoked";
+    static final String SECURITY_NOTICE = "email.security-notice";
 
     private final EmailService emailService;
     private final RegistrationAuditService auditService;
@@ -120,6 +122,18 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
         outbox.enqueue(MEMBER_REVOKED, event);
     }
 
+    /**
+     * A password was changed or added, or Apple / Google was connected or disconnected.
+     *
+     * <p>⚠️ A security control rather than a courtesy, like the revoke notice: it is how somebody
+     * notices a change they did not make. Enqueued inside the transaction that made the change, so
+     * a change that rolls back sends nothing.
+     */
+    @EventListener
+    public void onSecurityNotice(SecurityNoticeEvent event) {
+        outbox.enqueue(SECURITY_NOTICE, event);
+    }
+
     @Override
     public List<OutboxHandler<?>> outboxHandlers() {
         return List.of(
@@ -159,7 +173,11 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
                         e -> emailService.sendLoginRevoked(e.memberEmail(), e.accountName(), e.ownerName(),
                                 e.wasOnlyAnInvitation()),
                         RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
-                        RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED, "login revoked"));
+                        RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED, "login revoked"),
+                email(SECURITY_NOTICE, SecurityNoticeEvent.class, SecurityNoticeEvent::email,
+                        emailService::sendSecurityNotice,
+                        RegistrationEventType.SECURITY_NOTICE_EMAIL_SENT,
+                        RegistrationEventType.SECURITY_NOTICE_EMAIL_FAILED, "security notice"));
     }
 
     // The common shape of every handler above: the send's own failure propagates (so the outbox

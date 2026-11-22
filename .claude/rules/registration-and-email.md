@@ -93,6 +93,37 @@ This whole section exists because a real registration vanished with zero trace. 
 **General rule:** an async dispatch mechanism must never have a code path where "the task didn't
 run" and "the task ran and nothing went wrong" are indistinguishable from the outside.
 
+## Security notices: the login is told whenever its way in changes
+
+`user.SecurityNoticeEvent` → `EmailService.sendSecurityNotice`, through the same outbox and
+`RegistrationEmailEventListener` as every other email (`email.security-notice`). Sent for: a
+password changed (`PasswordChangeService.changePassword`), a first password added
+(`setInitialPassword`), Apple / Google connected or disconnected (`SocialSignInService`), and Apple
+sign-in turned off from Apple's side (`AppleNotificationService`). The pattern Google, Apple and
+banks use, so a change somebody did not make gets noticed.
+
+- **⚠️ Published only on the success path, inside the change's own transaction.** So a refused
+  change sends nothing — and that matters most on `changePassword`, whose wrong-password branch
+  COMMITS (`noRollbackFor`, for the attempt count): a notice published before the check would go
+  out for every guess. The idempotent "already connected" return publishes nothing either.
+  `ChangePasswordTest#aWrongCurrentPasswordEmailsNothing` and
+  `SocialSignInTest$SecurityNotices#connectingTheSameIdentityAgainSendsNoSecondNotice` were both
+  verified red by moving the publish.
+- **⚠️ The remedy differs by kind, and the connect one is not "reset your password".** A reset
+  would leave somebody else's connected account able to sign straight back in, so a connection says
+  to disconnect it (which also signs every other device out), then change the password. Every other
+  kind points at Forgot password, which works for any login, including one with no password.
+  `EmailServiceSecurityNoticeTest` pins each wording.
+- **Apple turning sign-in off carries `stillHasWayIn`.** When Apple was the last way in, the email
+  is the only place that says how to get back (a reset). Verified red by hard-coding it.
+- **Deliberately plain:** what changed, when (in UTC, since the server does not know the reader's
+  zone), and what to do. No device, no location, and no link but "Open Huddle" — a security email
+  carrying a sign-in link is the shape phishing copies.
+- `SECURITY_NOTICE_EMAIL_FAILED` is in `ALERTABLE`: the reader may be the one locked out, so a
+  notice that never went out must reach a person.
+- The event carries its time as epoch millis, not an `Instant`: the outbox's ObjectMapper has no
+  java.time module.
+
 ## Two levels of email truth — never conflate
 
 1. **Send accepted** — `EmailService.send` inspects ACS's `EmailSendResult.getStatus()`/
