@@ -1489,6 +1489,15 @@ export default function HelpTab() {
                 ]]
               : []),
             [
+              // Huddle emails the login whenever its password changes or a sign-in method is
+              // connected or disconnected (backend SecurityNoticeEvent). Stated here because this
+              // is where somebody looks when that email describes a change they did not make.
+              'An email says your password or sign-in changed, and it wasn’t you',
+              signInNames
+                ? `Use “Forgot password” on the login screen, which signs out every device. If the email says ${signInNames} was connected, sign in and disconnect it in Profile → Sign in with first.`
+                : 'Use “Forgot password” on the login screen. Resetting signs out every device.',
+            ],
+            [
               'Too many wrong passwords',
               'Sign-in locks for about 15 minutes. It lifts on its own, or use “Forgot password”, which gets you straight back in.',
             ],

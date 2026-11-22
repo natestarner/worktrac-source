@@ -11,6 +11,7 @@ import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.identity.ReconfirmationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,16 +52,19 @@ public class PasswordChangeService {
     private final AccountAccessService accountAccessService;
     private final AuthService authService;
     private final ReconfirmationService reconfirmationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public PasswordChangeService(UserRepository userRepository, PasswordEncoder passwordEncoder,
                                   AccountAccessService accountAccessService, AuthService authService,
-                                  ReconfirmationService reconfirmationService, Clock clock) {
+                                  ReconfirmationService reconfirmationService,
+                                  ApplicationEventPublisher eventPublisher, Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.accountAccessService = accountAccessService;
         this.authService = authService;
         this.reconfirmationService = reconfirmationService;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -142,6 +146,9 @@ public class PasswordChangeService {
         accountAccessService.invalidateUser(user.getId());
 
         log.info("Password changed for user {}", userId);
+        // Inside this transaction, so the notice commits or rolls back with the change itself.
+        eventPublisher.publishEvent(SecurityNoticeEvent.of(
+                user.getEmail(), SecurityNoticeEvent.Kind.PASSWORD_CHANGED, null, now));
         // The token version this caller just MINTED, not the one the request arrived with -- that
         // one is now deliberately stale and startSession would (correctly) refuse it, signing the
         // person out as a direct result of succeeding.
@@ -181,6 +188,8 @@ public class PasswordChangeService {
         accountAccessService.invalidateUser(user.getId());
 
         log.info("First password set for user {}", userId);
+        eventPublisher.publishEvent(SecurityNoticeEvent.of(
+                user.getEmail(), SecurityNoticeEvent.Kind.PASSWORD_ADDED, null, clock.instant()));
         return authService.startSession(userId, user.getTokenVersion(), accountId);
     }
 }

@@ -13,6 +13,7 @@ import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Locale;
@@ -278,6 +282,88 @@ public class EmailService {
                 .replace("{{CTA_LABEL}}", "Open Huddle");
 
         return send(toEmail, heading, body + " " + appUrl, html);
+    }
+
+    // US-style and in UTC: the server does not know the reader's time zone, and a time with no zone
+    // would be a guess dressed as a fact. Saying "UTC" outright is the honest version.
+    private static final DateTimeFormatter NOTICE_TIME =
+            DateTimeFormatter.ofPattern("MMMM d, yyyy 'at' h:mm a 'UTC'", Locale.US).withZone(ZoneOffset.UTC);
+
+    // The one remedy that works for every login whatever went wrong: a reset proves the MAILBOX,
+    // sets a password even on an Apple / Google-only login, and signs out every device.
+    private static final String RESET_IF_NOT_YOU = "If this wasn't you, reset your password right away with"
+            + " <b>Forgot password?</b> on the Huddle sign-in screen. That signs out every device.";
+
+    /**
+     * To the login whose sign-in changed ({@link SecurityNoticeEvent}): what changed, when, and what
+     * to do if it wasn't them. The pattern Google, Apple and banks use, kept deliberately plain —
+     * no device, no location, and no link that does anything but open the app, because a security
+     * email carrying a sign-in link is exactly the shape phishing copies.
+     */
+    public String sendSecurityNotice(SecurityNoticeEvent event) {
+        String when = NOTICE_TIME.format(Instant.ofEpochMilli(event.occurredAtMillis()));
+        String provider = escapeHtml(event.providerName() == null ? "Your sign-in" : event.providerName());
+
+        String heading;
+        String body;
+        switch (event.kind()) {
+            case PASSWORD_CHANGED -> {
+                heading = "Your Huddle password was changed";
+                body = "The password for your Huddle login was changed on " + when + ", and every other"
+                        + " device signed in to it was signed out.<br><br>" + RESET_IF_NOT_YOU;
+            }
+            case PASSWORD_ADDED -> {
+                heading = "A password was added to your Huddle login";
+                body = "A password was added to your Huddle login on " + when + ", so you can now also sign"
+                        + " in with your email and that password. Every other device signed in to it was"
+                        + " signed out.<br><br>" + RESET_IF_NOT_YOU;
+            }
+            case SIGN_IN_CONNECTED -> {
+                heading = provider + " was connected to your Huddle login";
+                // Not the usual remedy: a reset would leave somebody else's connected account able
+                // to sign in. Disconnecting removes it AND signs every other device out.
+                body = provider + " can now sign you in to Huddle. It was connected on " + when + ".<br><br>"
+                        + "If this wasn't you, somebody else's " + provider + " account may be able to sign"
+                        + " in to your Huddle login. Sign in, go to <b>Profile &rarr; Sign in with</b> and"
+                        + " disconnect " + provider + " (that signs out every other device), then change"
+                        + " your password.";
+            }
+            case SIGN_IN_DISCONNECTED -> {
+                heading = provider + " was disconnected from your Huddle login";
+                body = provider + " no longer signs you in to Huddle. It was disconnected on " + when
+                        + ", and every other device signed in to your login was signed out.<br><br>"
+                        + RESET_IF_NOT_YOU;
+            }
+            case SIGN_IN_TURNED_OFF_AT_APPLE -> {
+                heading = "Sign in with Apple was turned off for Huddle";
+                body = "Sign in with Apple stopped signing you in to Huddle on " + when + ", because it"
+                        + " was turned off in your Apple ID settings. Every device signed in to Huddle"
+                        + " was signed out, and your workouts are unaffected.<br><br>"
+                        + (event.stillHasWayIn()
+                                ? "You can still sign in to Huddle another way."
+                                : "To sign in again, use <b>Forgot password?</b> on the Huddle sign-in"
+                                        + " screen to set a password.");
+            }
+            default -> throw new IllegalArgumentException("Unknown security notice " + event.kind());
+        }
+
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", heading)
+                .replace("{{BODY}}", body)
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        String plain = unescapeHtml(body.replace("<br><br>", "\n\n").replace("<b>", "").replace("</b>", "")
+                .replace("&rarr;", "→")) + "\n\n" + appUrl;
+        return send(event.email(), unescapeHtml(heading), plain, html);
+    }
+
+    // Back to plain text for the subject line and the text part. The inverse of escapeHtml, in the
+    // reverse order so "&amp;lt;" comes back as "&lt;" rather than "<".
+    private static String unescapeHtml(String value) {
+        return value.replace("&#39;", "'").replace("&quot;", "\"").replace("&gt;", ">")
+                .replace("&lt;", "<").replace("&amp;", "&");
     }
 
     /**

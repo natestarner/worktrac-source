@@ -6,7 +6,9 @@ import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -28,8 +31,13 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,6 +67,7 @@ class ReconfirmationFlowTest extends AbstractIntegrationTest {
     @Autowired private UserIdentityRepository identityRepository;
     @Autowired private RegistrationEventRepository registrationEventRepository;
     @Autowired private AppleNotificationService appleNotificationService;
+    @Autowired @Qualifier("emailTaskExecutor") private Executor emailTaskExecutor;
 
     @MockitoBean private EmailService emailService;
 
@@ -161,6 +170,19 @@ class ReconfirmationFlowTest extends AbstractIntegrationTest {
             me(session).andExpect(status().isUnauthorized());
             passwordLogin(email, "my-first-password").andExpect(status().isOk());
             assertThat(user(email).hasPassword()).isTrue();
+        }
+
+        // A new way in, and every other device signed out: the login's owner is told.
+        @Test
+        void theLoginIsEmailedThatAPasswordWasAdded() throws Exception {
+            String email = unique("first") + "@example.com";
+            String subject = unique("sub");
+            String session = signUp(subject, email);
+
+            setPassword(session, "my-first-password", proof(subject)).andExpect(status().isOk());
+
+            verify(emailService, timeout(2000)).sendSecurityNotice(argThat(e -> e != null
+                    && e.email().equals(email) && e.kind() == SecurityNoticeEvent.Kind.PASSWORD_ADDED));
         }
 
         // ⚠️ A session proves a device, not a person: setting a password on a borrowed, signed-in
@@ -327,6 +349,55 @@ class ReconfirmationFlowTest extends AbstractIntegrationTest {
 
             assertThat(registrationEventRepository.findAll())
                     .anyMatch(e -> e.getEmail().equals(email) && e.getEventType() == RegistrationEventType.APPLE_ACCOUNT_DELETED);
+        }
+
+        // Every device was just signed out, so the login is told, and told it can still get in.
+        @Test
+        void consentRevokedEmailsTheLoginThatItCanStillSignIn() throws Exception {
+            String email = unique("apple") + "@example.com";
+            String subject = unique("apple-sub");
+            withAppleLinked(email, subject);
+
+            appleNotificationService.handle(notification("consent-revoked", subject));
+
+            verify(emailService, timeout(2000)).sendSecurityNotice(argThat(e -> e != null
+                    && e.email().equals(email)
+                    && e.kind() == SecurityNoticeEvent.Kind.SIGN_IN_TURNED_OFF_AT_APPLE
+                    && e.stillHasWayIn()));
+        }
+
+        // ⚠️ When Apple was the ONLY way in, the email is the one place that says how to get back
+        // (a password reset), so it must know there is no other way.
+        @Test
+        void whenAppleWasTheOnlyWayInTheEmailKnowsIt() throws Exception {
+            String email = unique("apple-only") + "@example.com";
+            String subject = unique("apple-sub");
+            signUp(unique("sub"), email);
+            // Swap the test identity signUp created for an Apple one: a login whose only way in is Apple.
+            Long userId = user(email).getId();
+            identityRepository.delete(identityRepository.findByUser_IdAndProvider(userId, IdentityProvider.TEST).orElseThrow());
+            identityRepository.save(new UserIdentity(user(email), IdentityProvider.APPLE, subject, null, clock.instant()));
+
+            appleNotificationService.handle(notification("consent-revoked", subject));
+
+            verify(emailService, timeout(2000)).sendSecurityNotice(argThat(e -> e != null
+                    && e.email().equals(email)
+                    && e.kind() == SecurityNoticeEvent.Kind.SIGN_IN_TURNED_OFF_AT_APPLE
+                    && !e.stillHasWayIn()));
+        }
+
+        // Apple retries a delivery; only the one that changed something is announced.
+        @Test
+        void aRepeatedNotificationIsAnnouncedOnce() throws Exception {
+            String email = unique("apple") + "@example.com";
+            String subject = unique("apple-sub");
+            withAppleLinked(email, subject);
+
+            appleNotificationService.handle(notification("consent-revoked", subject));
+            appleNotificationService.handle(notification("consent-revoked", subject));
+
+            EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+            verify(emailService, times(1)).sendSecurityNotice(argThat(e -> e != null && e.email().equals(email)));
         }
 
         // Apple retries; a second delivery, or one for an identity we never had, is a no-op.

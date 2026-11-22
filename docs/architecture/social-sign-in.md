@@ -359,3 +359,12 @@ that has no password.
    or allow it once linked?
 4. **Who can use it**: everyone, or Pro only like member logins? Recommendation: everyone. It's a
    way to sign in, not a feature to sell.
+
+## Security notices (2026-11-22)
+
+A login is emailed whenever its way in changes: Apple or Google connected or disconnected, Apple
+sign-in turned off from the Apple ID side, and (beyond sign-in proper) a password changed or added.
+This is what Google, Apple and banks do, and it is the only way somebody learns about a change made
+from a stolen session. The emails say what changed, when, and what to do; a connection's remedy is
+to disconnect it, because a password reset would leave somebody else's account able to sign straight
+back in. Rules: `.claude/rules/registration-and-email.md`, "Security notices".
