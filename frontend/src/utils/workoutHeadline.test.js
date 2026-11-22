@@ -98,6 +98,23 @@ describe('workoutHeadline', () => {
     expect(workoutHeadline(digests, { ...OPTS, workoutId: null })).toBe('A new best on Bench Press today.');
   });
 
+  // formatDateLabel answers "Yesterday" for yesterday -- a heading's capital. Dated against the real
+  // clock, because that is what formatDateLabel reads.
+  it('writes "since yesterday" in lowercase, mid-sentence', () => {
+    const local = (offsetDays, hour) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      d.setHours(hour, 0, 0, 0);
+      return d.toISOString();
+    };
+    const at = (startedAt, weight, id) => ({ ...workout('2026-01-01', [BENCH(weight)], id), startedAt });
+    const sessions = [at(local(0, 0), 120, 99), at(local(-1, 13), 130, 2), at(local(-1, 9), 100, 1)];
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(workoutHeadline(historyDigests(sessions), { ...OPTS, zone, now: Date.now() })).toBe(
+      'Bench Press is up 20% since yesterday.',
+    );
+  });
+
   it('otherwise says plainly where this one falls, and never reports a drop', () => {
     expect(headline([today([BENCH(90)]), workout('2026-09-21', [BENCH(100)])])).toBe('Your first workout this week.');
   });

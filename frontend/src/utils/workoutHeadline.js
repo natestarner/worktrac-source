@@ -84,7 +84,10 @@ export function workoutHeadline(digests, { workoutId, ready, zone, now, windowSt
     if (gain >= MIN_GAIN && (!best || gain > best.gain)) best = { gain, name: e.name, since: first.date };
   }
   if (best) {
-    return `${best.name} is up ${Math.round(best.gain * 100)}% since ${formatDateLabel(best.since)}.`;
+    // formatDateLabel says "Yesterday" for yesterday, which is a heading's capital, not a sentence's.
+    const since = formatDateLabel(best.since);
+    const sinceInSentence = since === 'Yesterday' ? 'yesterday' : since;
+    return `${best.name} is up ${Math.round(best.gain * 100)}% since ${sinceInSentence}.`;
   }
 
   // 3. The week.
