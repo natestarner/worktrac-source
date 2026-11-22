@@ -205,19 +205,24 @@ API=https://api.huddle.fitness node e2e/tools/demo-household.mjs --creds ../scre
 - **Header** (version page → Header and Search Results → Header) comes from
   `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and a short headline sit inside
   the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
-  if they don't fit. Two real captures flank it outside the safe area.
-  - **Restyled 2026-11-20 to match the photo-led screenshots** (Nate chose "A" from three mock-ups):
-    the same warm charcoal with a faint amber glow behind the type (not a terracotta one: that read
-    espresso-brown), white type with "family's" in amber, and the two
-    captures (log, progress chart) in Apple's iPhone frame. So it now needs `PHONE_BEZEL=<png>`,
-    the same frame file as the panels, and inherits their App-Store-only license. The final is
-    `screenshots/app-store-2026-11-19/header-21x9.png`; it goes up with 1.4, alongside the panels.
-  - **No photo in the header, on purpose.** The two variants that used the father/son photo were
-    rejected: the same photo in the same pose then appears again in screenshot 1 one scroll below.
-    Moving the photo up here would mean replacing panel 1 too.
-  - **Sized for the iPhone** (2026-11-05, "B2", kept): an iPhone shows ~86% of the header's width,
-    so the headline is the short "The whole family's workout" (196px, with a 190px lockup), and the
-    phones start low enough that the page's back/share buttons don't cover them.
+  if they don't fit.
+  - **Redone 2026-11-21: cream, the family of four, and an angled phone.** Nate chose it after six
+    rounds of side-by-side mock-ups (the charcoal two-phone header merged in #562 never shipped). A
+    cream ground that matches the app icon (the four circles on white), the icon's circles faint
+    behind the photo, and the headline "The whole family's workout" in dark ink with "family's" in
+    rust. On the right, the family of four (Adobe Stock #509656928, from the same shoot as the
+    screenshot-1 photo) in a rounded card, with the real log screen in Apple's iPhone frame rising
+    at an angle over its lower-left corner.
+  - **Run:** `FAMILY_PHOTO=<jpg> PHONE_BEZEL=<png> node tools/app-store-header.mjs <raw> <out>`. Both
+    inputs stay outside the repo (the photo is licensed; the frame is App Store only). The tool
+    refuses a photo of any other size, since the card's crop is measured for that frame. The final
+    is `screenshots/app-store-2026-11-19/header-21x9.png`; it goes up with 1.4.
+  - **The photo is contained in the card, never faded into the ground.** Its dark gym ceiling can't
+    blend into cream, so a fade always reads as a dark block. And **the phone never covers a face**.
+  - **Rejected, so not to be proposed again:** photo-only full-bleed headers, a photo fading into
+    charcoal, the father/son photo (it repeats screenshot 1 one scroll below), a couple instead of
+    the family, terracotta grounds, and the photo inside the headline's letters. The tool's header
+    comment lists the same.
   - **Search Results is left empty on purpose**: without that asset, the first three screenshots
     show in search, and those sell the app better than one banner. Every asset is RGB with no alpha
     channel, as Apple requires.

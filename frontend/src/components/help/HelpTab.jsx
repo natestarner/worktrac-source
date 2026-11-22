@@ -143,7 +143,9 @@ export default function HelpTab() {
             is no password to choose and no code to type: Huddle asks your name and creates the
             household. If you already have a Huddle login with that email, sign in with your password
             first and connect {signInNames} from <T>Profile</T>. Huddle never joins two logins just
-            because their emails match.
+            because their emails match. Use the same way in each time: a different one is a
+            different login, with its own household. The button this device used last is marked{' '}
+            <T>Last used</T>.
           </p>
         )}
         <p>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
+import { rememberSignInMethod } from '../lib/lastSignInMethod';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -54,6 +55,7 @@ export default function ConfirmEmailPage() {
     setSubmitting(true);
     try {
       await confirmEmail({ email, code: trimmedCode });
+      rememberSignInMethod('password'); // a password registration, now signed in
       if (wantsPlan) {
         // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
         // that effect runs as soon as the shell mounts. Setting it after the navigation would race

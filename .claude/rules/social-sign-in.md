@@ -9,6 +9,10 @@ paths:
   - "backend/src/test/java/com/worktrac/backend/identity/**"
   - "frontend/src/components/auth/SocialSignIn.jsx"
   - "frontend/src/components/auth/ProviderButtons.jsx"
+  - "frontend/src/lib/native/socialSignIn.js"
+  - "frontend/src/lib/lastSignInMethod.js"
+  - "frontend/src/routes/LoginPage.jsx"
+  - "frontend/src/routes/RegisterPage.jsx"
 ---
 
 # Sign in with Apple / Google: the invariants
@@ -156,6 +160,30 @@ close, so it has three independent exits and each one must stay:
 Pinned by `SocialSignIn.test.jsx` ("an attempt that never finishes") and `social-sign-in.spec.ts`
 (a server that never answers; a sign-in stuck past every limit), each verified red by removing what
 it guards.
+
+## The sign-in screens: agreement, failures, "Last used"
+
+- **⚠️ The Terms line sits under the name step's Create button** (`SocialSignIn`'s `SignUpDetails`).
+  That step is where an Apple / Google account is created, and it is reachable from **Log in**,
+  which shows no Terms of its own. Register hides its own line while the step is up, so exactly one
+  agreement is on screen. `social-sign-in.spec.ts` pins both; its Register test waits on the step's
+  "Welcome to Huddle" heading, NOT "Your name" (Register's own form has that field, which made the
+  first cut pass vacuously).
+- **A provider failure is `signInFailure(provider, code)`** (`lib/native/socialSignIn.js`): plain
+  words in `message`, the provider's own code in `code`, `signInFailure: true`. Screens show the
+  message, and `SocialSignIn` shows the code small underneath for support. Never put a raw code in
+  the headline again ("Couldn't sign you in: Sign-in failed (popup_blocked_by_browser)"). Anything
+  without the flag is not ours to word: `SocialSignIn` says one plain sentence, the Profile screens
+  keep their own. A cancel is still `cancelled: true` and says nothing.
+- **"Last used" is per device and names a method only** (`lib/lastSignInMethod.js`, localStorage,
+  every access wrapped). Written when the server ACCEPTS a provider (signed in, or a household to
+  pick) and when a password sign-in or confirmation succeeds; never on a failure or an unfinished
+  name step. It survives logout on purpose: that is when it is read. It is the guard against a
+  second, empty household from an Apple "Hide My Email" address meeting the other provider.
+  - **It is `aria-describedby`, never part of the button's name.** "Continue with Apple" stays
+    exactly that for screen readers, voice control and every selector in both test layers.
+  - The badge ignores the pointer and sits on the button's edge, so it moves nothing and cannot
+    eat a tap, including on Google's own iframe button.
 
 ## Deleting a user deletes its identities
 

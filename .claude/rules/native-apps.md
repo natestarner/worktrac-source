@@ -262,9 +262,12 @@ Capacitor's default is the system white/black, which flashes against both.
   switch), and iOS already picks dark or light status-bar text for it. If an in-app theme override
   is ever added, it must drive `@capacitor/status-bar` from `lib/native`.
 - **The icon PNGs must be opaque (RGB).** App Store Connect rejects an app icon with an alpha
-  channel. `AppIcon.appiconset` holds the 1024px light icon (the PWA's white tile) and an iOS 18
-  dark variant (the dark tile from `public/icon.svg`); both are rendered from the brand geometry,
-  never hand-drawn (see `docs/brand/README.md`).
+  channel. `AppIcon.appiconset` holds the 1024px icon and its iOS 18 dark variant, which since
+  2026-11-22 are the SAME image: the mark on the warm charcoal tile (Nate's choice, after a
+  side-by-side in App Store search and on the product page). Both, and the web's home-screen PNGs,
+  come from `e2e/tools/app-icons.mjs`, which renders the brand geometry and refuses an alpha
+  channel. Never hand-draw them (`docs/brand/README.md`). A new icon reaches people only in the
+  next store build.
 - `MainViewController.swift` is registered in `project.pbxproj` by hand (no Xcode here). A new
   Swift file needs the same four entries (PBXBuildFile, PBXFileReference, the App group, Sources),
   and `mobile-ci` is what proves it compiles.

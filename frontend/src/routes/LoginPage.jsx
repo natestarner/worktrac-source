@@ -12,6 +12,7 @@ import {
 } from '../components/auth/authStyles';
 import AnimatedLockup from '../components/auth/AnimatedLockup';
 import SocialSignIn from '../components/auth/SocialSignIn';
+import { rememberSignInMethod } from '../lib/lastSignInMethod';
 import PasswordInput from '../components/shared/PasswordInput';
 
 export default function LoginPage() {
@@ -42,6 +43,8 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const needsChoice = await login(email, password);
+      // The password worked, so it -- not Apple or Google -- is what this device used last.
+      rememberSignInMethod('password');
       if (needsChoice) {
         // Nothing has been signed in and nothing torn down -- whatever session this device already
         // had is still intact, so abandoning the picker costs nothing.

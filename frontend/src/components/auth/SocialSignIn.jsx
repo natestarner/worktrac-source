@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import ProviderButtons from './ProviderButtons';
 import HuddleMark from '../shared/HuddleMark';
 import { availableSignInProviders } from '../../lib/native';
+import { lastSignInMethod, rememberSignInMethod } from '../../lib/lastSignInMethod';
+import LegalLinks from '../shared/LegalLinks';
 import { errorBannerStyle, fieldLabelStyle } from './authStyles';
 
 /**
@@ -31,7 +33,8 @@ import { errorBannerStyle, fieldLabelStyle } from './authStyles';
  */
 export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, accountNoun = 'Household' }) {
   const { signInWithIdToken } = useAuth();
-  const [error, setError] = useState('');
+  // { message, code? } or null. `code` is a provider's own failure code, shown small for support.
+  const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   // { provider, token } while a new person is giving their name. Component state on purpose: the
   // ID token is a credential and must not outlive this screen (same argument as the selection
@@ -47,10 +50,13 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
   async function finish(provider, token, details) {
     const attempt = ++attemptRef.current;
     const isCurrent = () => attempt === attemptRef.current;
-    setError('');
+    setError(null);
     setBusy(true);
     try {
       const choice = await signInWithIdToken(provider, { idToken: token.idToken, nonce: token.nonce, ...details });
+      // The server accepted this provider for this person (signed in, or a household to pick), so it
+      // is the button to point at next time -- even if the attempt was abandoned meanwhile.
+      rememberSignInMethod(provider);
       if (!isCurrent()) {
         // Abandoned from the overlay, then it landed anyway. With no choice to make the session is
         // already live (AuthContext has switched), so the app is the only honest place to go. A
@@ -69,7 +75,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
       } else {
         setSignUp(null);
         onSignUpStep?.(false);
-        setError(err?.message || "Couldn't sign you in. Please try again.");
+        setError({ message: err?.message || "Couldn't sign you in. Please try again." });
       }
     } finally {
       if (isCurrent()) setBusy(false);
@@ -82,7 +88,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
   function abandon() {
     attemptRef.current += 1;
     setBusy(false);
-    setError("That's taking longer than it should. Please try again.");
+    setError({ message: "That's taking longer than it should. Please try again." });
   }
 
   // The overlay is `busy`, and nothing else can keep it up. Three things take it down, and each is
@@ -110,7 +116,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
           accountNoun={accountNoun}
           busy={busy}
           error={error}
-          onCancel={() => { setSignUp(null); setError(''); onSignUpStep?.(false); }}
+          onCancel={() => { setSignUp(null); setError(null); onSignUpStep?.(false); }}
           onSubmit={(details) => finish(signUp.provider, signUp.token, details)}
         />
       </>
@@ -125,19 +131,16 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
         <span>or</span>
         <span style={dividerLineStyle} />
       </div>
-      {error && (
-        <div role="alert" style={errorBannerStyle}>
-          {error}
-        </div>
-      )}
+      <SignInError error={error} />
       <ProviderButtons
         size="large"
         disabled={busy}
+        lastUsed={lastSignInMethod()}
         // Not returned: ProviderButton keeps its own button disabled until onToken settles, so
         // handing it the attempt would leave that button disabled for as long as a stuck attempt
         // runs -- even after "Start over". `busy` (disabled above) covers the attempt instead.
         onToken={(provider, token) => { finish(provider, token, {}); }}
-        onError={(err) => setError(err?.message ? `Couldn't sign you in: ${err.message}` : "Couldn't sign you in.")}
+        onError={(err) => setError(providerErrorForScreen(err))}
       />
     </div>
   );
@@ -209,11 +212,7 @@ function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit
       <p style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)', margin: '0 0 var(--space-4)' }}>
         One more thing before we set up your {accountNoun.toLowerCase()}.
       </p>
-      {error && (
-        <div role="alert" style={errorBannerStyle}>
-          {error}
-        </div>
-      )}
+      <SignInError error={error} />
       <label htmlFor="signup-person-name" style={fieldLabelStyle}>Your name</label>
       <input
         id="signup-person-name"
@@ -238,6 +237,12 @@ function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit
       <button type="submit" disabled={busy || !personName.trim()} className="btn btn-primary btn-lg btn-full pressable">
         {busy ? `Creating your ${accountNoun.toLowerCase()}…` : `Create my ${accountNoun.toLowerCase()}`}
       </button>
+      {/* The agreement sits under the button that creates the account, because this is where an
+          Apple / Google sign-up actually happens -- and it can be reached from the Log in page, which
+          (unlike Register) shows no Terms of its own. */}
+      <p className="signup-consent">
+        By creating your {accountNoun.toLowerCase()}, you agree to our <LegalLinks />.
+      </p>
       <button
         type="button"
         onClick={onCancel}
@@ -248,6 +253,25 @@ function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit
         Back
       </button>
     </form>
+  );
+}
+
+// A provider's failure in the words lib/native wrote for people (`signInFailure`), with its code;
+// anything else that reaches onError (a missing test hook, an unexpected throw) gets one plain
+// sentence rather than a developer's message.
+function providerErrorForScreen(err) {
+  if (err?.signInFailure) return { message: err.message, code: err.code };
+  return { message: "Couldn't sign you in. Please try again." };
+}
+
+// The message first, in plain words; the code underneath, small, for anyone writing to support.
+function SignInError({ error }) {
+  if (!error) return null;
+  return (
+    <div role="alert" style={errorBannerStyle}>
+      {error.message}
+      {error.code && <span className="sign-in-error-code">Error code: {error.code}</span>}
+    </div>
   );
 }
 
