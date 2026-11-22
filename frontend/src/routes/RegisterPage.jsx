@@ -284,10 +284,14 @@ export default function RegisterPage() {
           accountNoun={isProIntent ? 'Account' : 'Household'}
         />
 
-        {/* Below both ways in, so it covers an Apple / Google sign-up as much as a password one. */}
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
-          By creating {isProIntent ? 'an account' : 'a household'}, you agree to our <LegalLinks />.
-        </div>
+        {/* Below both ways in, so it covers an Apple / Google sign-up as much as a password one.
+            Hidden during the Apple / Google name step, which carries the same line under its own
+            Create button (SocialSignIn) -- one agreement on screen, beside the action it covers. */}
+        {!signingUp && (
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
+            By creating {isProIntent ? 'an account' : 'a household'}, you agree to our <LegalLinks />.
+          </div>
+        )}
 
         {!signingUp && (
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>

@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,8 +21,14 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,6 +58,10 @@ class ChangePasswordTest extends AbstractIntegrationTest {
 
     @MockitoBean
     private EmailService emailService;
+
+    @Autowired
+    @Qualifier("emailTaskExecutor")
+    private Executor emailTaskExecutor;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -85,6 +97,32 @@ class ChangePasswordTest extends AbstractIntegrationTest {
 
         login("a-brand-new-one").andExpect(status().isOk());
         login("password123").andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * The owner of the login is told, at its own address: a password changed from a stolen session
+     * is the change they most need to hear about (SecurityNoticeEvent).
+     */
+    @Test
+    void theLoginIsEmailedThatItsPasswordChanged() throws Exception {
+        change("password123", "a-brand-new-one", token).andExpect(status().isOk());
+
+        verify(emailService, timeout(2000)).sendSecurityNotice(argThat(e -> e != null
+                && e.email().equals(email)
+                && e.kind() == SecurityNoticeEvent.Kind.PASSWORD_CHANGED
+                && e.providerName() == null));
+    }
+
+    /**
+     * ⚠️ This branch COMMITS (noRollbackFor, so the failed-attempt count sticks), so a notice
+     * published before the check would go out for a guess. Only a real change is announced.
+     */
+    @Test
+    void aWrongCurrentPasswordEmailsNothing() throws Exception {
+        change("not-my-password", "attacker-chosen", token).andExpect(status().isForbidden());
+
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+        verify(emailService, never()).sendSecurityNotice(any());
     }
 
     /**

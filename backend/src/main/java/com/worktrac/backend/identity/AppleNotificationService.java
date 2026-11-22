@@ -5,15 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
+import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.Map;
 
 /**
@@ -41,15 +44,20 @@ public class AppleNotificationService {
     private final UserRepository userRepository;
     private final AccountAccessService accountAccessService;
     private final RegistrationAuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AppleNotificationService(UserIdentityRepository identityRepository, UserRepository userRepository,
                                     AccountAccessService accountAccessService,
-                                    RegistrationAuditService auditService) {
+                                    RegistrationAuditService auditService,
+                                    ApplicationEventPublisher eventPublisher, Clock clock) {
         this.identityRepository = identityRepository;
         this.userRepository = userRepository;
         this.accountAccessService = accountAccessService;
         this.auditService = auditService;
+        this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     /** @param notification a payload {@link IdTokenVerifier#verifyAppleNotification} has verified */
@@ -86,6 +94,13 @@ public class AppleNotificationService {
                 auditService.record(locked.getEmail(), "account-delete".equals(type)
                         ? RegistrationEventType.APPLE_ACCOUNT_DELETED
                         : RegistrationEventType.APPLE_CONSENT_REVOKED, detail);
+                // Told, because every device was just signed out -- and when Apple was the only way
+                // in, the email is the only place that says how to get back (a password reset). It
+                // goes to the login's address; for a deleted Apple ID's relay that may not arrive,
+                // which is accepted: nothing else can reach them either.
+                eventPublisher.publishEvent(new SecurityNoticeEvent(locked.getEmail(),
+                        SecurityNoticeEvent.Kind.SIGN_IN_TURNED_OFF_AT_APPLE, "Apple",
+                        clock.instant().toEpochMilli(), wayIn));
             }
             case "email-disabled" -> auditService.record(user.getEmail(), RegistrationEventType.APPLE_EMAIL_DISABLED,
                     "Hide My Email forwarding turned off for " + event.path("email").asText("this address")

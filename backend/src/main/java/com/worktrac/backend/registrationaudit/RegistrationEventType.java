@@ -56,6 +56,12 @@ public enum RegistrationEventType {
     MEMBER_REVOKED_EMAIL_SENT,
     MEMBER_REVOKED_EMAIL_FAILED,
 
+    // "Your password was changed", "Google was connected to your Huddle login", and the rest of
+    // user.SecurityNoticeEvent. A security control: the reader may be the person locked out, so a
+    // notice that never went out is alertable, like the password-reset emails.
+    SECURITY_NOTICE_EMAIL_SENT,
+    SECURITY_NOTICE_EMAIL_FAILED,
+
     // Level 1: did ACS accept the send?
     VERIFICATION_EMAIL_SENT,
     VERIFICATION_EMAIL_FAILED,

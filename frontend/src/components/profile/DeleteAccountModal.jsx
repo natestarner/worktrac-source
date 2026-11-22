@@ -226,7 +226,7 @@ export default function DeleteAccountModal({ onClose }) {
               verb="Delete and confirm with"
               disabled={confirmText !== CONFIRMATION_WORD}
               onToken={handleProviderToken}
-              onError={() => setError("Couldn't reach the sign-in service. Try again.")}
+              onError={(err) => setError(err?.signInFailure ? err.message : "Couldn't reach the sign-in service. Try again.")}
             />
           </div>
           <button onClick={onClose} style={{ ...cancelButtonStyle, width: '100%' }}>

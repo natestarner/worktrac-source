@@ -29,7 +29,16 @@ describe('web Apple: the popup opens inside the tap', () => {
     });
     adapter = await import('./socialSignIn');
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Every tap re-arms Apple in the background, and nothing in a test waits for it. Each test gets a
+    // fresh module (resetModules) but window.AppleID is shared, so a re-arm still running when a test
+    // ends calls the NEXT test's init mock. On a slow CI runner (2026-11-21) test 1's did: it
+    // satisfied test 2's "init called twice" before test 2's own re-arm had finished, so test 2's
+    // second tap wasn't armed ("called 1 times"), and that tap later used up test 3's rejection
+    // ("resolved instead of rejecting"). Reproduced exactly by holding test 1's re-arm until test 2's
+    // mocks were in place. prepareSignIn returns the arming in flight (or arms once more), so this
+    // drains it while this test's mocks are still the ones installed.
+    await adapter.prepareSignIn('apple').catch(() => {});
     appendChild.mockRestore();
     delete window.AppleID;
   });
@@ -60,10 +69,39 @@ describe('web Apple: the popup opens inside the tap', () => {
 
   it("still works when tapped before arming finished, and names Apple's error when it fails", async () => {
     signIn.mockRejectedValueOnce({ error: 'popup_blocked_by_browser' });
+    // Plain words that say what to do, with Apple's own code kept apart for support.
     await expect(adapter.signInWithProvider('apple')).rejects.toMatchObject({
       cancelled: false,
-      message: 'Sign-in failed (popup_blocked_by_browser)',
+      signInFailure: true,
+      code: 'popup_blocked_by_browser',
+      message: 'Your browser blocked the Apple sign-in window. Allow pop-ups for Huddle, then try again.',
     });
+  });
+
+  it("an Apple code with no advice of its own still reads as plain words, and keeps the code", async () => {
+    await adapter.prepareSignIn('apple');
+    signIn.mockRejectedValueOnce({ error: 'invalid_request' });
+    await expect(adapter.signInWithProvider('apple')).rejects.toMatchObject({
+      cancelled: false,
+      signInFailure: true,
+      code: 'invalid_request',
+      message: "Apple couldn't finish signing you in. Please try again.",
+    });
+  });
+
+  it("says Apple couldn't be reached when its script never arrives", async () => {
+    // A content blocker or no signal: the script tag fails, so there is no sheet to open.
+    appendChild.mockImplementation((el) => {
+      queueMicrotask(() => el.onerror?.(new Event('error')));
+      return el;
+    });
+    await expect(adapter.signInWithProvider('apple')).rejects.toMatchObject({
+      cancelled: false,
+      signInFailure: true,
+      code: 'script_load_failed',
+      message: "Couldn't reach Apple. Check your connection and try again.",
+    });
+    expect(signIn).not.toHaveBeenCalled();
   });
 
   it('treats a closed popup as a cancellation', async () => {
