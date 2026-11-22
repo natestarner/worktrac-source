@@ -23,8 +23,9 @@ import { forEachConnectivityMode } from './support/parity';
 // uses: server entries plus the pending log-set mutations, which are the ONLY record of those sets
 // while degraded. No branch on connectivity is involved, which is why this adds no row to
 // resilience.md's register -- and why the assertion below must never grow one either.
-// Two exercises and three sets, as tiles, then Done -- which must close it in every mode (its close
-// also runs the deferred rating ask and forced update, neither of which may depend on the network).
+// Two exercises and three sets on the card, then a close -- which must work in every mode (it also
+// runs the deferred rating ask and forced update, neither of which may depend on the network). The
+// X, because a one-person household is asked "Who else trains with you?" in Done's place.
 async function expectWorkoutDoneSheet(page: Page) {
   const sheet = page.getByRole('dialog', { name: 'Workout done' });
   await expect(sheet).toBeVisible();
@@ -32,7 +33,7 @@ async function expectWorkoutDoneSheet(page: Page) {
   await expect(sheet.getByText('exercises', { exact: true })).toBeVisible();
   await expect(sheet.getByText('3', { exact: true })).toBeVisible();
   await expect(sheet.getByText('sets', { exact: true })).toBeVisible();
-  await sheet.getByRole('button', { name: 'Done' }).click();
+  await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
 }
@@ -111,6 +112,34 @@ test.describe('The workout-done sheet asks who else trains with you', () => {
     await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Partner/ })).toBeVisible();
 
     // A second workout: the question has been answered, so the sheet no longer asks it.
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText('Who else trains with you?', { exact: true })).toHaveCount(0);
+    await sheet.getByRole('button', { name: 'Done' }).click();
+    await expect(sheet).toBeHidden();
+  });
+
+  // Someone who trains alone answers once, and is not asked again -- across a reload, because the
+  // answer is stored, not held in memory.
+  test('"Just me" closes the sheet and stops the question', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alone');
+    const sheet = page.getByRole('dialog', { name: 'Workout done' });
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
+    await sheet.getByRole('button', { name: 'Just me' }).click();
+    await expect(sheet).toBeHidden();
+
+    await page.reload();
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
     await dismissPrCelebration(page);

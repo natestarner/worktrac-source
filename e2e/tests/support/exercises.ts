@@ -129,7 +129,9 @@ export async function endWorkout(page: Page) {
   await page.getByRole('button', { name: 'End workout' }).first().click();
   await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
   const sheet = page.getByRole('dialog', { name: 'Workout done' });
-  await sheet.getByRole('button', { name: 'Done' }).click();
+  // The X, not Done: in a one-person household the sheet asks "Who else trains with you?" and its
+  // two answers take Done's place. The X closes it in every household without answering.
+  await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toBeHidden();
 }
 

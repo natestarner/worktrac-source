@@ -275,7 +275,8 @@ async function countFlows(target, creds) {
       await page.getByRole('button', { name: 'End workout' }).first().click();
       await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
       // The workout-done sheet is a modal; it must close before the next flow can click anything.
-      await page.getByRole('dialog', { name: 'Workout done' }).getByRole('button', { name: 'Done' }).click();
+      // Its X, which every household has (a one-person one is asked a question in Done's place).
+      await page.getByRole('dialog', { name: 'Workout done' }).getByRole('button', { name: 'Close' }).click();
     });
     await count('open PRs', async () => { await goTab(page, 'PRs'); await page.getByTestId('pr-row').first().waitFor(); });
     await count('open Trends', async () => { await goTab(page, 'Trends'); await page.getByTestId('consistency-grid').waitFor(); });
@@ -294,7 +295,7 @@ async function countFlows(target, creds) {
       await goTab(page, 'Log');
       await page.getByRole('button', { name: 'End workout' }).first().click();
       await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
-      await page.getByRole('dialog', { name: 'Workout done' }).getByRole('button', { name: 'Done' }).click();
+      await page.getByRole('dialog', { name: 'Workout done' }).getByRole('button', { name: 'Close' }).click();
     });
     return flows;
   } finally { await browser.close(); }

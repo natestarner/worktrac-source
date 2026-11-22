@@ -40,18 +40,28 @@ export function formatSessionRecap({ exerciseCount = 0, setCount = 0, elapsedMs 
   return parts.join(' · ');
 }
 
-// The same numbers as formatSessionRecap, as the workout-done sheet's tiles: [{ value, label }].
-// Lives beside the sentence form, and shares its pluralising and duration rules, so the sheet and
-// the End dialog can never disagree about what was done. Same null rule too: nothing logged means
-// no sheet at all (SessionBar falls back to the plain toast).
+// The same numbers as formatSessionRecap, as the workout-done card's stats: [{ value, label }].
+// Lives beside the sentence form, and shares its pluralising and its under-a-minute rule, so the
+// card and the End dialog can never disagree about what was done. Same null rule too: nothing
+// logged means no sheet at all (SessionBar falls back to the plain toast).
+//
+// The card shows each value as a bare number over its unit, so the time is "41" over "minutes",
+// or "1:12" over "hours" from an hour on -- not the sentence's "1 hr 12 min", which would be the
+// only value on the card with words in it.
 export function sessionRecapTiles({ exerciseCount = 0, setCount = 0, elapsedMs = null } = {}) {
   if (setCount <= 0) return null;
   const tiles = [
     { value: String(exerciseCount), label: exerciseCount === 1 ? 'exercise' : 'exercises' },
     { value: String(setCount), label: setCount === 1 ? 'set' : 'sets' },
   ];
-  const duration = formatWorkoutDuration(elapsedMs);
-  if (duration) tiles.push({ value: duration, label: 'time' });
+  if (formatWorkoutDuration(elapsedMs)) {
+    const minutes = Math.floor(elapsedMs / MINUTE_MS);
+    if (minutes < 60) {
+      tiles.push({ value: String(minutes), label: minutes === 1 ? 'minute' : 'minutes' });
+    } else {
+      tiles.push({ value: `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`, label: 'hours' });
+    }
+  }
   return tiles;
 }
 

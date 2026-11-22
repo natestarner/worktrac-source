@@ -262,7 +262,8 @@ describe('SessionBar end workout', () => {
     expect(await screen.findByRole('dialog', { name: 'Workout done' })).toBeInTheDocument();
     expect(tryForceUpdate).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    // The X: with the household question showing, its two answers replace Done.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(tryForceUpdate).toHaveBeenCalledTimes(1);
     expect(tryForceUpdate.mock.calls[0][1]).toBe(7);
@@ -306,7 +307,8 @@ describe('SessionBar end workout', () => {
     expect(sheet.getByText('exercises')).toBeInTheDocument();
     expect(sheet.getByText('12')).toBeInTheDocument();
     expect(sheet.getByText('sets')).toBeInTheDocument();
-    expect(sheet.getByText('47 min')).toBeInTheDocument();
+    expect(sheet.getByText('47')).toBeInTheDocument();
+    expect(sheet.getByText('minutes')).toBeInTheDocument();
     // The sheet replaces the toast; it does not add to it.
     expect(showToast).not.toHaveBeenCalled();
   });
@@ -322,23 +324,24 @@ describe('SessionBar end workout', () => {
     expect(sheet.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
   });
 
-  // A shared device says whose workout it was, as "Log set for Sam" does -- and the question has
-  // been answered, so it is not asked.
-  it('names the person, and does not ask, once the household has a second person', async () => {
+  // The card says whose workout it was -- on a shared device that matters -- and once there is a
+  // second person the question has been answered, so it is not asked and Done is the button.
+  it('names the person on the card, and does not ask, once the household has a second person', async () => {
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Sam' }, { id: 8, name: 'Alex' }], account: { id: 1 } });
     render(<SessionBar />);
     await endTheWorkout();
 
-    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done for Sam' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
+    expect(sheet.getByText('Sam')).toBeInTheDocument();
     expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
     expect(sheet.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
   // Without an answer that sticks, someone who trains alone was asked after every workout.
-  it('stops asking once the answer is "It’s just me", and closes the sheet like Done', async () => {
+  it('stops asking once the answer is "Just me", which closes the sheet like Done', async () => {
     const { unmount } = render(<SessionBar />);
     await endTheWorkout();
-    fireEvent.click(await screen.findByRole('button', { name: 'It’s just me' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Just me' }));
 
     expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
     expect(tryForceUpdate).toHaveBeenCalledTimes(1);

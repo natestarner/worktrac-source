@@ -9,9 +9,16 @@ describe('sessionRecapTiles', () => {
     expect(sessionRecapTiles(summary)).toEqual([
       { value: '3', label: 'exercises' },
       { value: '12', label: 'sets' },
-      { value: '47 min', label: 'time' },
+      { value: '47', label: 'minutes' },
     ]);
     expect(formatSessionRecap(summary)).toBe('3 exercises · 12 sets · 47 min');
+  });
+
+  it('gives the time from an hour on as h:mm over "hours", the sentence as "1 hr 12 min"', () => {
+    const summary = { exerciseCount: 5, setCount: 20, elapsedMs: 72 * 60 * 1000 };
+    expect(sessionRecapTiles(summary)[2]).toEqual({ value: '1:12', label: 'hours' });
+    expect(formatSessionRecap(summary)).toBe('5 exercises · 20 sets · 1 hr 12 min');
+    expect(sessionRecapTiles({ ...summary, elapsedMs: 60 * 60 * 1000 })[2]).toEqual({ value: '1:00', label: 'hours' });
   });
 
   it('uses the singular for one, and drops the time under a minute, as the sentence does', () => {

@@ -67,6 +67,18 @@
   /* The wordmark's ink, as the lockup SVGs in assets/ draw it (onlight / ondark). Only the inline
      AnimatedLockup reads this; the <img> lockups carry the same pair baked into two files. */
   --brand-wordmark-ink: #3e3a37;
+  /* The brand card (the workout-done sheet's summary): the charcoal ground of the home-screen icon
+     and the App Store screenshots (docs/brand/README.md, 2026-11-22), so the card reads as one set
+     with them. Deliberately NOT redefined for dark mode -- like the icon, the card is the same
+     object in both themes, which is also why its ink is fixed rather than theme text. Ink against
+     the LIGHTER top stop (the worst case): cream 8.0:1, muted 5.2:1, amber 4.6:1 -- all AA; amber
+     is used only at headline size. */
+  --brand-card-top: #4a4642;
+  --brand-card-bottom: #2f2d2b;
+  --brand-card-ink: #f2ede1;
+  --brand-card-muted: #c9c0b4;
+  --brand-card-highlight: #f2a65a;
+  --brand-card-rule: rgba(242, 237, 225, 0.18);
 
   /* --- Status --------------------------------------------------------- */
   /* Raised from #15803d, which was 4.46:1 on its own --color-success-bg. */
@@ -4035,4 +4047,84 @@ button.person-row {
   background: var(--color-record-bg);
   color: var(--color-record-text);
   font-weight: 700;
+}
+
+/* --- The brand card (WorkoutDoneSheet) ----------------------------------
+   The workout as a Huddle card: charcoal ground, the on-dark lockup, the headline in cream with its
+   key words in the mark's amber, the numbers between hairlines, and the mark itself, large and
+   faint, cropped off the corner. Classes rather than inline styles for the gradient and the
+   cropped mark. Every colour is a --brand-card-* token (top of file), fixed across themes like
+   the home-screen icon it matches. */
+.brand-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, var(--brand-card-top), var(--brand-card-bottom));
+  color: var(--brand-card-ink);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+}
+.brand-card__mark {
+  position: absolute;
+  right: -30px;
+  bottom: -36px;
+  opacity: 0.12;
+  pointer-events: none;
+}
+.brand-card__top {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.brand-card__lockup {
+  height: 24px;
+  display: block;
+}
+.brand-card__who {
+  text-align: right;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  color: var(--brand-card-muted);
+}
+.brand-card__name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--brand-card-ink);
+}
+.brand-card__headline {
+  position: relative;
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+.brand-card__headline em {
+  font-style: normal;
+  color: var(--brand-card-highlight);
+}
+.brand-card__stats {
+  position: relative;
+  display: flex;
+}
+.brand-card__stat {
+  flex: 1;
+  min-width: 0;
+}
+.brand-card__stat + .brand-card__stat {
+  border-left: 1px solid var(--brand-card-rule);
+  padding-left: var(--space-3);
+}
+.brand-card__value {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-card-ink);
+}
+.brand-card__label {
+  font-size: var(--text-xs);
+  color: var(--brand-card-muted);
 }
