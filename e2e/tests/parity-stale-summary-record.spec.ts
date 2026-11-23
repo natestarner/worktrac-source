@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, setStepperPair } from './support/exercises';
 import { delayNetwork } from './support/faults';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
@@ -32,8 +32,7 @@ async function workout(page: Page, reps: number) {
   await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
   await dismissPrCelebration(page);
   await waitForOutboxDrain(page);
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+  await endWorkout(page);
   await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
   await waitForOutboxDrain(page);
 }

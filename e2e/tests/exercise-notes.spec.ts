@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { endWorkout, pickExercise } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Exercise notes are two independent, coexisting features (see CLAUDE.md's Data Model
@@ -43,8 +43,7 @@ test.describe('Exercise notes', () => {
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
 
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();

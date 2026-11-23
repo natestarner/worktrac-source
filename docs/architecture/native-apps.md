@@ -132,7 +132,9 @@ without leaving the app, so a screen in front of it would only cost ratings. Unh
 Contact Us, which sits beside "Rate Huddle" in the menu at all times rather than as a branch of the
 prompt.
 
-**When:** the "End workout" tap, 1.5s later, once the recap has been said. A PR felt like the
+**When:** 1.5s after the workout-done sheet that follows "End workout" closes, so Apple's sheet
+never covers the numbers. Counted at the End tap itself (synchronously, so a reload with the sheet
+open cannot lose the count); only the ask waits for the sheet. A PR felt like the
 happier moment, but it lands mid-workout with a rest timer running. The 3rd workout with a set in
 it, then every 5th after the last ask, and never within 30 days of the last ask. Counted per device,
 because the rating goes to the phone's Apple ID whoever was logging.

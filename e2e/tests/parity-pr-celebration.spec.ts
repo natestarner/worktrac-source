@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, setStepperPair } from './support/exercises';
+import { endWorkout, pickExercise, setStepperPair } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -128,8 +128,7 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     await expect(first).toBeHidden();
     // End it, so the next workout is a new session and its volume starts from zero. The confirm
     // is scoped to the dialog -- the SessionBar's own button carries the same name.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The baseline set and the End on the server before re-entering. Without this, against lower's
     // ~800ms writes, the re-entry fetched a summary from before the set landed, nothing refetched
@@ -204,8 +203,7 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     await expect(page.getByRole('dialog')).not.toContainText('Volume');
     await first.click({ force: true });
     await expect(first).toBeHidden();
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The baseline set AND the End on the server before anything below reads them back. THIS is
     // the load-bearing line. The End queues behind the set in the serial outbox, and against

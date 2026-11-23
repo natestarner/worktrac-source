@@ -286,7 +286,10 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # 79 with lib/lastSignInMethod.js's read and write (+2): storage refused (private mode, a full
 #   quota) for the sign-in screens' "Last used" hint. Nothing is lost: the hint is simply not
 #   shown, and signing in must never fail over a hint.
-EXPECTED_LIB_SWALLOWS=79
+# 81 with lib/householdAsk.js's read and write (+2): storage refused for the workout-done sheet's
+#   "Just me" answer. Nothing is lost: the question is simply asked again, and ending a workout
+#   must never fail over it.
+EXPECTED_LIB_SWALLOWS=81
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

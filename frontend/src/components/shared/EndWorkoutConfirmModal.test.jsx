@@ -5,7 +5,7 @@ import EndWorkoutConfirmModal from './EndWorkoutConfirmModal';
 import { LOG_SET_MUTATION_KEY, queryClient } from '../../lib/queryClient';
 import { isCreateInEndedWorkout, isSessionEnded } from '../../lib/endedSessions';
 import { queryKeys } from '../../api/queryKeys';
-import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
+import { noteWorkoutEnded } from '../../lib/reviewPrompt';
 
 vi.mock('../../api/sets', () => ({
   logLiveSet: vi.fn(() => new Promise(() => {})),
@@ -21,7 +21,7 @@ vi.mock('../../api/sessions', () => ({
 vi.mock('../../context/UIContext', () => ({ useUI: () => ({ clearRestTimer: vi.fn() }) }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: () => ({ setRestTimer: vi.fn() }) }));
 vi.mock('../../lib/haptics', () => ({ tryHaptic: vi.fn() }));
-vi.mock('../../lib/reviewPrompt', () => ({ askForReviewAfterWorkout: vi.fn() }));
+vi.mock('../../lib/reviewPrompt', () => ({ noteWorkoutEnded: vi.fn(() => false) }));
 
 const PERSON = 7;
 
@@ -35,10 +35,10 @@ function logPendingSet(tempId, overrides = {}) {
     .catch(() => {});
 }
 
-function endWorkout() {
+function endWorkout(onEnded = () => {}) {
   render(
     <QueryClientProvider client={queryClient}>
-      <EndWorkoutConfirmModal personId={PERSON} onClose={() => {}} onEnded={() => {}} />
+      <EndWorkoutConfirmModal personId={PERSON} onClose={() => {}} onEnded={onEnded} />
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
@@ -86,16 +86,34 @@ describe('EndWorkoutConfirmModal', () => {
   });
 
   // The rating schedule (lib/reviewPrompt.js) counts finished workouts by their sets, so the End
-  // tap hands it the same count the recap shows -- including sets still queued offline.
-  it('tells the rating schedule how many sets the ended workout had', () => {
-    askForReviewAfterWorkout.mockClear();
+  // tap hands it the same count the recap shows -- including sets still queued offline. Counted AT
+  // the tap, so a reload with the workout-done sheet open cannot lose it; the answer travels to
+  // SessionBar, which asks only once the sheet closes.
+  it('tells the rating schedule how many sets the ended workout had, and hands its answer on', () => {
+    noteWorkoutEnded.mockClear();
+    noteWorkoutEnded.mockReturnValueOnce(true);
     queryClient.setQueryData(queryKeys.liveSession(PERSON), { id: null, startedAt: '2026-09-23T09:00:00Z' });
     logPendingSet('optimistic-a');
     logPendingSet('optimistic-b');
+    const onEnded = vi.fn();
 
-    endWorkout();
+    endWorkout(onEnded);
 
-    expect(askForReviewAfterWorkout).toHaveBeenCalledTimes(1);
-    expect(askForReviewAfterWorkout).toHaveBeenCalledWith({ setCount: 2 });
+    expect(noteWorkoutEnded).toHaveBeenCalledTimes(1);
+    expect(noteWorkoutEnded).toHaveBeenCalledWith({ setCount: 2 });
+    expect(onEnded).toHaveBeenCalledWith({
+      summary: expect.objectContaining({ exerciseCount: 1, setCount: 2 }),
+      reviewDue: true,
+    });
+  });
+
+  // Nothing logged means nothing to summarise: SessionBar shows the plain toast instead of a sheet.
+  it('hands on no summary for a workout with nothing in it', () => {
+    queryClient.setQueryData(queryKeys.liveSession(PERSON), { id: 55, startedAt: '2026-09-23T09:00:00Z' });
+    const onEnded = vi.fn();
+
+    endWorkout(onEnded);
+
+    expect(onEnded).toHaveBeenCalledWith({ summary: null, reviewDue: false });
   });
 });

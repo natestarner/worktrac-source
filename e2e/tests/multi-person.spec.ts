@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { endWorkout, pickExercise } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -275,8 +275,7 @@ test.describe('Multi-person switching', () => {
     await expect(restReadout(page)).toBeVisible();
     await expect(restRing(page, 'Alex')).toBeVisible();
 
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
 
     // Both surfaces clear, and so does the bar that hosted them.
     await expect(restReadout(page)).toHaveCount(0);

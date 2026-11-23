@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Mode 3 (elected/hard offline): the rest of the active-workout loop beyond plain set-logging --
@@ -128,8 +128,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await expect(page.getByText(/Session in progress/)).toBeVisible();
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
 
     // Optimistic clear happens immediately -- doesn't wait for the write to settle.
     await expect(page.getByText(/Session in progress/)).toBeHidden();

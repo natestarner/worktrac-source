@@ -1,5 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { formatSessionRecap, formatWorkoutDuration, sessionElapsedMs } from './sessionRecap';
+import { formatSessionRecap, formatWorkoutDuration, sessionElapsedMs, sessionRecapTiles } from './sessionRecap';
+
+// The workout-done sheet's tiles and the End dialog's sentence are the same numbers in two shapes;
+// these pin that they agree, including the singular and the dropped-duration cases.
+describe('sessionRecapTiles', () => {
+  it('gives the same numbers as the sentence, as tiles', () => {
+    const summary = { exerciseCount: 3, setCount: 12, elapsedMs: 47 * 60 * 1000 };
+    expect(sessionRecapTiles(summary)).toEqual([
+      { value: '3', label: 'exercises' },
+      { value: '12', label: 'sets' },
+      { value: '47', label: 'minutes' },
+    ]);
+    expect(formatSessionRecap(summary)).toBe('3 exercises · 12 sets · 47 min');
+  });
+
+  it('gives the time from an hour on as h:mm over "hours", the sentence as "1 hr 12 min"', () => {
+    const summary = { exerciseCount: 5, setCount: 20, elapsedMs: 72 * 60 * 1000 };
+    expect(sessionRecapTiles(summary)[2]).toEqual({ value: '1:12', label: 'hours' });
+    expect(formatSessionRecap(summary)).toBe('5 exercises · 20 sets · 1 hr 12 min');
+    expect(sessionRecapTiles({ ...summary, elapsedMs: 60 * 60 * 1000 })[2]).toEqual({ value: '1:00', label: 'hours' });
+  });
+
+  it('uses the singular for one, and drops the time under a minute, as the sentence does', () => {
+    expect(sessionRecapTiles({ exerciseCount: 1, setCount: 1, elapsedMs: 20 * 1000 })).toEqual([
+      { value: '1', label: 'exercise' },
+      { value: '1', label: 'set' },
+    ]);
+  });
+
+  it('returns null when nothing was logged, so there is no sheet', () => {
+    expect(sessionRecapTiles({ exerciseCount: 0, setCount: 0 })).toBeNull();
+  });
+});
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
