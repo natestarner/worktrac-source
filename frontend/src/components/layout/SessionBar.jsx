@@ -9,8 +9,7 @@ import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import { formatRestTime, formatTime } from '../../utils/datetime';
 import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
-import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
-import WorkoutDoneSheet from '../shared/WorkoutDoneSheet';
+import EndWorkoutSheet from '../shared/EndWorkoutSheet';
 import Button from '../shared/Button';
 import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconTimer } from '../shared/icons';
@@ -35,11 +34,11 @@ export default function SessionBar() {
   const { session, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const { restTimers, showToast } = useUI();
   const [restEnabled] = useRestTimerPreference(activePersonId);
-  const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
-  // The workout-done sheet's state: `{ personId, summary, reviewDue }` from the End tap, or null.
-  // Plain local state, not UIContext: the sheet is a modal, so nobody can switch person under it,
-  // and it is in memory only -- a reload closes it, which is the right outcome for a summary.
-  const [workoutDone, setWorkoutDone] = useState(null);
+  // The end-workout sheet: `{ personId, ended }` while it is open, or null. `ended` flips at the
+  // End tap, after which the sheet outlives the bar it was opened from. Plain local state, not
+  // UIContext: the sheet is a modal, so nobody can switch person under it, and it is in memory
+  // only -- a reload closes it, which is the right outcome for a summary.
+  const [endSheet, setEndSheet] = useState(null);
 
   // Editing a past session is an editor, not a live session -- and its own date/time card stays in
   // flow in LogTab, because it is a form rather than a status. Mirrors the condition the banner
@@ -78,34 +77,59 @@ export default function SessionBar() {
     };
   }, [visible]);
 
-  // Everything that used to happen at the End tap and would land ON the sheet happens as it closes:
-  // the App Store rating ask, and the forced update, which reloads the page -- at the tap it took
-  // the sheet with it. Every exit from the sheet (Done, the X, Escape, the add-person dialog) is
-  // this one callback.
-  function closeWorkoutDone() {
-    const done = workoutDone;
-    setWorkoutDone(null);
-    if (!done) return;
-    askForReviewAfterWorkout({ due: done.reviewDue });
+  // A sheet still asking "End this workout?" when the workout ends some other way (another device's
+  // End, seen on a refetch) has nothing left to ask about. It used to live inside the bar and went
+  // with it; it now outlives the bar, so it is closed here instead -- during render, React's
+  // pattern for state that follows a prop, so no frame ever draws the orphaned question. The End
+  // tap itself never lands here: it marks the sheet `ended` in the same event that clears the bar.
+  if (endSheet && !endSheet.ended && !visible) setEndSheet(null);
+
+  // The End tap itself. The sheet has already captured the card and queued the END_WORKOUT write.
+  function handleEnded({ hadSets }) {
+    setEndSheet((sheet) => sheet && { ...sheet, ended: true });
+    endRoutine();
+    // Ending a workout from the exercise screen returns this person to their Log picker.
+    backToPicker();
+    refetchLiveSession();
+    // A workout with nothing in it (a mis-tap, every set deleted) has no card to show, so it gets
+    // the plain sentence -- congratulating it would be worse.
+    if (!hadSets) showToast('Workout ended. Logging a set anytime starts a new one.');
+  }
+
+  // Everything that used to happen at the End tap and would land ON the sheet happens as it closes
+  // after the End: the App Store rating ask, and the forced update, which reloads the page -- at the
+  // tap it took the sheet with it. Every exit after the End (End itself when nothing is asked, the
+  // X, Escape, "Just me", the add-person dialog) is this one callback.
+  function handleClosedAfterEnd({ reviewDue }) {
+    const sheet = endSheet;
+    setEndSheet(null);
+    if (!sheet) return;
+    askForReviewAfterWorkout({ due: reviewDue });
     // An explicit "I'm done with this session" signal -- one of the forced-reload trigger points
     // (guarded: a no-op if the END_WORKOUT write itself, or anything else for this person, is
     // still in flight and not yet durable). See swUpdate.js.
-    tryForceUpdate(queryClient, done.personId);
+    tryForceUpdate(queryClient, sheet.personId);
   }
 
   // Rendered even once the bar itself is gone: ending the workout is exactly what hides the bar,
-  // and the sheet is what follows it. Modal portals onto document.body, so its place in this tree
-  // draws nothing -- but it keeps ONE place in it (the fragment's second child, bar or no bar), so
-  // the bar coming or going under it can never remount the sheet and drop its state.
-  const doneSheet = workoutDone && (
-    <WorkoutDoneSheet personId={workoutDone.personId} summary={workoutDone.summary} onClose={closeWorkoutDone} />
+  // and the sheet's "Workout done" state is what follows it. Modal portals onto document.body, so
+  // its place in this tree draws nothing -- but it keeps ONE place in it (the fragment's second
+  // child, bar or no bar), so the bar going under it can never remount the sheet and drop its state.
+  const sheet = endSheet && (
+    <EndWorkoutSheet
+      personId={endSheet.personId}
+      sessionId={session?.id ?? null}
+      onCancel={() => setEndSheet(null)}
+      onEnded={handleEnded}
+      onClose={handleClosedAfterEnd}
+    />
   );
 
   if (!visible) {
     return (
       <>
         {null}
-        {doneSheet}
+        {sheet}
       </>
     );
   }
@@ -160,7 +184,7 @@ export default function SessionBar() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowEndWorkoutConfirm(true)}
+              onClick={() => setEndSheet({ personId: activePersonId, ended: false })}
               style={{ color: 'var(--color-muted)', flexShrink: 0 }}
             >
               End workout
@@ -168,31 +192,8 @@ export default function SessionBar() {
           </ReadOnlyWrap>
         </div>
 
-        {showEndWorkoutConfirm && (
-          <EndWorkoutConfirmModal
-            personId={activePersonId}
-            onClose={() => setShowEndWorkoutConfirm(false)}
-            onEnded={({ summary, reviewDue }) => {
-              setShowEndWorkoutConfirm(false);
-              endRoutine();
-              // Ending a workout from the exercise screen returns this person to their Log picker.
-              backToPicker();
-              refetchLiveSession();
-              // The numbers were counted in the modal and handed here, rather than recounted: by this
-              // point handleEnd has already nulled the cached liveSession, so recounting would report
-              // an empty workout. A workout with nothing in it (a mis-tap, every set deleted) gets no
-              // sheet -- congratulating it would be worse than the plain sentence.
-              if (summary) {
-                setWorkoutDone({ personId: activePersonId, summary, reviewDue });
-              } else {
-                showToast('Workout ended. Logging a set anytime starts a new one.');
-                tryForceUpdate(queryClient, activePersonId);
-              }
-            }}
-          />
-        )}
       </div>
-      {doneSheet}
+      {sheet}
     </>
   );
 }

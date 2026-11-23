@@ -189,7 +189,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await page.reload();
     await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
 
-    // Not endWorkout(): its closing of the workout-done sheet is a click this spec cannot afford
+    // Not endWorkout(): its closing of the end-workout sheet is a click this spec cannot afford
     // between the End and the reload. The sheet is in memory only, so the reload closes it anyway.
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();

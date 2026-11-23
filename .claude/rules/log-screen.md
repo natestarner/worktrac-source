@@ -563,7 +563,7 @@ something:
   reproduce it**, which is why it got through; the guards are `AppShell.test.jsx`'s resume block
   and `multi-person.spec.ts`'s reload spec, both verified against the old behaviour.
 - **Every path that ends a rest must clear BOTH copies in one synchronous step** — ending the
-  workout (`EndWorkoutConfirmModal`) and starting a hold (`ExerciseDetail`). Clearing only the
+  workout (`EndWorkoutSheet`) and starting a hold (`ExerciseDetail`). Clearing only the
   in-memory one leaves the persisted start for the next mount to resume, which is the same
   resurrection `endedSessions.js` exists to prevent for the live session.
 - **No `+30s`, no `−15s`, no Skip.** `+30s` negotiates with a deadline that has no authority, and
@@ -693,7 +693,7 @@ readout there with nothing but the pills to act on.
 - **No confirm dialog on `End routine`.** It clears client-side navigation state only — nothing
   logged is touched, and the routine restarts from the picker's quick-start list, which
   `ExercisePicker` shows precisely when no routine is active. A modal would tax every deliberate
-  use to guard an action with nothing to undo. (`EndWorkoutConfirmModal` is the opposite case: it
+  use to guard an action with nothing to undo. (`EndWorkoutSheet` is the opposite case: it
   ends a real session server-side, and calls `endRoutine()` on the way through.)
 
 None of this is a connectivity branch — routine position is pure client state — so it does not

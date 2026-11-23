@@ -57,7 +57,7 @@ describe('when to ask for a rating', () => {
 });
 
 // The count is taken at the End tap (noteWorkoutEnded, above); this is only the ask, made as the
-// workout-done sheet closes, with what that tap answered.
+// end-workout sheet closes, with what that tap answered.
 describe('askForReviewAfterWorkout', () => {
   it("asks Apple's sheet a moment after it is told the ask is due, never at once", () => {
     vi.useFakeTimers();

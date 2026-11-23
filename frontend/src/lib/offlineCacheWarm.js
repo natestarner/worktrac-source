@@ -50,7 +50,7 @@ const WARM_STALE_TIME = 30 * 1000;
 // would delete it mid-flight:
 //   - exercises, personExercises -- insertOptimisticExercise (AddEditExerciseModal) puts a temp
 //                       exercise in both while its create is still queued in the outbox.
-//   - liveSession    -- EndWorkoutConfirmModal optimistically nulls it on end-workout.
+//   - liveSession    -- EndWorkoutSheet optimistically nulls it on end-workout.
 function personWarmTargets(queryClient, personId) {
   return [
     { queryKey: queryKeys.liveSession(personId), queryFn: () => fetchLiveSession(queryClient, personId) },

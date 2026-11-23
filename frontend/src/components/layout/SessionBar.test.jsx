@@ -26,7 +26,7 @@ vi.mock('../../hooks/useAccountAccess', () => ({
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 // Mocked like useLiveSession above: the recap's own assembly (history + catalog + pending writes)
 // is covered by useSessionRecap's sources, and its wording by utils/sessionRecap.test.js. What
-// matters here is that whatever it reports reaches the modal and the toast.
+// matters here is that whatever it reports reaches the sheet and the toast.
 vi.mock('../../hooks/useSessionRecap', () => ({ useSessionRecap: vi.fn() }));
 vi.mock('../../hooks/useRestTimerPreference', () => ({ useRestTimerPreference: vi.fn() }));
 // The fold behind the sheet's headline, mocked like useSessionRecap: its assembly is
@@ -36,7 +36,8 @@ vi.mock('../../hooks/useStatsFromHistory', () => ({ useStatsFromHistory: vi.fn()
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 vi.mock('../../lib/reviewPrompt', () => ({ noteWorkoutEnded: vi.fn(() => false), askForReviewAfterWorkout: vi.fn() }));
-// The workout-done sheet reads the household (for its "who else trains with you?" ask).
+// The end-workout sheet reads the household (for its card's name and its "who else trains with
+// you?" ask).
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 function baseAppState(overrides = {}) {
@@ -228,8 +229,8 @@ describe('SessionBar rest readout', () => {
 
 describe('SessionBar end workout', () => {
   async function endTheWorkout() {
-    // The bar's button and the confirm modal's share the label once the modal is open -- the
-    // modal's is the one added last.
+    // The bar's button and the sheet's share the label once the sheet is open -- the sheet's is the
+    // one added last.
     fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
     fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
   }
@@ -262,9 +263,9 @@ describe('SessionBar end workout', () => {
     expect(appState.setRestTimer).toHaveBeenCalledWith({});
   });
 
-  // A forced update reloads the page, so with a workout-done sheet to show it waits for the sheet
+  // A forced update reloads the page, so with a end-workout sheet to show it waits for the sheet
   // to close -- at the End tap it would reload the page out from under the sheet.
-  it('is a forced-reload trigger point, once the workout-done sheet closes', async () => {
+  it('is a forced-reload trigger point, once the end-workout sheet closes', async () => {
     render(<SessionBar />);
 
     await endTheWorkout();
@@ -295,9 +296,9 @@ describe('SessionBar end workout', () => {
   });
 
   // Ending a workout used to report only a state transition ("Workout ended.") while the session's
-  // own numbers sat unused in the cache. The confirm modal names them before the tap; the sheet
-  // after it, as tiles, from the SAME count -- not a recount against a cache the End has cleared.
-  it('shows what was actually done, in the modal and again in the sheet', async () => {
+  // own numbers sat unused in the cache. The sheet names them as it asks, and keeps the SAME count
+  // after the End -- not a recount against a cache the End has cleared.
+  it('shows what was actually done while asking, and keeps it after the End', async () => {
     const showToast = vi.fn();
     useUI.mockReturnValue(baseUI({ showToast }));
     // Anchored to now, not to `liveSession`'s fixed date: the duration is measured against the real
@@ -307,8 +308,14 @@ describe('SessionBar end workout', () => {
     render(<SessionBar />);
 
     fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
-    expect(screen.getByText('3 exercises · 12 sets · 47 min')).toBeInTheDocument();
+    const asking = within(screen.getByRole('dialog', { name: 'End this workout?' }));
+    expect(asking.getByText('3')).toBeInTheDocument();
+    expect(asking.getByText('exercises')).toBeInTheDocument();
+    expect(asking.getByText('12')).toBeInTheDocument();
+    expect(asking.getByText('47')).toBeInTheDocument();
 
+    // The End nulls the live session; a recount here would report an empty workout.
+    useSessionRecap.mockReturnValue({ exerciseCount: 0, setCount: 0, startedAt: null });
     fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
 
     const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
@@ -320,6 +327,43 @@ describe('SessionBar end workout', () => {
     expect(sheet.getByText('minutes')).toBeInTheDocument();
     // The sheet replaces the toast; it does not add to it.
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  // One dialog, not a confirm followed by a summary: the card is on the question itself, and
+  // Cancel leaves the workout running with none of the after-End work done.
+  it('asks on the card itself, and Cancel ends nothing', async () => {
+    const appState = baseAppState();
+    useAppState.mockReturnValue(appState);
+    render(<SessionBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    const asking = screen.getByRole('dialog', { name: 'End this workout?' });
+    expect(asking.querySelector('.brand-card')).not.toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+
+    fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(endWorkout).not.toHaveBeenCalled();
+    expect(appState.endRoutine).not.toHaveBeenCalled();
+    expect(tryForceUpdate).not.toHaveBeenCalled();
+    expect(askForReviewAfterWorkout).not.toHaveBeenCalled();
+    expect(screen.getByText(/Session in progress/)).toBeInTheDocument();
+  });
+
+  // The sheet outlives the bar (so the post-End question can), which means a sheet still ASKING
+  // when the workout ends elsewhere -- another device's End, seen on a refetch -- must close too,
+  // rather than offer to end a workout that is already over.
+  it('closes a sheet still asking once the workout has ended elsewhere', () => {
+    const { rerender } = render(<SessionBar />);
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    expect(screen.getByRole('dialog', { name: 'End this workout?' })).toBeInTheDocument();
+
+    useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
+    rerender(<SessionBar />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tryForceUpdate).not.toHaveBeenCalled();
   });
 
   // The headline is chosen at the End tap, from the fold with this workout (session 55) still in
@@ -341,7 +385,13 @@ describe('SessionBar end workout', () => {
     queryClient.setQueryData(queryKeys.liveSession(7), liveSession);
     render(<SessionBar />);
 
-    await endTheWorkout();
+    // Live while asking, from the same fold.
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    const asking = screen.getByRole('dialog', { name: 'End this workout?' });
+    expect(asking.querySelector('.brand-card__headline')).toHaveTextContent(/^A new best on Bench Press\.$/);
+    // Captured at the tap: after it the workout has left the live fold.
+    useStatsFromHistory.mockReturnValue({ digests: [], status: 'ready', historyWindow: null });
+    fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
 
     // Read as the paragraph's whole text: the lit words are their own <em>, and RTL's getByText
     // matches only an element's direct text.
@@ -372,16 +422,21 @@ describe('SessionBar end workout', () => {
   });
 
   // The card says whose workout it was -- on a shared device that matters -- and once there is a
-  // second person the question has been answered, so it is not asked and Done is the button.
-  it('names the person on the card, and does not ask, once the household has a second person', async () => {
+  // second person the question has been answered, so there is nothing to ask: the End closes the
+  // sheet, and the after-End work runs then.
+  it('names the person on the card, and closes at the End once the household has a second person', async () => {
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Sam' }, { id: 8, name: 'Alex' }], account: { id: 1 } });
+    noteWorkoutEnded.mockReturnValueOnce(true);
     render(<SessionBar />);
-    await endTheWorkout();
 
-    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
-    expect(sheet.getByText('Sam')).toBeInTheDocument();
-    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
-    expect(sheet.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    expect(within(screen.getByRole('dialog', { name: 'End this workout?' })).getByText('Sam')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(endWorkout).toHaveBeenCalledWith(7));
+    expect(tryForceUpdate).toHaveBeenCalledTimes(1);
+    expect(askForReviewAfterWorkout).toHaveBeenCalledWith({ due: true });
   });
 
   // Without an answer that sticks, someone who trains alone was asked after every workout.
@@ -396,8 +451,8 @@ describe('SessionBar end workout', () => {
 
     render(<SessionBar />);
     await endTheWorkout();
-    const sheet = within(await screen.findByRole('dialog', { name: 'Workout done' }));
-    expect(sheet.queryByText('Who else trains with you?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Who else trains with you?')).not.toBeInTheDocument();
   });
 
   // The question's nouns are the plan's: a trainer's account is a practice, not a household.
@@ -443,8 +498,8 @@ describe('SessionBar end workout', () => {
 
     await waitFor(() => expect(showToast).toHaveBeenCalled());
     expect(showToast.mock.calls[0][0]).toBe('Workout ended. Logging a set anytime starts a new one.');
-    // No sheet to wait for, so the forced update keeps its old place at the End tap.
-    expect(screen.queryByRole('dialog', { name: 'Workout done' })).not.toBeInTheDocument();
+    // No card and nothing to ask, so the End closes the sheet and the forced update runs at once.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(tryForceUpdate).toHaveBeenCalledTimes(1);
   });
 });

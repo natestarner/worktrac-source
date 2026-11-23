@@ -304,7 +304,7 @@ export function isDeleteQueuedFor(client, setId) {
 
 // The tempIds of this person's live-set creates that have not landed yet -- the sets of the workout
 // in progress. Session-edit creates are excluded: they log into a PAST session, not the live one.
-// Read by the End tap (EndWorkoutConfirmModal, to mark exactly these as ended) and by
+// Read by the End tap (EndWorkoutSheet, to mark exactly these as ended) and by
 // lib/liveSession.js (to tell a "no live workout" answer that predates them from a real one).
 export function pendingLiveSetCreates(client, personId) {
   return client
@@ -922,7 +922,7 @@ export function dispatchDurableWrite(client, mutationKey, variables) {
 
 // Fire a durable write against the app's singleton client WITHOUT a React observer -- for
 // fire-and-dismiss actions (end workout) whose component has no QueryClientProvider dependency at
-// all (see EndWorkoutConfirmModal.jsx, which imports the singleton directly and never calls
+// all (see EndWorkoutSheet.jsx, which imports the singleton directly and never calls
 // useQueryClient()). The write still queues + replays via the outbox exactly like a
 // useMutation-dispatched one. A component that already has `useQueryClient()` should call
 // dispatchDurableWrite with its own context client instead of this -- see there for why.
