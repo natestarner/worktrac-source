@@ -52,6 +52,7 @@ need the "why" or the debugging story.
 | 2026-11-12 | [ACS stopped confirming sends, and the app resent every accepted email](2026-11-12-acs-slow-confirmation-resent-accepted-email.md) — Azure delivered hours late, the 2-minute wait threw, and the outbox re-POSTed each accepted email up to five times, reporting each as FAILED; now an accepted send is never resent, and a missing delivery report alerts after 24 hours | Email |
 | 2026-11-19 | [Production's default health probes restarted the backend five times in a month](2026-11-19-prod-default-probes-restarted-backend.md) — no `probes` meant Azure's 30s TCP liveness; each kill a ~4-minute outage on one 0.25 vCPU replica | Infra |
 | 2026-11-19 | [A forgotten legacy column made households undeletable](2026-11-19-legacy-users-account-id-blocked-account-deletion.md) — `users.account_id` was unmapped in phase 2 but never dropped; its FK failed the final `DELETE FROM accounts` for any pre-phase-2 login that also belonged to another household, a 503 on every attempt | Account / schema |
+| 2026-11-21 | [A tap on History slid off its button in WebKit, so the menu never opened](2026-11-21-history-tap-slid-away-in-webkit.md) — Playwright's scroll reached the page only with the click, blocks drawn by it shrank 60px mid-press, and the click went to the card; #440, a nightly flake for a month | e2e / WebKit |
 
 ## Adding a new incident
 

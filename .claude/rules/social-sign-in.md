@@ -13,6 +13,7 @@ paths:
   - "frontend/src/lib/lastSignInMethod.js"
   - "frontend/src/routes/LoginPage.jsx"
   - "frontend/src/routes/RegisterPage.jsx"
+  - "frontend/src/routes/JoinPage.jsx"
 ---
 
 # Sign in with Apple / Google: the invariants
@@ -177,8 +178,9 @@ it guards.
   keep their own. A cancel is still `cancelled: true` and says nothing.
 - **"Last used" is per device and names a method only** (`lib/lastSignInMethod.js`, localStorage,
   every access wrapped). Written when the server ACCEPTS a provider (signed in, or a household to
-  pick) and when a password sign-in or confirmation succeeds; never on a failure or an unfinished
-  name step. It survives logout on purpose: that is when it is read. It is the guard against a
+  pick), when a password sign-in or confirmation succeeds, and when an invitation is accepted WITH
+  a password (`JoinPage`; joining on an existing session signed nobody in, so it records nothing);
+  never on a failure or an unfinished name step. It survives logout on purpose: that is when it is read. It is the guard against a
   second, empty household from an Apple "Hide My Email" address meeting the other provider.
   - **It is `aria-describedby`, never part of the button's name.** "Continue with Apple" stays
     exactly that for screen readers, voice control and every selector in both test layers.
