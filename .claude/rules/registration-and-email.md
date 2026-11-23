@@ -170,7 +170,8 @@ explanation of why the app stopped letting them in.
 2. **Actually delivered** — arrives later out of band via Event Grid
    (`Microsoft.Communication.EmailDeliveryReportReceived`) → `EmailDeliveryWebhookController`,
    correlated by that same `messageId`. Its `permitAll()` route is gated by a shared-secret query
-   param (`EMAIL_DELIVERY_WEBHOOK_KEY`). A new environment needs its own Event Grid subscription
+   param (`EMAIL_DELIVERY_WEBHOOK_KEY`), compared with `MessageDigest.isEqual` (constant time,
+   like `TestSupportController`'s key), never `String.equals`. A new environment needs its own Event Grid subscription
    or these events never arrive.
 
 Every failure event's `detail` carries the **real reason** (ACS code, the recipient server's SMTP
