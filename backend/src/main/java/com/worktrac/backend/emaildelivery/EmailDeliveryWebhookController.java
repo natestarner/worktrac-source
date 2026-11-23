@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Map;
 
 // Ingests Azure Event Grid's push delivery of Azure Communication Services email events --
@@ -59,7 +61,10 @@ public class EmailDeliveryWebhookController {
     public ResponseEntity<?> receive(@RequestParam(value = "key", required = false, defaultValue = "") String key,
                                       @RequestBody String rawBody) throws Exception {
         String expectedKey = properties.getKey();
-        if (expectedKey == null || expectedKey.isBlank() || !expectedKey.equals(key)) {
+        // Constant-time comparison (MessageDigest.isEqual), not String.equals: equals returns at
+        // the first differing character, so its timing leaks how much of a guess was right.
+        if (expectedKey == null || expectedKey.isBlank() || !MessageDigest.isEqual(
+                expectedKey.getBytes(StandardCharsets.UTF_8), key.getBytes(StandardCharsets.UTF_8))) {
             log.warn("Rejected email-delivery webhook call: missing or invalid key");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
