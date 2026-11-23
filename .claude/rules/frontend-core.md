@@ -141,7 +141,7 @@ bottom of the scroll.
   the **end of the document** clears the bar; a fixed bottom bar necessarily overlaps mid-document
   content at some scroll position, and asserting otherwise fails against correct code.
 - **Ending a workout opens the workout-done sheet (`WorkoutDoneSheet`), and SessionBar owns what
-  follows it.** Three rules:
+  follows it.** Four rules:
   - **Its numbers are handed over, never recounted.** `EndWorkoutConfirmModal` counts on the render
     it opens and passes `{ summary, reviewDue }` through `onEnded`; by the time the sheet mounts the
     End has nulled the live session, so a recount reports an empty workout. A workout with no sets
@@ -155,6 +155,13 @@ bottom of the scroll.
     bar), because ending the workout is what removes the bar; a moved sheet remounts and drops its
     state. The card's `--brand-card-*` colours are deliberately not themed (like the home-screen
     icon), and the household question's "Just me" is stored per account by `lib/householdAsk.js`.
+  - **The card's headline (`utils/workoutHeadline.js`) is chosen at the End tap too, from
+    `useStatsFromHistory`'s fold, and handed over in `summary.headline`.** After the End a finished
+    workout's queued sets leave the live fold and History does not have them yet, so a headline
+    computed in the sheet misses the workout in every degraded mode -- verified: moved into the
+    sheet, `parity-session-recap`'s "names a new best" failed lie-fi, hard-offline and pinned-offline
+    and passed online. It only CHOOSES among the fold's answers (`exerciseTrend`, `trendsOverview`);
+    never give it arithmetic of its own, or it can disagree with the PRs board and Trends.
 
 ### Modals: `Modal` never closes on a backdrop tap
 
