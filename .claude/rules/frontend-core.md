@@ -140,6 +140,21 @@ bottom of the scroll.
   mid-page, so scrolling to the bottom moves it off the *top*. What the padding guarantees is that
   the **end of the document** clears the bar; a fixed bottom bar necessarily overlaps mid-document
   content at some scroll position, and asserting otherwise fails against correct code.
+- **Ending a workout opens the workout-done sheet (`WorkoutDoneSheet`), and SessionBar owns what
+  follows it.** Three rules:
+  - **Its numbers are handed over, never recounted.** `EndWorkoutConfirmModal` counts on the render
+    it opens and passes `{ summary, reviewDue }` through `onEnded`; by the time the sheet mounts the
+    End has nulled the live session, so a recount reports an empty workout. A workout with no sets
+    gets the plain toast and no sheet.
+  - **The App Store rating ask and `tryForceUpdate` run when the sheet CLOSES, not at the End tap.**
+    At the tap, the forced update reloads the page out from under the sheet and Apple's sheet
+    covers it. The rating COUNT stays at the tap (`noteWorkoutEnded`, synchronous) so a reload with
+    the sheet open cannot lose it. Every exit (Done, X, Escape, "Just me", the add-person dialog's
+    close) goes through the one `closeWorkoutDone`.
+  - **The sheet keeps one position in SessionBar's tree** (the fragment's second child, bar or no
+    bar), because ending the workout is what removes the bar; a moved sheet remounts and drops its
+    state. The card's `--brand-card-*` colours are deliberately not themed (like the home-screen
+    icon), and the household question's "Just me" is stored per account by `lib/householdAsk.js`.
 
 ### Modals: `Modal` never closes on a backdrop tap
 
