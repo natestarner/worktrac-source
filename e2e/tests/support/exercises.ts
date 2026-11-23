@@ -117,22 +117,25 @@ export async function dismissPrCelebration(page: Page) {
   }
 }
 
-// Ends the active person's workout through the bar and its confirm, then closes the workout-done
-// sheet that follows.
+// Ends the active person's workout through the bar and its "End this workout?" sheet, then closes
+// the sheet if it stays open to ask "Who else trains with you?".
 //
 // USE THIS RATHER THAN CLICKING "End workout" TWICE. The sheet is a Modal, so until it closes every
-// click on the page behind it is intercepted -- the same trap as the PR celebration above. Unlike
-// that one it is awaited, not checked with isVisible(): it shows for every workout with a set in
-// it, which is every caller's, and the End tap renders it synchronously. A spec ending a workout
-// with NOTHING in it gets the plain toast and no sheet, and should not use this helper.
+// click on the page behind it is intercepted -- the same trap as the PR celebration above. After
+// the End it either closes, or (a one-person household that hasn't answered "Just me") stays open
+// retitled "Workout done". The End tap renders either outcome in the same commit, so once the
+// "End this workout?" title is gone, whether the "Workout done" one is there is already settled.
 export async function endWorkout(page: Page) {
   await page.getByRole('button', { name: 'End workout' }).first().click();
-  await page.getByRole('dialog', { name: 'End this workout?' }).getByRole('button', { name: 'End workout' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Workout done' });
-  // The X, not Done: in a one-person household the sheet asks "Who else trains with you?" and its
-  // two answers take Done's place. The X closes it in every household without answering.
-  await sheet.getByRole('button', { name: 'Close' }).click();
-  await expect(sheet).toBeHidden();
+  const asking = page.getByRole('dialog', { name: 'End this workout?' });
+  await asking.getByRole('button', { name: 'End workout' }).click();
+  await expect(asking).toBeHidden();
+  const done = page.getByRole('dialog', { name: 'Workout done' });
+  if (await done.isVisible()) {
+    // The X, which closes it without answering the question.
+    await done.getByRole('button', { name: 'Close' }).click();
+    await expect(done).toBeHidden();
+  }
 }
 
 // Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so the

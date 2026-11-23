@@ -43,7 +43,7 @@ import { LOG_SET_MUTATION_KEY, DELETE_SET_MUTATION_KEY } from '../lib/queryClien
 // useSessionEntries' rows, and the recap counts rather than names things -- so dropping it also
 // drops an observer this modal never needed.
 //
-// Mounted from EndWorkoutConfirmModal rather than SessionBar, so its history observer lives only
+// Mounted from EndWorkoutSheet rather than SessionBar, so its history observer lives only
 // while the modal is open -- the same split as OfflineBanner's OutboxModalContainer.
 //
 // ## Deleting a set must net out of the mutation-cache fallback too
@@ -54,7 +54,7 @@ import { LOG_SET_MUTATION_KEY, DELETE_SET_MUTATION_KEY } from '../lib/queryClien
 // mutation cache -- it already succeeded, so it is exactly the kind of write the max is designed
 // to keep counting. Without accounting for the delete, `Math.max` picks the stale, too-high
 // mutation-cache count forever, and "log some sets, delete them all, end the workout" reports the
-// deleted sets instead of nothing. `formatSessionRecap` even documents the intended behaviour for
+// deleted sets instead of nothing. `sessionRecapTiles` even documents the intended behaviour for
 // this case ("a mis-tap on 'Log set' that was then deleted") -- this is what actually delivers it.
 //
 // DELETE_SET's own variables carry the `setId` it targeted (SessionSummary.jsx's "remove

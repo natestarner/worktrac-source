@@ -298,8 +298,10 @@ export default function HelpTab() {
           time you began.
         </p>
         <p>
-          When you&rsquo;re done, tap <T>End workout</T> in that bar, and Huddle shows what the
-          workout came to. Logging another set any time afterwards simply starts a new one.
+          When you&rsquo;re done, tap <T>End workout</T> in that bar. Huddle shows what the
+          workout came to and asks whether to end it; tap <T>End workout</T> again to finish, or
+          <T>Cancel</T> to keep going. Logging another set any time afterwards simply starts a new
+          one.
         </p>
 
         <Note title="If you forget to end it">

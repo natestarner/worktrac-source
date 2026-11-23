@@ -140,28 +140,33 @@ bottom of the scroll.
   mid-page, so scrolling to the bottom moves it off the *top*. What the padding guarantees is that
   the **end of the document** clears the bar; a fixed bottom bar necessarily overlaps mid-document
   content at some scroll position, and asserting otherwise fails against correct code.
-- **Ending a workout opens the workout-done sheet (`WorkoutDoneSheet`), and SessionBar owns what
-  follows it.** Four rules:
-  - **Its numbers are handed over, never recounted.** `EndWorkoutConfirmModal` counts on the render
-    it opens and passes `{ summary, reviewDue }` through `onEnded`; by the time the sheet mounts the
-    End has nulled the live session, so a recount reports an empty workout. A workout with no sets
-    gets the plain toast and no sheet.
-  - **The App Store rating ask and `tryForceUpdate` run when the sheet CLOSES, not at the End tap.**
-    At the tap, the forced update reloads the page out from under the sheet and Apple's sheet
-    covers it. The rating COUNT stays at the tap (`noteWorkoutEnded`, synchronous) so a reload with
-    the sheet open cannot lose it. Every exit (Done, X, Escape, "Just me", the add-person dialog's
-    close) goes through the one `closeWorkoutDone`.
+- **"End workout" opens ONE sheet (`EndWorkoutSheet`): the question and the workout's card
+  together.** Titled "End this workout?" with Cancel / End workout; after the End it either closes,
+  or — only while "Who else trains with you?" is due — stays open, retitled "Workout done", with that
+  question. It replaced a confirm dialog followed by a separate summary sheet, which read as the
+  same popup twice; don't split it back into two. SessionBar owns what follows it. Four rules:
+  - **The card is live while asking and CAPTURED at the End tap, never recounted after.** The End
+    nulls the live session, so a recount reports an empty workout; the "Workout done" state renders
+    only the captured copy. A workout with no sets gets no card, and the plain toast after the End.
+  - **The App Store rating ask and `tryForceUpdate` run when the sheet CLOSES after the End, not at
+    the tap.** At the tap, the forced update reloads the page out from under the sheet and Apple's
+    sheet covers it. The rating COUNT stays at the tap (`noteWorkoutEnded`, synchronous) so a reload
+    with the sheet open cannot lose it. Every exit after the End (End itself when nothing is asked,
+    X, Escape, "Just me", the add-person dialog's close) is the one `onClose`; Cancel and every exit
+    BEFORE the End are `onCancel`, which runs none of it.
   - **The sheet keeps one position in SessionBar's tree** (the fragment's second child, bar or no
     bar), because ending the workout is what removes the bar; a moved sheet remounts and drops its
-    state. The card's `--brand-card-*` colours are deliberately not themed (like the home-screen
-    icon), and the household question's "Just me" is stored per account by `lib/householdAsk.js`.
-  - **The card's headline (`utils/workoutHeadline.js`) is chosen at the End tap too, from
-    `useStatsFromHistory`'s fold, and handed over in `summary.headline`.** After the End a finished
-    workout's queued sets leave the live fold and History does not have them yet, so a headline
-    computed in the sheet misses the workout in every degraded mode -- verified: moved into the
-    sheet, `parity-session-recap`'s "names a new best" failed lie-fi, hard-offline and pinned-offline
-    and passed online. It only CHOOSES among the fold's answers (`exerciseTrend`, `trendsOverview`);
-    never give it arithmetic of its own, or it can disagree with the PRs board and Trends.
+    state. A sheet still ASKING when the workout ends elsewhere is closed by SessionBar. The card's
+    `--brand-card-*` colours are deliberately not themed (like the home-screen icon), and the
+    household question's "Just me" is stored per account by `lib/householdAsk.js`.
+  - **The card's headline (`utils/workoutHeadline.js`) is read from `useStatsFromHistory`'s fold
+    while the workout is live, and captured with the numbers at the End tap.** After the End a
+    finished workout's queued sets leave the live fold and History does not have them yet, so a
+    headline computed after it misses the workout in every degraded mode -- verified: computed in
+    the old post-End sheet, `parity-session-recap`'s "names a new best" failed lie-fi, hard-offline
+    and pinned-offline and passed online. It only CHOOSES among the fold's answers
+    (`exerciseTrend`, `trendsOverview`); never give it arithmetic of its own, or it can disagree
+    with the PRs board and Trends.
 
 ### Modals: `Modal` never closes on a backdrop tap
 

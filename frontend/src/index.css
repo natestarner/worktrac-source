@@ -67,7 +67,7 @@
   /* The wordmark's ink, as the lockup SVGs in assets/ draw it (onlight / ondark). Only the inline
      AnimatedLockup reads this; the <img> lockups carry the same pair baked into two files. */
   --brand-wordmark-ink: #3e3a37;
-  /* The brand card (the workout-done sheet's summary): the charcoal ground of the home-screen icon
+  /* The brand card (the end-workout sheet's summary): the charcoal ground of the home-screen icon
      and the App Store screenshots (docs/brand/README.md, 2026-11-22), so the card reads as one set
      with them. Deliberately NOT redefined for dark mode -- like the icon, the card is the same
      object in both themes, which is also why its ink is fixed rather than theme text. Ink against
@@ -4049,7 +4049,7 @@ button.person-row {
   font-weight: 700;
 }
 
-/* --- The brand card (WorkoutDoneSheet) ----------------------------------
+/* --- The brand card (EndWorkoutSheet) ----------------------------------
    The workout as a Huddle card: charcoal ground, the on-dark lockup, the headline in cream with its
    key words in the mark's amber, the numbers between hairlines, and the mark itself, large and
    faint, cropped off the corner. Classes rather than inline styles for the gradient and the

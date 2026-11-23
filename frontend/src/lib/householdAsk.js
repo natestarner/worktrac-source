@@ -1,4 +1,4 @@
-// "Who else trains with you?" on the workout-done sheet, answered "Just me".
+// "Who else trains with you?" on the end-workout sheet, answered "Just me".
 //
 // Without an answer that sticks, someone who trains alone was asked after every workout, forever,
 // with "Add a person" as the sheet's main button -- the nagging a polished app must not do. Adding

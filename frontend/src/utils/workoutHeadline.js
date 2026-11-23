@@ -1,7 +1,7 @@
 import { exerciseTrend, trendsOverview, workoutExercises } from './statsFromHistory';
 import { formatDateLabel } from './datetime';
 
-// The one line of encouragement at the top of the workout-done sheet: the single best thing that is
+// The one line of encouragement at the top of the end-workout sheet: the single best thing that is
 // TRUE about the workout just ended, or null.
 //
 // ## Nothing here measures anything
@@ -30,11 +30,11 @@ import { formatDateLabel } from './datetime';
 //
 // ## Computed at the End tap, never after
 //
-// EndWorkoutConfirmModal calls this when End is tapped, while the workout is still live and its
-// unsynced sets are still folded in (useStatsFromHistory's `live`). After the End they are not:
-// a finished workout's queued sets leave the live fold, and History has not got them yet, so
-// computing it in the sheet would miss the very workout it describes -- in every degraded mode.
-// The same reason the recap's numbers are counted in the modal and handed over.
+// EndWorkoutSheet calls this while it asks "End this workout?", while the workout is still live and
+// its unsynced sets are still folded in (useStatsFromHistory's `live`), and captures the answer at
+// the End tap. After the End they are not: a finished workout's queued sets leave the live fold,
+// and History has not got them yet, so computing it then would miss the very workout it describes
+// -- in every degraded mode. The same reason the recap's numbers are captured at the tap.
 //
 // `ready` is useStatsFromHistory's status === 'ready'. Anything else means History is not on this
 // device, and every comparison above would be against nothing: return null and the sheet shows the
@@ -44,7 +44,7 @@ const ALL_WEEKS = 260;
 const MIN_GAIN = 0.01;
 
 // A headline is its sentence and, optionally, the words in it the card lights up in the mark's amber
-// (`emphasis`, always a substring of `text`). Words, not markup: WorkoutDoneSheet does the splitting,
+// (`emphasis`, always a substring of `text`). Words, not markup: EndWorkoutSheet does the splitting,
 // so this stays plain data a test can compare.
 function line(text, emphasis = null) {
   return { text, emphasis };

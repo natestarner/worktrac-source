@@ -435,7 +435,7 @@ export default function ExerciseDetail({
           // EARLIEST start time across multiple sets logged before the session syncs and
           // never clobbers a real (or already-seeded) session. The real session (with the
           // correct startedAt) replaces this once it actually syncs, via the registered
-          // liveSession invalidation; EndWorkoutConfirmModal already clears it the same way.
+          // liveSession invalidation; EndWorkoutSheet already clears it the same way.
           //
           // ...except an ENDED session, which is not "a real session" to keep. The raw cache can
           // still hold one that useLiveSession suppresses -- restored after a reload (2026-08-08), or
