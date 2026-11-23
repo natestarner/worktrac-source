@@ -35,6 +35,9 @@ describe('HelpTab and Sign in with Apple / Google', () => {
     expect(screen.queryByText(/Continue with/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Sign in with/)).not.toBeInTheDocument();
     expect(screen.getByText(/enter your password, so a device someone left signed in/)).toBeInTheDocument();
+    // Backend AccountDeletedEvent: every login with a way in is emailed, on every configuration.
+    expect(screen.getByText(/everyone with a login to it gets an email saying it was deleted/))
+      .toBeInTheDocument();
   });
 
   it('explains it, and how deleting confirms with Apple, where both are offered', () => {
