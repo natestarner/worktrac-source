@@ -216,6 +216,15 @@ Confirm through the real screens), each verified red by removing what it guards.
     nothing exists until its Create button. **On Sign up the general version is left out**
     (`askWhenNothingKnown={false}`): the person chose to make one, and the question would only
     plant doubt. The named version shows there too.
+  - **The Reset password (code) screen says "No code? If you signed up with Apple or Google…" to
+    everyone**, whatever email was typed, naming only the providers this build offers. It reads
+    nothing from the device, so it is the one hint that reaches a NEW device, and because it is
+    unconditional it says nothing about whether the typed email has an account. Never make it
+    depend on the email: that would turn the reset form into a way to learn which addresses use
+    Apple or Google (the same leak `verifyCredentials`' dummy BCrypt exists to prevent).
+  - **Kept "You last signed in with …", not "Last used on this device"** (decided 2026-11-23). On a
+    family iPad "You" can be a sibling's sign-in, but most devices have one owner and the warmer
+    wording reads better there.
   - **No "trust this device" question, deliberately.** It stores method names only, never an email
     or account, so it tells whoever holds the device nothing about who signed in. Storing anything
     that identifies a person ("Continue as Nate", a pre-filled email) would change that answer.

@@ -319,6 +319,23 @@ test.describe('sign in with Apple or Google', () => {
     await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
     await expect(page.getByTestId('forgot-password-provider-hint')).toHaveCount(0);
   });
+
+  // A new device knows nothing, and an Apple "Hide My Email" account is under a relay address, so
+  // the email typed into Forgot password matches nothing and no code comes. The code screen says
+  // why, to everyone, whatever email was typed.
+  test('a device that knows nothing still learns why no reset code may come', async ({ page }) => {
+    await page.goto('/forgot-password');
+    await expect(page.getByTestId('forgot-password-provider-hint')).toHaveCount(0);
+    await page.getByPlaceholder('you@example.com').fill(`nobody-${Date.now()}@example.com`);
+    await page.getByRole('button', { name: 'Send reset code' }).click();
+
+    await expect(page).toHaveURL(/\/reset-password/);
+    await expect(page.getByTestId('reset-no-code-provider-hint')).toContainText(
+      'No code? If you signed up with Test provider, your account has no password to reset',
+    );
+    await page.getByRole('link', { name: 'Log in screen' }).click();
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
+  });
 });
 
 // The bug fixed alongside this feature: a wrong password in Delete account used to sign the person
