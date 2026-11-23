@@ -9,7 +9,7 @@
         <artifactId>spring-boot-starter-parent</artifactId>
         <!-- NOTE: verify this is still the latest stable (non-SNAPSHOT/RC) version at
              https://start.spring.io before your first build -->
-        <version>4.1.2</version>
+        <version>4.2.0</version>
         <relativePath/>
     </parent>
 
@@ -60,7 +60,7 @@
         <!-- Latest STABLE at time of writing; 33.5.0-beta.1 exists and is deliberately not used.
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
              SDK bump cannot silently change request/response shapes. -->
-        <stripe-java.version>34.1.0</stripe-java.version>
+        <stripe-java.version>34.2.0</stripe-java.version>
         <!-- Apple's official App Store Server Library: verifies StoreKit's signed transactions and
              notifications, and calls the App Store Server API. Only AppStoreProvider imports it
              (docs/in-app-purchase-plan.md). Brings Jackson 2, which sits beside our Jackson 3
