@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SocialSignIn, { SIGNING_IN_ESCAPE_MS, SIGNING_IN_SLOW_MS } from './SocialSignIn';
+import SocialSignIn, { SIGNING_IN_ESCAPE_MS, SIGNING_IN_MIN_MS, SIGNING_IN_SLOW_MS } from './SocialSignIn';
 import { useAuth } from '../../context/AuthContext';
 import { availableSignInProviders, signInWithProvider } from '../../lib/native';
 
@@ -263,6 +263,11 @@ describe('SocialSignIn', () => {
       vi.useRealTimers();
     });
 
+    // The overlay stays up SIGNING_IN_MIN_MS whatever the answer, so a fast one doesn't flash it.
+    async function passMinimum() {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, SIGNING_IN_MIN_MS)); });
+    }
+
     it('covers the screen while the sign-in is in flight, and hands over when it lands', async () => {
       const request = deferred();
       signInWithIdToken.mockReturnValue(request.promise);
@@ -278,7 +283,36 @@ describe('SocialSignIn', () => {
       expect(onSignedIn).not.toHaveBeenCalled();
 
       await act(async () => request.resolve(null));
+      await passMinimum();
       expect(onSignedIn).toHaveBeenCalled();
+    });
+
+    it('stays up for its minimum time even when the answer is instant, for every outcome', async () => {
+      vi.useFakeTimers();
+      const onSignedIn = vi.fn();
+      signInWithIdToken.mockResolvedValueOnce(null).mockRejectedValueOnce(apiError(401, 'Bad token'));
+      render(<SocialSignIn onSignedIn={onSignedIn} onNeedsChoice={vi.fn()} />);
+
+      // Signed in: the hand-over waits for the minimum.
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await act(async () => {});
+      act(() => vi.advanceTimersByTime(SIGNING_IN_MIN_MS - 1));
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+      expect(onSignedIn).not.toHaveBeenCalled();
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(onSignedIn).toHaveBeenCalledTimes(1);
+
+      // A failure: the error waits for it too, then the overlay comes down.
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await act(async () => {});
+      act(() => vi.advanceTimersByTime(SIGNING_IN_MIN_MS - 1));
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Bad token');
     });
 
     it('goes away when the sign-in fails (a timeout, a refusal) and the buttons come back', async () => {
@@ -290,6 +324,7 @@ describe('SocialSignIn', () => {
       await screen.findByTestId('signing-in-overlay');
 
       await act(async () => request.reject(apiError(0, "Couldn't reach Huddle")));
+      await passMinimum();
 
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reach Huddle");
@@ -306,6 +341,7 @@ describe('SocialSignIn', () => {
       await screen.findByTestId('signing-in-overlay');
 
       await act(async () => request.resolve({ accounts: [], selectionToken: 'sel' }));
+      await passMinimum();
 
       expect(onNeedsChoice).toHaveBeenCalled();
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
@@ -320,12 +356,14 @@ describe('SocialSignIn', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
       await screen.findByTestId('signing-in-overlay');
       await act(async () => first.reject(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED')));
+      await passMinimum();
 
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Create my household' }));
       expect(await screen.findByTestId('signing-in-overlay')).toHaveTextContent('Creating your household…');
 
       await act(async () => second.reject(apiError(500, 'Something went wrong')));
+      await passMinimum();
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
     });
@@ -405,6 +443,7 @@ describe('SocialSignIn', () => {
         expect(screen.queryByText('Old failure')).not.toBeInTheDocument();
 
         await act(async () => fresh.reject(apiError(0, 'New failure')));
+        await act(async () => { vi.advanceTimersByTime(SIGNING_IN_MIN_MS); });
         expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
         expect(screen.getByRole('alert')).toHaveTextContent('New failure');
       });

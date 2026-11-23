@@ -8,6 +8,9 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/account/AccountDeletionService.java"
   - "backend/src/test/java/com/worktrac/backend/identity/**"
   - "frontend/src/components/auth/SocialSignIn.jsx"
+  - "frontend/src/components/auth/SigningInOverlay.jsx"
+  - "frontend/src/components/auth/useSigningIn.js"
+  - "frontend/src/routes/ConfirmEmailPage.jsx"
   - "frontend/src/components/auth/ProviderButtons.jsx"
   - "frontend/src/lib/native/socialSignIn.js"
   - "frontend/src/lib/lastSignInMethod.js"
@@ -137,30 +140,43 @@ days, no nonce). `consent-revoked` / `account-delete` disconnect the Apple ident
 household may hold other people's training). `email-disabled` / `email-enabled` are audit rows only.
 Idempotent; an unknown subject is ignored.
 
-## ⚠️ The "Signing you in" overlay must never trap anyone (`SocialSignIn.jsx`)
+## ⚠️ The "Signing you in" overlay must never trap anyone (`SigningInOverlay.jsx` + `useSigningIn.js`)
 
-A full-screen, opaque overlay covers the gap between the provider's sheet closing and the app
-appearing. A screen that covers everything is the shape that bricks the app if it can fail to
-close, so it has three independent exits and each one must stay:
+A full-screen, opaque overlay covers the gap between handing over a credential and the app
+appearing. **Three screens use the ONE component and the ONE hook**: Apple / Google
+(`SocialSignIn`, "Signing you in…" / "Creating your household…"), the password form (`LoginPage`,
+"Signing you in…") and Confirm on a password registration (`ConfirmEmailPage`, "Creating your
+household…", or "account" for a Pro arrival). Never a second overlay or a hand-rolled attempt
+counter: the exits below live in the hook, and a copy is where one gets dropped. Deliberately NOT
+on the household picker's step (the overlay has already come down before the picker, for both
+kinds of sign-in) or on accepting an invitation.
 
-- **It is `busy` and nothing else.** No second flag. `finish()`'s `finally` clears it on every
-  outcome, and the page navigating away on success unmounts it.
+A screen that covers everything is the shape that bricks the app if it can fail to close, so it
+has three independent exits and each one must stay:
+
+- **It is `busy` and nothing else.** No second flag. The attempt's `end()` in a `finally` clears it
+  on every outcome, and the page navigating away on success unmounts it.
+- **It stays up at least `SIGNING_IN_MIN_MS` (500ms)** so a fast answer reads as a step, not a
+  flash. The minimum is awaited (`settled()`) only while the attempt is current, before acting on
+  any outcome; **never** on "Start over", which must not wait on anything. The three screens' unit
+  tests pin it (each verified red with the minimum at 0).
 - **"Start over" after `SIGNING_IN_ESCAPE_MS` (60s), which depends on nothing finishing.** The
   requests are time-limited, but the response body, `/me` after it and `restoreOutbox`'s IndexedDB
   read are not, so the `finally` alone is not trusted. 60s = the 45s sign-in limit + `/me`'s 15s;
   earlier would abandon a cold start that was about to succeed.
-- **A superseded attempt touches nothing** (`attemptRef`). After "Start over", a late answer may
-  only do one thing: a late SUCCESS still calls `onSignedIn` (the session is live, so staying on the
-  login screen would be the lie). A late failure, picker or name step is dropped, and a late
-  `finally` must not clear a NEW attempt's overlay.
+- **A superseded attempt touches nothing** (`isCurrent()`). After "Start over", a late answer may
+  only do one thing: a late SUCCESS still goes into the app (the session is live, so staying on the
+  sign-in screen would be the lie; on Confirm the account now exists too). A late failure, picker or
+  name step is dropped, and a late `finally` must not clear a NEW attempt's overlay.
 - **`onToken` must not return the attempt to `ProviderButtons`.** Its button stays disabled until
   `onToken` settles, so a hung attempt would leave it disabled after "Start over". `ProviderButtons`
   itself is unchanged because Delete account relies on exactly that to block a second tap.
 - **Portalled to `<body>`**, so no ancestor transform or overflow can shrink it.
 
-Pinned by `SocialSignIn.test.jsx` ("an attempt that never finishes") and `social-sign-in.spec.ts`
-(a server that never answers; a sign-in stuck past every limit), each verified red by removing what
-it guards.
+Pinned by `SocialSignIn.test.jsx`, `LoginPage.signingIn.test.jsx` and `ConfirmEmailPage.test.jsx`
+("an attempt that never finishes", the minimum), `social-sign-in.spec.ts` (a server that never
+answers; a sign-in stuck past every limit) and `password-signing-in.spec.ts` (the password form and
+Confirm through the real screens), each verified red by removing what it guards.
 
 ## The sign-in screens: agreement, failures, "Last used"
 
