@@ -108,9 +108,10 @@ describe('ForgotPasswordPage', () => {
       renderPage();
       const hint = screen.getByTestId('forgot-password-provider-hint');
       expect(hint).toHaveTextContent(
-        'Signed up with Apple? This device has signed in with Apple before. An account made that way has no password to reset.',
+        'Signed up with Apple? This device has signed in with Apple before. An account made that way has no password to reset: tap Continue with Apple on the Log in screen instead.',
       );
-      expect(screen.getByRole('link', { name: 'Log in with Apple' })).toHaveAttribute('href', '/login');
+      // The link goes to Log in; it does not start Apple itself, so it doesn't claim to.
+      expect(screen.getByRole('link', { name: 'Log in screen' })).toHaveAttribute('href', '/login');
       // The form is still there: it is a hint, not a gate.
       expect(screen.getByRole('button', { name: 'Send reset code' })).toBeEnabled();
     });

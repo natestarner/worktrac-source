@@ -305,7 +305,7 @@ test.describe('sign in with Apple or Google', () => {
     await expect(page.getByTestId('forgot-password-provider-hint')).toContainText(
       'Signed up with Test provider? This device has signed in with Test provider before.',
     );
-    await page.getByRole('link', { name: 'Log in with Test provider' }).click();
+    await page.getByRole('link', { name: 'Log in screen' }).click();
     await expect(page).toHaveURL(/\/login/);
 
     // A password sign-in on this device (a password registration here) replaces it.

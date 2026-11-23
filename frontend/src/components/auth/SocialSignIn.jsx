@@ -38,7 +38,9 @@ import { errorBannerStyle, fieldLabelStyle } from './authStyles';
  * nothing to queue. Offline the provider's sheet or the request fails and the message says so; no
  * connectivity branch (resilience.md's register, "Signing in with Apple or Google").
  */
-export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, accountNoun = 'Household' }) {
+export default function SocialSignIn({
+  onSignedIn, onNeedsChoice, onSignUpStep, accountNoun = 'Household', askWhenNothingKnown = true,
+}) {
   const { signInWithIdToken } = useAuth();
   // { message, code? } or null. `code` is a provider's own failure code, shown small for support.
   const [error, setError] = useState(null);
@@ -113,6 +115,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
         {overlay}
         <SignUpDetails
           provider={signUp.provider}
+          askWhenNothingKnown={askWhenNothingKnown}
           givenName={signUp.token.givenName}
           accountNoun={accountNoun}
           busy={busy}
@@ -155,7 +158,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
 // nothing has been created yet, so Back costs nothing. It works on a device with nothing remembered
 // (a new phone, a reinstall), which no on-device hint can. Where this device has signed in some
 // OTHER way before, it names that way; otherwise it says "a different way".
-function SignUpDetails({ provider, givenName, accountNoun, busy, error, onCancel, onSubmit }) {
+function SignUpDetails({ provider, askWhenNothingKnown, givenName, accountNoun, busy, error, onCancel, onSubmit }) {
   const [personName, setPersonName] = useState(givenName ?? '');
   const [accountName, setAccountName] = useState('');
 
@@ -173,7 +176,7 @@ function SignUpDetails({ provider, givenName, accountNoun, busy, error, onCancel
       <p style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)', margin: '0 0 var(--space-4)' }}>
         One more thing before we set up your {accountNoun.toLowerCase()}.
       </p>
-      <ExistingHouseholdHint provider={provider} />
+      <ExistingHouseholdHint provider={provider} accountNoun={accountNoun} askWhenNothingKnown={askWhenNothingKnown} />
       <SignInError error={error} />
       <label htmlFor="signup-person-name" style={fieldLabelStyle}>Your name</label>
       <input
@@ -218,11 +221,16 @@ function SignUpDetails({ provider, givenName, accountNoun, busy, error, onCancel
   );
 }
 
-function ExistingHouseholdHint({ provider }) {
+// `askWhenNothingKnown` is false on Sign up: there the general "a different way" question would
+// only make a new person doubt the choice they just made. The named version always shows, because
+// a device that has signed in another way is the real sign of a duplicate in the making.
+function ExistingHouseholdHint({ provider, accountNoun, askWhenNothingKnown }) {
   const others = describeSignInMethods(usedSignInMethods().filter((m) => m !== provider));
+  if (!others && !askWhenNothingKnown) return null;
+  const thing = accountNoun === 'Account' ? 'an account' : 'a household';
   return (
     <p className="sign-in-method-hint" data-testid="existing-household-hint" style={{ margin: '0 0 var(--space-4)' }}>
-      <strong>Already have a household?</strong>{' '}
+      <strong>{`Already have ${thing}?`}</strong>{' '}
       {others ? `You may have signed up with ${others}.` : 'You may have signed up a different way.'}{' '}
       Tap Back and sign in that way instead.
     </p>

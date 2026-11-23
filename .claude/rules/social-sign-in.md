@@ -213,7 +213,9 @@ Confirm through the real screens), each verified red by removing what it guards.
     so only the device can point back), and only providers this build still offers. The name
     step opens with "Already have a household?", naming the device's OTHER ways in, or "a different
     way" when it knows none: that step is where the duplicate household is about to be made, and
-    nothing exists until its Create button.
+    nothing exists until its Create button. **On Sign up the general version is left out**
+    (`askWhenNothingKnown={false}`): the person chose to make one, and the question would only
+    plant doubt. The named version shows there too.
   - **No "trust this device" question, deliberately.** It stores method names only, never an email
     or account, so it tells whoever holds the device nothing about who signed in. Storing anything
     that identifies a person ("Continue as Nate", a pre-filled email) would change that answer.

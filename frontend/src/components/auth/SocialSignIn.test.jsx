@@ -148,13 +148,30 @@ describe('SocialSignIn', () => {
   // The server has just said it doesn't know this person, and nothing exists yet: the moment to ask
   // whether they meant to make a second household (an Apple "Hide My Email" address meeting Google).
   describe('"Already have a household?" on the name step', () => {
-    async function reachNameStep(buttonName) {
+    async function reachNameStep(buttonName, props = {}) {
       signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
-      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} {...props} />);
       fireEvent.click(screen.getByRole('button', { name: buttonName }));
       await screen.findByLabelText('Your name');
-      return screen.getByTestId('existing-household-hint');
+      return screen.queryByTestId('existing-household-hint');
     }
+
+    // Sign up: the person chose to make one, so the general question would only plant doubt.
+    it('on Sign up, asks only when this device knows another way in', async () => {
+      expect(await reachNameStep('Continue with Apple', { askWhenNothingKnown: false })).toBeNull();
+    });
+
+    it('on Sign up, still names a way this device has used', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['google']));
+      const hint = await reachNameStep('Continue with Apple', { askWhenNothingKnown: false });
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up with Google.');
+    });
+
+    it('says "an account" for a Pro arrival', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['google']));
+      const hint = await reachNameStep('Continue with Apple', { accountNoun: 'Account' });
+      expect(hint).toHaveTextContent('Already have an account?');
+    });
 
     it('names the other way this device has signed in', async () => {
       localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple']));

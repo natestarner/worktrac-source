@@ -83,10 +83,12 @@ export default function ForgotPasswordPage() {
         {providerHint && (
           <p className="sign-in-method-hint" data-testid="forgot-password-provider-hint" style={{ margin: '0 0 var(--space-5)' }}>
             <strong>Signed up with {providerHint}?</strong> This device has signed in with{' '}
-            {providerHint} before. An account made that way has no password to reset.{' '}
+            {providerHint} before. An account made that way has no password to reset: tap Continue
+            with {providerHint} on the{' '}
             <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
-              Log in with {providerHint}
-            </Link>
+              Log in screen
+            </Link>{' '}
+            instead.
           </p>
         )}
 

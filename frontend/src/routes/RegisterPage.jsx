@@ -282,6 +282,10 @@ export default function RegisterPage() {
           onNeedsChoice={setChoice}
           onSignUpStep={setSigningUp}
           accountNoun={isProIntent ? 'Account' : 'Household'}
+          // Somebody here chose Sign up, so a blanket "Already have a household?" would only plant
+          // doubt at the moment they commit. It still asks when this device has signed in some
+          // OTHER way before, which is the mistake worth stopping.
+          askWhenNothingKnown={false}
         />
 
         {/* Below both ways in, so it covers an Apple / Google sign-up as much as a password one.
