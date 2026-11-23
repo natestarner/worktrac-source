@@ -3,6 +3,21 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
+import { availableSignInProviders } from '../lib/native';
+import { describeSignInMethods, usedSignInMethods } from '../lib/lastSignInMethod';
+
+// The Apple / Google ways in this device has used, but only on a device that has never signed in
+// with a password. Someone here may have joined with Apple's "Hide My Email": their account is under
+// a relay address they have never seen, so the email they type below matches nothing, and no reset
+// email can help them. Only the device can point them back. A device that has also used a password
+// says nothing (on a family iPad that is somebody else's password, as likely as not). Providers
+// this build no longer offers are not named.
+function providersToPointBackAt() {
+  const used = usedSignInMethods();
+  if (used.includes('password')) return [];
+  const offered = availableSignInProviders();
+  return used.filter((m) => offered.includes(m));
+}
 
 export default function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
@@ -11,6 +26,7 @@ export default function ForgotPasswordPage() {
   const [emailError, setEmailError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [providerHint] = useState(() => describeSignInMethods(providersToPointBackAt()));
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -63,6 +79,16 @@ export default function ForgotPasswordPage() {
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           Enter your email and we'll send you a code to reset your password.
         </div>
+
+        {providerHint && (
+          <p className="sign-in-method-hint" data-testid="forgot-password-provider-hint" style={{ margin: '0 0 var(--space-5)' }}>
+            <strong>Signed up with {providerHint}?</strong> This device has signed in with{' '}
+            {providerHint} before. An account made that way has no password to reset.{' '}
+            <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
+              Log in with {providerHint}
+            </Link>
+          </p>
+        )}
 
         {error && (
           <div role="alert" style={errorBannerStyle}>

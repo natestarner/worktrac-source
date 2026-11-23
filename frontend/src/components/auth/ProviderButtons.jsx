@@ -6,8 +6,7 @@ import {
   renderGoogleButton,
   signInWithProvider,
 } from '../../lib/native';
-
-const LABELS = { apple: 'Apple', google: 'Google', test: 'Test provider' };
+import { SIGN_IN_METHOD_NAMES as LABELS } from '../../lib/lastSignInMethod';
 
 /**
  * One button per provider this environment offers ("Continue with Apple", ...). Calls
@@ -28,9 +27,12 @@ const LABELS = { apple: 'Apple', google: 'Google', test: 'Test provider' };
  * A provider whose script can't load (offline, a content blocker) just drops out; nothing else on
  * the screen depends on it.
  *
- * `lastUsed` (Log in and Register only) marks the provider this device signed in with last
- * ("Last used", lib/lastSignInMethod.js). It is DESCRIPTION, not part of the button's name, so
- * "Continue with Apple" stays exactly that for screen readers, voice control and every test.
+ * `lastUsed` (Log in and Register only) marks the provider this device signed in with last, with a
+ * line under its button ("You last signed in with Apple", lib/lastSignInMethod.js). It is
+ * DESCRIPTION, not part of the button's name, so "Continue with Apple" stays exactly that for
+ * screen readers, voice control and every test. Under the button, never on it: Apple's guidelines
+ * constrain what may be drawn on Sign in with Apple, and on the web Google's button is Google's own
+ * iframe, which nothing of ours can go inside or over without covering it.
  */
 export default function ProviderButtons({
   onToken, onError, disabled = false, only, verb = 'Continue with', size = 'default', lastUsed = null,
@@ -72,13 +74,23 @@ export default function ProviderButtons({
               )}
               {badgeId && (
                 <span id={badgeId} className="provider-last-used" data-testid="provider-last-used">
-                  Last used
+                  <ClockIcon />
+                  {`You last signed in with ${LABELS[provider]}`}
                 </span>
               )}
             </div>
           );
         })}
     </div>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="8" cy="8" r="6.2" />
+      <path d="M8 4.8V8l2.2 1.4" strokeLinecap="round" />
+    </svg>
   );
 }
 

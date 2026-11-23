@@ -178,7 +178,7 @@ Pinned by `SocialSignIn.test.jsx`, `LoginPage.signingIn.test.jsx` and `ConfirmEm
 answers; a sign-in stuck past every limit) and `password-signing-in.spec.ts` (the password form and
 Confirm through the real screens), each verified red by removing what it guards.
 
-## The sign-in screens: agreement, failures, "Last used"
+## The sign-in screens: agreement, failures, the last-used caption
 
 - **⚠️ The Terms line sits under the name step's Create button** (`SocialSignIn`'s `SignUpDetails`).
   That step is where an Apple / Google account is created, and it is reachable from **Log in**,
@@ -200,8 +200,27 @@ Confirm through the real screens), each verified red by removing what it guards.
   second, empty household from an Apple "Hide My Email" address meeting the other provider.
   - **It is `aria-describedby`, never part of the button's name.** "Continue with Apple" stays
     exactly that for screen readers, voice control and every selector in both test layers.
-  - The badge ignores the pointer and sits on the button's edge, so it moves nothing and cannot
-    eat a tap, including on Google's own iframe button.
+  - **It is a caption UNDER the button ("You last signed in with Apple"), never a badge on it.**
+    It was a pill on the button's top edge until 2026-11-23. Apple's guidelines constrain what may
+    be drawn on Sign in with Apple, and on the web Google's button is Google's own iframe, which
+    anything of ours could only cover.
+  - **The device also remembers EVERY method it has used** (`usedSignInMethods`, its own key). A
+    family iPad has several people's ways in, and a last-used alone points each at the other's.
+    `rememberSignInMethod` reads the list BEFORE moving the last-used key, because on a device that
+    predates the list the old last-used value is its only record (`lastSignInMethod.test.js`).
+  - **Two screens read that list.** Forgot password names the providers this device used when it
+    has NEVER used a password (an Apple "Hide My Email" relay address matches nothing typed there,
+    so only the device can point back), and only providers this build still offers. The name
+    step opens with "Already have a household?", naming the device's OTHER ways in, or "a different
+    way" when it knows none: that step is where the duplicate household is about to be made, and
+    nothing exists until its Create button.
+  - **No "trust this device" question, deliberately.** It stores method names only, never an email
+    or account, so it tells whoever holds the device nothing about who signed in. Storing anything
+    that identifies a person ("Continue as Nate", a pre-filled email) would change that answer.
+  - **Not a warning on the TAP of the other provider, deliberately** (considered 2026-11-23). On the
+    web Google's button is Google's iframe, so its tap cannot be intercepted; it would warn people
+    whose other provider is already linked; and it cannot fire on a new device. The name step's
+    line covers the same mistake with none of those gaps.
 
 ## Deleting a user deletes its identities
 

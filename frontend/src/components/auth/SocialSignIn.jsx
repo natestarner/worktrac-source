@@ -6,7 +6,12 @@ import { useSigningIn } from './useSigningIn';
 import { availableSignInProviders } from '../../lib/native';
 
 export { SIGNING_IN_ESCAPE_MS, SIGNING_IN_MIN_MS, SIGNING_IN_SLOW_MS } from './useSigningIn';
-import { lastSignInMethod, rememberSignInMethod } from '../../lib/lastSignInMethod';
+import {
+  describeSignInMethods,
+  lastSignInMethod,
+  rememberSignInMethod,
+  usedSignInMethods,
+} from '../../lib/lastSignInMethod';
 import LegalLinks from '../shared/LegalLinks';
 import { errorBannerStyle, fieldLabelStyle } from './authStyles';
 
@@ -107,6 +112,7 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
       <>
         {overlay}
         <SignUpDetails
+          provider={signUp.provider}
           givenName={signUp.token.givenName}
           accountNoun={accountNoun}
           busy={busy}
@@ -143,7 +149,13 @@ export default function SocialSignIn({ onSignedIn, onNeedsChoice, onSignUpStep, 
 
 // A new person: what to call them, and (optionally) the household. Same fields and caps as the
 // Register form, which this replaces for an Apple / Google sign-up.
-function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit }) {
+//
+// It opens with "Already have a household?", because this step is exactly where the mistake the
+// whole sign-in hint exists for lands: the server has just said it doesn't know this person, and
+// nothing has been created yet, so Back costs nothing. It works on a device with nothing remembered
+// (a new phone, a reinstall), which no on-device hint can. Where this device has signed in some
+// OTHER way before, it names that way; otherwise it says "a different way".
+function SignUpDetails({ provider, givenName, accountNoun, busy, error, onCancel, onSubmit }) {
   const [personName, setPersonName] = useState(givenName ?? '');
   const [accountName, setAccountName] = useState('');
 
@@ -161,6 +173,7 @@ function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit
       <p style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)', margin: '0 0 var(--space-4)' }}>
         One more thing before we set up your {accountNoun.toLowerCase()}.
       </p>
+      <ExistingHouseholdHint provider={provider} />
       <SignInError error={error} />
       <label htmlFor="signup-person-name" style={fieldLabelStyle}>Your name</label>
       <input
@@ -202,6 +215,17 @@ function SignUpDetails({ givenName, accountNoun, busy, error, onCancel, onSubmit
         Back
       </button>
     </form>
+  );
+}
+
+function ExistingHouseholdHint({ provider }) {
+  const others = describeSignInMethods(usedSignInMethods().filter((m) => m !== provider));
+  return (
+    <p className="sign-in-method-hint" data-testid="existing-household-hint" style={{ margin: '0 0 var(--space-4)' }}>
+      <strong>Already have a household?</strong>{' '}
+      {others ? `You may have signed up with ${others}.` : 'You may have signed up a different way.'}{' '}
+      Tap Back and sign in that way instead.
+    </p>
   );
 }
 

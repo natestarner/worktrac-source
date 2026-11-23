@@ -15,6 +15,7 @@ vi.mock('../../lib/native', () => ({
 }));
 
 const LAST_USED_KEY = 'huddle-last-sign-in-method';
+const ALL_USED_KEY = 'huddle-sign-in-methods';
 
 function apiError(status, message, code) {
   return Object.assign(new Error(message), { status, code });
@@ -31,6 +32,7 @@ describe('SocialSignIn', () => {
     signInWithIdToken = vi.fn();
     useAuth.mockReturnValue({ signInWithIdToken });
     localStorage.removeItem(LAST_USED_KEY);
+    localStorage.removeItem(ALL_USED_KEY);
   });
 
   // An Apple / Google sign-up happens on the name step, and it can be reached from the Log in page,
@@ -100,8 +102,10 @@ describe('SocialSignIn', () => {
       render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
 
       const apple = screen.getByRole('button', { name: 'Continue with Apple' });
-      expect(apple).toHaveAccessibleDescription('Last used');
+      expect(apple).toHaveAccessibleDescription('You last signed in with Apple');
       expect(screen.getAllByTestId('provider-last-used')).toHaveLength(1);
+      // Under the button, never inside it: Apple's button carries nothing of ours.
+      expect(apple).not.toContainElement(screen.getByTestId('provider-last-used'));
       expect(screen.getByRole('button', { name: 'Continue with Google' })).not.toHaveAccessibleDescription();
     });
 
@@ -137,6 +141,44 @@ describe('SocialSignIn', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
       await screen.findByLabelText('Your name');
       expect(localStorage.getItem(LAST_USED_KEY)).toBeNull();
+      expect(localStorage.getItem(ALL_USED_KEY)).toBeNull();
+    });
+  });
+
+  // The server has just said it doesn't know this person, and nothing exists yet: the moment to ask
+  // whether they meant to make a second household (an Apple "Hide My Email" address meeting Google).
+  describe('"Already have a household?" on the name step', () => {
+    async function reachNameStep(buttonName) {
+      signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: buttonName }));
+      await screen.findByLabelText('Your name');
+      return screen.getByTestId('existing-household-hint');
+    }
+
+    it('names the other way this device has signed in', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple']));
+      const hint = await reachNameStep('Continue with Google');
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up with Apple. Tap Back and sign in that way instead.');
+    });
+
+    it('names every other way, never the one just tried', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['password', 'google', 'apple']));
+      const hint = await reachNameStep('Continue with Google');
+      expect(hint).toHaveTextContent('You may have signed up with your email and password or Apple.');
+    });
+
+    // A new phone or a reinstall remembers nothing; the question still matters most there.
+    it('still asks on a device that remembers nothing', async () => {
+      const hint = await reachNameStep('Continue with Apple');
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up a different way.');
+    });
+
+    it('Back leaves the step without creating anything', async () => {
+      await reachNameStep('Continue with Apple');
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(screen.getByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
+      expect(signInWithIdToken).toHaveBeenCalledTimes(1);
     });
   });
 
