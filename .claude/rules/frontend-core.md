@@ -456,6 +456,19 @@ as such — it has no response body, and is unreachable for an unsynced set.
 Assert this against a **real cache**, never a spy on `invalidateQueries`: a spy passes just as
 happily on a key nothing observes, which is exactly the failure mode.
 
+**The EXERCISE id has the same trap: resolve it, never use the one captured at dispatch.** A set,
+edit or note written against a just-created exercise carries its `temp-exercise-…` id, and LogTab
+moves the screen to the real id the moment the create lands — always before the dependent write
+succeeds. So `LOG_SET`, `reconcileSetChange` and `SAVE_NOTE` key every seed and invalidation on
+`resolveExerciseId(vars.exerciseId)`, and `ExerciseDetail`'s readers of queued writes
+(`unsyncedLogSets`, `pendingLiveNote`) match on the resolved id (`isForThisExercise`), not the raw
+mutation key. Keyed on the temp id, the set list kept only the sets that landed before it was
+fetched ("Set 1" only, surviving a reload), and queued sets were drawn nowhere from the remap until
+each landed (`docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md`). For an id with
+no temp past, resolving is the identity — keep it that way, it is why library exercises are
+untouched. **Any new write that can target a just-created exercise, or new reader of queued writes,
+goes through `resolveExerciseId`.**
+
 ### History is cached a month at a time — read it through `flattenHistory`
 
 `queryKeys.history(personId)` holds `{ format: 2, months: { 'yyyy-mm': { fp, sessions } },
