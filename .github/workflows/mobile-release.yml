@@ -61,7 +61,7 @@ jobs:
     needs: simulator
     # `certificates` builds nothing, so it skips the gate rather than being skipped by it.
     if: ${{ !cancelled() && (needs.simulator.result == 'success' || inputs.lane == 'certificates') }}
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     environment: mobile-${{ inputs.environment }}
     defaults:
@@ -105,11 +105,9 @@ jobs:
         with:
           ruby-version: '3.3'
 
-      - name: Select newest Xcode
-        run: |
-          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
-          xcodebuild -version
+      # App Store Connect requires the iOS 27 SDK from April 2027 (ITMS-90725).
+      - name: Select Xcode 27
+        run: bash ../scripts/select-xcode.sh 27
 
       - run: bundle install
       - run: npm ci

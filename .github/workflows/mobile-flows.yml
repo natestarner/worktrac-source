@@ -84,7 +84,7 @@ jobs:
             flows: 03-checkout-return-link 04-in-app-browser-sheet
           - shard: share-and-refresh
             flows: 05-export-share-sheet 06-history-pull-to-refresh
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 75
     environment: mobile-e2e
     defaults:
