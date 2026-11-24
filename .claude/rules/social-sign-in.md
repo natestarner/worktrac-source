@@ -178,6 +178,21 @@ Pinned by `SocialSignIn.test.jsx`, `LoginPage.signingIn.test.jsx` and `ConfirmEm
 answers; a sign-in stuck past every limit) and `password-signing-in.spec.ts` (the password form and
 Confirm through the real screens), each verified red by removing what it guards.
 
+## The provider buttons are one matched set (`ProviderButtons.jsx`)
+
+White, outlined pills for every provider, in Google's outline colour (`#dadce0`), the way Reddit,
+Spotify, Notion, Hevy and Trello draw theirs (compared 2026-11-24). Apple's is its "white with
+outline" style; it was solid black beside Google's white button, which read as two unrelated
+controls.
+
+- **On the web Apple takes the exact box of Google's own button** (44px pill, at most 400px wide,
+  `matchGoogle`), because Google's iframe cannot be resized and Apple's rule is "no smaller than
+  the other sign-in buttons". `renderGoogleButton` asks Google for `shape: 'pill'` to match.
+- **In the app both buttons are ours and stay `btn-lg`**, the size of "Log in", which is what App
+  Review checks (`SocialSignIn.test.jsx` pins the classes).
+- **With no Google button on the web, Apple keeps the full size.** Pinned in
+  `ProviderButtons.matchedPair.test.jsx`.
+
 ## The sign-in screens: agreement, failures, the last-used caption
 
 - **⚠️ The Terms line sits under the name step's Create button** (`SocialSignIn`'s `SignUpDetails`).

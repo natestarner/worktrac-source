@@ -202,12 +202,13 @@ export default function HelpTab() {
           profile&rsquo;s data is completely separate from everyone else&rsquo;s.
         </p>
         <p>
-          <strong>To add someone:</strong> account menu &rarr; <T>Profile</T> &rarr; <T>People</T>{' '}
-          &rarr; <T>Add a person</T>. <ChipWait />
+          <strong>To add someone:</strong> tap <T>+ Add person</T> in the bar across the top, or go
+          to account menu &rarr; <T>Profile</T> &rarr; <T>People</T> &rarr; <T>Add a person</T>.{' '}
+          <ChipWait />
         </p>
         <p>
-          <strong>To switch:</strong> tap their name in the bar across the top. That bar only appears
-          once there is more than one person on the account.
+          <strong>To switch:</strong> tap their name in that bar. Once there are two or more of you,
+          it stays pinned to the top of the screen while you scroll.
         </p>
 
         <h3 className="help-h3">What the dots and rings mean</h3>
@@ -244,7 +245,7 @@ export default function HelpTab() {
         <p>The <T>Log</T> tab opens on your own short list, not the full library:</p>
         <ul>
           <li><strong>Favorites:</strong> the ones you starred.</li>
-          <li><strong>Other Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
+          <li><strong>Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
         </ul>
         <p>
           Type in the search box to reach the full library. Search is forgiving about word order, so
@@ -301,7 +302,7 @@ export default function HelpTab() {
         </p>
         <p>
           When you&rsquo;re done, tap <T>End workout</T> in that bar. Huddle shows what the
-          workout came to and asks whether to end it; tap <T>End workout</T> again to finish, or
+          workout came to and asks whether to end it; tap <T>End workout</T> again to finish, or{' '}
           <T>Cancel</T> to keep going. Logging another set any time afterwards simply starts a new
           one.
         </p>
@@ -331,7 +332,7 @@ export default function HelpTab() {
           The bar at the bottom fills toward a <strong>{DEFAULT_REST_TARGET_SECONDS}-second target</strong>.
           When it&rsquo;s full, you&rsquo;re ready. Counting up rather than down is deliberate: a full
           bar is a stable &ldquo;go now&rdquo; that holds, and if you sit for four minutes the timer
-          says so instead of vanishing at zero. Anything past the target shows as an overrun.
+          says so instead of vanishing at zero. Anything past the target is shown in red beside it, as in <T>1:52 · 0:22 over</T>.
         </p>
         <ul>
           <li>Every person has their own timer, running independently in the background.</li>
@@ -828,7 +829,7 @@ export default function HelpTab() {
         </p>
         <p>
           The star and note icons sit in the row just under the exercise&rsquo;s name; the rest live
-          behind the <T>&hellip;</T> button beside them.
+          behind the <T>Customize</T> button beside them (the one drawn as three sliders).
         </p>
         <p>
           The little figure in a circle at the start of that row is about the muscles the exercise
@@ -859,7 +860,7 @@ export default function HelpTab() {
           When you add your own exercise you can pick its muscles too. They are grouped by body area;
           open one and tap a muscle once to make it primary (dark red), again for secondary (lighter
           red), and a third time to clear it. Huddle suggests a starting point from the closest exercise in
-          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
+          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>Customize</T>, needs a
           connection, and only whoever added the exercise or the account owner can. Closing that
           window saves a change you made there.
         </p>
@@ -1015,7 +1016,7 @@ export default function HelpTab() {
         <Note title="You can never see or set their password">
           <p>
             Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
-            lets one person set another&rsquo;s password. If they forget it they use
+            lets one person set another&rsquo;s password. If they forget it they use{' '}
             <T>Forgot password</T>, exactly as you would. What you can do is send the invite again,
             unlock them if too many wrong tries locked them out, or remove their login.
           </p>
@@ -1138,7 +1139,7 @@ export default function HelpTab() {
 
         <p>
           <T>Clients</T> and <T>Check-ins</T> are both in your account menu, under your name. A
-          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never
+          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never{' '}
           <T>Clients</T>.
         </p>
 

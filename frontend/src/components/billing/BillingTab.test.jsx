@@ -29,7 +29,7 @@ vi.mock('./EmbeddedCheckout', () => ({
 }));
 vi.mock('../../api/logins', () => ({ listLogins: vi.fn() }));
 
-function render(account, subscription, { logins = [], membership } = {}) {
+function render(account, subscription, { logins = [], membership, url = '/app/billing' } = {}) {
   useAuth.mockReturnValue({
     account,
     refreshPeople: vi.fn().mockResolvedValue(),
@@ -40,7 +40,7 @@ function render(account, subscription, { logins = [], membership } = {}) {
   getSubscription.mockResolvedValue(subscription ?? null);
   listLogins.mockResolvedValue(logins);
   return renderWithQuery(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <BillingTab />
     </MemoryRouter>,
   );
@@ -86,10 +86,19 @@ describe('BillingTab', () => {
 
   // Free is permanent, so deferring costs nothing -- this is an equal-weight escape, not fine
   // print, especially for someone routed here straight from marketing's "Go Plus".
-  it('offers a way to stay on Free', async () => {
-    render({ id: 1, plan: 'FREE' });
+  it('offers a way to stay on Free to someone arriving from sign-up', async () => {
+    render({ id: 1, plan: 'FREE' }, null, { url: '/app/billing?intent=plus' });
 
     expect(await screen.findByRole('button', { name: /Start with Free/ })).toBeInTheDocument();
+  });
+
+  // From the menu or the Go Plus badge the household is already on Free; offering to "start" it
+  // read as a mistake.
+  it('does not offer to start Free to a household opening billing from the app', async () => {
+    render({ id: 1, plan: 'FREE' });
+
+    expect(await screen.findByRole('button', { name: 'Upgrade to Plus' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Start with Free/ })).toBeNull();
   });
 
   // Midday UTC, not midnight: dates render in the VIEWER's local time (see utils/datetime.js),

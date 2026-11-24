@@ -69,19 +69,22 @@ export default function PastSessionModal({ onClose }) {
   return (
     <Modal width={340} onClose={onClose} title="Log a past workout" initialFocus="dialog">
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>When did {activePersonName} work out?</div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+      {/* A date or time input has a wide intrinsic minimum, so as plain flex: 1 items they ran past
+          the dialog's right edge on a 390px phone. minWidth: 0 lets them shrink, and the wrap
+          stacks them when even that won't fit. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
+          style={{ flex: '1 1 140px', minWidth: 0, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
         />
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
+          style={{ flex: '1 1 140px', minWidth: 0, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
         />
       </div>
       {outsideWindow && (

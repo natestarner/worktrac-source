@@ -23,6 +23,26 @@ export default function ConfirmEmailPage() {
   // which one -- the billing screen already carries a card for each.
   const wantsPlan = location.state?.wantsPlan ?? null;
 
+  // "Use a different email": back to sign-up with what was typed, so a mistyped address is a
+  // one-letter fix rather than a dead end. Before this the screen offered only Confirm and Resend,
+  // and in the App Store app there is no browser Back button to find. Nothing needs undoing on the
+  // server: no account exists until a code is confirmed, and the pending sign-up for the wrong
+  // address simply expires (RegistrationService). The plan a marketing link named rides along in
+  // the URL, which is where RegisterPage reads it.
+  function startOver() {
+    const plan = wantsPlan ? `?plan=${wantsPlan.toLowerCase()}` : '';
+    navigate(`/register${plan}`, {
+      replace: true,
+      state: {
+        startOver: {
+          email,
+          personName: location.state?.personName ?? '',
+          accountName: location.state?.accountName ?? '',
+        },
+      },
+    });
+  }
+
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState(false);
   const [error, setError] = useState('');
@@ -151,7 +171,7 @@ export default function ConfirmEmailPage() {
       >
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Check your email</h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
-          Enter the 6-digit code we sent to {email}.
+          Enter the 6-digit code we sent to {email}. Not there? Check your spam or junk folder.
         </div>
 
         {error && (
@@ -219,6 +239,27 @@ export default function ConfirmEmailPage() {
               <Spinner color="var(--color-muted)" />
             </span>
           )}
+        </button>
+
+        {/* Quieter than Resend: most people typed the address right. Muted text, not accent, so
+            the two actions read as "the usual fix" and "the other one". */}
+        <button
+          type="button"
+          onClick={startOver}
+          disabled={submitting}
+          className="pressable"
+          style={{
+            width: '100%',
+            minHeight: 44,
+            padding: 'var(--space-3)',
+            background: 'transparent',
+            color: 'var(--color-muted)',
+            border: 'none',
+            fontSize: 'var(--text-sm)',
+            cursor: 'pointer',
+          }}
+        >
+          Use a different email
         </button>
         {justSent && cooldown > 0 && (
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>

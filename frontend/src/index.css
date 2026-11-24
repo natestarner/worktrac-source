@@ -2753,9 +2753,43 @@ button.person-row {
   color: var(--color-text);
 }
 
+/* On a phone the start time goes under the label rather than being cut off by the rest timer.
+   The middot is hidden, never removed, so the status keeps ONE text content
+   ("Session in progress · started 10:27 PM") for screen readers and for tests. Two short lines
+   fit the fixed bar height, so the bar never grows -- see the rule above .session-bar-progress. */
+@media (max-width: 599px) {
+  .session-bar-status {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.2;
+  }
+
+  .session-bar-status-label,
+  .session-bar-status-when {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-bar-status-sep {
+    display: none;
+  }
+
+  .session-bar-status-when {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-normal);
+    color: var(--color-muted);
+  }
+
+  .session-bar-status-when::first-letter {
+    text-transform: uppercase;
+  }
+}
+
 /* Past target. --color-danger is contrast-tuned as TEXT in both themes (it is a light salmon in
-   dark mode, not the light-mode brick), so it is legible on --color-surface either way. The minus
-   sign carries the meaning on its own -- colour is reinforcement here, not the signal. */
+   dark mode, not the light-mode brick), so it is legible on --color-surface either way. The word
+   "over" carries the meaning ("0:22 over"); colour is reinforcement, not the signal. It was a
+   minus sign, which read as time LEFT ("-0:22") -- the opposite of what it meant. */
 .session-bar-over {
   color: var(--color-danger);
 }

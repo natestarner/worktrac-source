@@ -4,7 +4,7 @@ import IconButton from './IconButton';
 import { IconInfo } from './icons';
 
 // Ranked exercise search results, rendered as a traditional single-column list (one result per
-// row) rather than the wrapped chip layout used for Favorites/Other Previously Logged -- that
+// row) rather than the wrapped chip layout used for Favorites/Previously Logged -- that
 // distinction matters once a query can return many matches, and keeps "pick one of these curated
 // exercises" visually separate from "here's what matched your search". Styled after the row list
 // in HistoryTab.jsx (card container, rows divided by a bottom border) for consistency with the

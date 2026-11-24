@@ -131,7 +131,8 @@ export function renderGoogleButton(container, { onToken, onError, text = 'contin
         theme: 'outline',
         size: 'large',
         text,
-        shape: 'rectangular',
+        // A pill, matching the Apple button drawn beside it (ProviderButtons' matchGoogle).
+        shape: 'pill',
         logo_alignment: 'center',
         width: Math.min(container.clientWidth || 320, 400),
       });

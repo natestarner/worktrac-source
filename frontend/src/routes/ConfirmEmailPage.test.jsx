@@ -264,3 +264,35 @@ describe('ConfirmEmailPage', () => {
     });
   });
 });
+
+// A mistyped address used to be a dead end: Confirm and Resend both act on the wrong email, and
+// the App Store app has no browser Back button. "Use a different email" goes back to sign-up with
+// what was typed (never the password), keeping the plan a marketing link named. Its name must not
+// contain "Start over" -- the overlay's escape on this same screen is selected by that substring.
+describe('ConfirmEmailPage — a different email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ confirmEmail: vi.fn(), resendCode: vi.fn() });
+    useUI.mockReturnValue({ deferOnboarding: vi.fn() });
+  });
+
+  it('says where else the code might be', () => {
+    renderWithEmail('alex@example.com');
+    expect(screen.getByText(/Check your spam or junk folder/)).toBeInTheDocument();
+  });
+
+  it('goes back to sign-up with the name, household and email filled back in', () => {
+    renderWithEmail('alx@example.com', { wantsPlan: null, personName: 'Alex', accountName: 'The Crew' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use a different email' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/register', {
+      replace: true,
+      state: { startOver: { email: 'alx@example.com', personName: 'Alex', accountName: 'The Crew' } },
+    });
+  });
+
+  it('keeps the plan a marketing link named', () => {
+    renderWithEmail('sam@example.com', { wantsPlan: 'PRO', personName: 'Sam', accountName: '' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use a different email' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/register?plan=pro', expect.objectContaining({ replace: true }));
+  });
+});

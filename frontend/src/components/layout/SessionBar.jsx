@@ -158,9 +158,19 @@ export default function SessionBar() {
       <div className="session-bar" role="region" aria-label="Workout session">
         <div className="session-bar-progress" style={{ width: `${progress * 100}%` }} aria-hidden="true" />
         <div className="session-bar-row">
+          {/* Three spans, ONE text: "Session in progress · started 10:27 PM" stays the element's
+              text content everywhere (tests and screen readers read it whole). On a phone the CSS
+              stacks the start time under the label instead of truncating it -- at 390px the single
+              line ran out of room the moment the rest timer appeared ("started 1…"). The bar's
+              height does not change, so nothing above it moves when the timer starts. */}
           <span className="session-bar-status">
-            Session in progress
-            {session.startedAt ? ` \u00b7 started ${formatTime(session.startedAt)}` : ''}
+            <span className="session-bar-status-label">Session in progress</span>
+            {session.startedAt && (
+              <>
+                <span className="session-bar-status-sep">{' \u00b7 '}</span>
+                <span className="session-bar-status-when">started {formatTime(session.startedAt)}</span>
+              </>
+            )}
           </span>
           {restTimer && (
             <span className="session-bar-rest" role="img" aria-label={restLabel}>
@@ -168,8 +178,8 @@ export default function SessionBar() {
               <span>{formatRestTime(elapsed)}</span>
               {overSeconds > 0 && (
                 <span className="session-bar-over">
-                  {'\u00b7 \u2212'}
-                  {formatRestTime(overSeconds)}
+                  {'\u00b7 '}
+                  {formatRestTime(overSeconds)} over
                 </span>
               )}
             </span>

@@ -172,7 +172,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // so a bare getByText for it is a strict-mode violation waiting to happen."
     //
     // It was a bare getByText and passed anyway, because the reload used to land inside the
-    // persister's 1s throttle and the picker's "Other previously logged" chip had no data to
+    // persister's 1s throttle and the picker's "Previously logged" chip had no data to
     // render -- leaving exactly one match. In other words this line was passing BECAUSE the cache
     // was incompletely restored, in the spec whose whole point is that it is restored. Now that
     // the gate above guarantees a complete snapshot, both render and the scope is required.

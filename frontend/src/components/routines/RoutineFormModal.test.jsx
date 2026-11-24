@@ -47,7 +47,7 @@ describe('RoutineFormModal exercise selection', () => {
 
     // Default: the person's list, split into the same two headings as the Log picker.
     expect(screen.getByText('Favorites')).toBeInTheDocument();
-    expect(screen.getByText('Other Previously Logged')).toBeInTheDocument();
+    expect(screen.getByText('Previously Logged')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Bent-Over Row' })).toBeInTheDocument();
