@@ -121,6 +121,14 @@ bottom of the scroll.
   Siblings cannot know each other's height and no CSS token can supply it.
 - **`fixed`, not `sticky`.** Sticky-to-bottom only works for an element in flow at the end of a
   scroll container; this has to hold its place over every tab.
+- **On a phone (< 600px) the status is two lines, and its text is still ONE string.**
+  "Session in progress" over a muted "Started 10:27 PM", because at 390px one line ran out of room
+  the moment the rest timer appeared and cut the time to "started 1…". It is three spans with the
+  middot hidden by CSS, never removed, so the element's text stays "Session in progress · started
+  10:27 PM" for screen readers and for `parity-session-bar`'s selector. Two short lines fit the
+  fixed height; the bar does not grow.
+- **Past the target the rest readout says "0:22 over", in words.** It was "−0:22", which read as
+  time LEFT. Colour reinforces it; the word carries it.
 - **Its height must not change when the rest timer starts.** A bar that grew would move the same
   tap-jump from the top of the screen to the bottom, and desync the reserved padding.
 - **It must RESERVE space, not float over content.** `.app-shell`'s `padding-bottom` adds

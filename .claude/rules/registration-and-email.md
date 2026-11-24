@@ -446,3 +446,13 @@ no longer keeps. There is no shared constant between the two — the string is d
 deliberately (Java `String.format`-shaped vs. a template literal), same tradeoff as
 `historyWindowCopy.js` deriving from a server value rather than hand-duplicating one, except here
 the shapes live in different languages and repos, so a shared constant isn't available at all.
+
+## A mistyped address has a way back ("Use a different email")
+
+`ConfirmEmailPage` offers it under Resend: back to `/register` (with `?plan=` kept) carrying the
+name, household name and email in router state, never the password. Nothing is undone on the
+server: no account exists until a code is confirmed, and the pending sign-up for the wrong
+address expires on its own. Before it, the confirm screen had no exit, and the App Store app has
+no browser Back. **Its label must not contain "Start over"** -- the Signing-you-in overlay's
+escape on the same screen is selected by that substring. Pinned in `ConfirmEmailPage.test.jsx`,
+`RegisterPage.test.jsx` and `new-user-polish.spec.ts`.

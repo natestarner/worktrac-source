@@ -589,7 +589,7 @@ that is the same on every visit, so the alphabetical order `PersonExerciseServic
 returns is preserved exactly.
 
 - **Never rank the picker by recency or frequency.** It was considered and rejected: a list that
-  re-sorts itself between visits cannot be learned, and "Other Previously Logged" grows
+  re-sorts itself between visits cannot be learned, and "Previously Logged" grows
   monotonically forever, so it is the list most in need of a stable position. Bounding is the only
   lever, because it shortens a list without moving anything in it. (`PersonExerciseDto` carries no
   `lastLoggedAt`/`logCount` and deliberately should not gain them for this purpose — see

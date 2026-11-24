@@ -45,6 +45,12 @@ export default function ProviderButtons({
 
   if (providers.length === 0) return null;
 
+  // On the web Google draws its own button (a 44px pill, at most 400px wide) and nothing of ours
+  // can resize it, so the Apple button beside it takes the same box: one matched pair, the way
+  // Reddit, Spotify and Notion draw theirs. Apple's rule is "no smaller than the other sign-in
+  // buttons", and Google's is the other one. In the app both are ours and stay full size.
+  const matchGoogle = googleUsesRenderedButton() && providers.includes('google') && !unavailable.includes('google');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       {providers
@@ -65,7 +71,7 @@ export default function ProviderButtons({
                 <ProviderButton
                   provider={provider}
                   verb={verb}
-                  size={size}
+                  size={matchGoogle ? 'google' : size}
                   disabled={disabled}
                   describedBy={badgeId}
                   onToken={onToken}
@@ -120,8 +126,16 @@ function ProviderButton({ provider, verb, size, disabled, describedBy, onToken, 
   // household" box), so the two can never drift apart: an inline min-height of 52 measured 52px
   // on lower while "Log in" is 58 (its padding and line height carry it past its own minimum).
   // Only the colours are set here, because inline size properties would override the class.
+  //
+  // size="google" is the web's matched pair: the box Google's own button draws, so the two read as
+  // one set (see matchGoogle above).
   const colors = provider === 'apple' ? appleColors : neutralColors;
   const large = size === 'large';
+  const style = large
+    ? { ...colors, ...pill }
+    : size === 'google'
+      ? { ...baseStyle, ...googleBox, ...colors, ...pill }
+      : { ...baseStyle, ...colors, ...pill };
   return (
     <button
       type="button"
@@ -129,10 +143,10 @@ function ProviderButton({ provider, verb, size, disabled, describedBy, onToken, 
       onClick={handleClick}
       disabled={disabled || busy}
       aria-describedby={describedBy}
-      style={large ? colors : { ...baseStyle, ...colors }}
+      style={style}
     >
-      {provider === 'apple' && <AppleLogo size={size === 'large' ? 20 : 16} />}
-      {provider === 'google' && <GoogleLogo size={size === 'large' ? 20 : 16} />}
+      {provider === 'apple' && <AppleLogo size={large ? 20 : 18} />}
+      {provider === 'google' && <GoogleLogo size={large ? 20 : 18} />}
       <span>{`${verb} ${LABELS[provider]}`}</span>
     </button>
   );
@@ -191,15 +205,37 @@ const baseStyle = {
   cursor: 'pointer',
 };
 
-// Apple's Human Interface Guidelines fix this button's colours: black with white text, in both
-// themes (a white variant exists for dark backgrounds, but black passes on ours in both). These are
-// Apple's colours, not ours, which is why they are literals rather than tokens.
-const appleColors = { background: '#000', color: '#fff', border: '1px solid #000' };
+// Apple's Human Interface Guidelines offer this button in three styles; this is "white with
+// outline" (white fill, black mark and text), chosen so it pairs with Google's white outlined
+// button instead of sitting beside it as a solid black slab -- every app we compared (Reddit,
+// Spotify, Notion, Hevy, Trello) draws its sign-in buttons as one matched set. The outline is
+// Google's own #dadce0, so the two edges are identical; a black one read as a heavier button.
+// Literals rather than tokens, and the same in both themes: these are the providers' colours,
+// and Google's web button stays white in dark mode too.
+const PROVIDER_OUTLINE = '1px solid #dadce0';
+const appleColors = { background: '#fff', color: '#000', border: PROVIDER_OUTLINE };
 
+// Every provider button is a pill, the shape Google's own web button is drawn in, so the set
+// matches wherever it appears (the app draws both; the web draws only Apple's).
+const pill = { borderRadius: 'var(--radius-full)' };
+
+// The box Google Identity Services draws for size "large": 44px tall, at most 400px wide, 14px
+// medium text. Centred, because Google's sits centred in its slot.
+const googleBox = {
+  minHeight: 44,
+  height: 44,
+  maxWidth: 400,
+  margin: '0 auto',
+  fontSize: 14,
+  fontWeight: 'var(--weight-medium)',
+};
+
+// Google's light-theme button colours (its branding guidance for a custom button: white fill,
+// #1f1f1f text). Drawn by us only in the app; on the web Google draws its own in the same colours.
 const neutralColors = {
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
+  background: '#fff',
+  color: '#1f1f1f',
+  border: PROVIDER_OUTLINE,
 };
 
 /**

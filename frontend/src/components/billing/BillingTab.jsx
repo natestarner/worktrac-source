@@ -256,6 +256,12 @@ export default function BillingTab() {
   // Latched into state on the first render because the param is stripped immediately below: the
   // value has to outlive the URL it came from.
   const [wantedProOnArrival] = useState(() => searchParams.get('intent') === 'pro');
+  // Arriving with ANY ?intent= means arriving from sign-up with a plan in mind, still deciding.
+  // Only then does "Start with Free, decide later" make sense; a household already on Free that
+  // opened this screen from the menu or the Go Plus badge read it as a nonsense offer to start
+  // something it already has. Latched for the same reason as wantedProOnArrival: the param is
+  // stripped below.
+  const [arrivedFromSignUp] = useState(() => searchParams.has('intent'));
   const scrolledToProRef = useRef(false);
 
   // A callback ref rather than an effect, because the node is what we are waiting for: the Pro
@@ -496,6 +502,7 @@ export default function BillingTab() {
           pending={pending}
           onUpgrade={handleUpgrade}
           onStartFree={() => navigate('/app/log')}
+          offerStartFree={arrivedFromSignUp}
           proCardRef={proCardRef}
         />
       )}
@@ -792,6 +799,7 @@ function FreeSummary({
   pending,
   onUpgrade,
   onStartFree,
+  offerStartFree = false,
   proCardRef,
   canBuy = true,
   unavailableLine = null,
@@ -866,10 +874,13 @@ function FreeSummary({
       )}
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
-          straight here, and Free is permanent -- deferring costs them nothing. */}
-      <Button variant="ghost" fullWidth onClick={onStartFree}>
-        Start with Free, decide later
-      </Button>
+          straight here, and Free is permanent -- deferring costs them nothing. Only on that
+          arrival (offerStartFree): from the menu it offered a Free household the plan it is on. */}
+      {offerStartFree && (
+        <Button variant="ghost" fullWidth onClick={onStartFree}>
+          Start with Free, decide later
+        </Button>
+      )}
     </>
   );
 }

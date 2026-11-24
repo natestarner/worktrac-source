@@ -183,8 +183,10 @@ describe('SessionBar rest readout', () => {
 
     expect(restReadout()).toHaveAccessibleName('Rest 1:52, 0:22 past target');
     expect(screen.getByText('1:52')).toBeInTheDocument();
-    // The minus sign carries the meaning; colour only reinforces it.
-    expect(screen.getByText(/−0:22/)).toBeInTheDocument();
+    // The word carries the meaning; colour only reinforces it. It was "−0:22", which read as time
+    // remaining rather than time over.
+    expect(screen.getByText(/0:22 over/)).toBeInTheDocument();
+    expect(screen.queryByText(/−/)).toBeNull();
   });
 
   it('freezes both numbers at the ceiling instead of climbing forever', () => {
@@ -192,7 +194,7 @@ describe('SessionBar rest readout', () => {
     render(<SessionBar />);
 
     expect(screen.getByText('10:00')).toBeInTheDocument();
-    expect(screen.getByText(/−8:30/)).toBeInTheDocument();
+    expect(screen.getByText(/8:30 over/)).toBeInTheDocument();
   });
 
   it('fills the progress bar proportionally and stops at full', () => {

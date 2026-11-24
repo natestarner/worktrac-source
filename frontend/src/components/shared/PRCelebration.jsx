@@ -238,12 +238,12 @@ export default function PRCelebration() {
                 </span>
               </div>
               <div
+                // Not uppercased: the caption carries units ("135 lb × 8"), and an uppercase
+                // transform printed "135 LB × 8" -- the one place in the app the unit was capitals.
                 style={{
                   fontSize: 13,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   color: 'var(--color-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
                 }}
               >
                 {/* One string, decided by the caller (ExerciseDetail). This used to be a boolean

@@ -14,7 +14,11 @@ import Card from '../shared/Card';
 
 const CELL = 10;
 const GAP = 3;
-const COLUMN = CELL + GAP;
+// The largest a square grows to on a wide screen (see cellSize below): at 28px an iPad held
+// sideways fills ~80% of the card and portrait fills it. Then the space between the weekday
+// labels and the grid.
+const MAX_CELL = 28;
+const LABELS_GAP = 6;
 
 // Mon/Wed/Fri only -- seven stacked labels at 10px rows is unreadable.
 const DAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', ''];
@@ -66,6 +70,28 @@ export default function ConsistencyHeatmap({ workoutDays }) {
     if (node) node.scrollLeft = node.scrollWidth;
   }, []);
 
+  // The squares grow to fill a wide card. At a fixed 10px the 26 weeks took ~340px, which on an
+  // iPad left two thirds of the card empty and read as unfinished. On a phone the width works out
+  // below CELL, so the floor keeps today's 10px squares and the scroll-to-today above. Measured,
+  // not a breakpoint, because the card's width depends on orientation and the tab panel's cap.
+  // jsdom has no ResizeObserver, and there the grid simply stays at CELL.
+  const labelsRef = useRef(null);
+  const [cellSize, setCellSize] = useState(CELL);
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const labelsWidth = labelsRef.current?.offsetWidth ?? 0;
+      const available = node.clientWidth - labelsWidth - LABELS_GAP;
+      const fit = Math.floor((available - (HEATMAP_WEEKS - 1) * GAP) / HEATMAP_WEEKS);
+      setCellSize(Math.max(CELL, Math.min(MAX_CELL, fit)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Card size="dense">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -80,15 +106,19 @@ export default function ConsistencyHeatmap({ workoutDays }) {
 
       {/* Narrow phones scroll the grid rather than squeezing the squares below tap size. */}
       <div ref={scrollRef} data-testid="consistency-scroll" style={{ overflowX: 'auto', paddingBottom: 4 }}>
-        <div style={{ display: 'flex', gap: 6, minWidth: 'min-content' }}>
+        {/* Centred when it doesn't fill the card (an iPad held sideways, at the MAX_CELL cap), so the
+            space left over is even rather than all on the right. When it overflows (a phone),
+            auto margins resolve to 0 and the scroll-to-today above is unchanged. */}
+        <div style={{ display: 'flex', gap: LABELS_GAP, minWidth: 'min-content', width: 'fit-content', margin: '0 auto' }}>
           {/* Sticky within the scroll container (not the page), so the weekday labels stay
               readable at whatever week someone has scrolled to. Needs its own background -- it's
               sitting in front of grid cells now, not beside them. */}
           <div
+            ref={labelsRef}
             data-testid="consistency-day-labels"
             style={{
               display: 'grid',
-              gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${CELL}px)`,
+              gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${cellSize}px)`,
               gap: GAP,
               paddingTop: 16,
               position: 'sticky',
@@ -98,14 +128,14 @@ export default function ConsistencyHeatmap({ workoutDays }) {
             }}
           >
             {DAY_LABELS.map((label, i) => (
-              <div key={i} style={{ fontSize: 9, lineHeight: `${CELL}px`, color: 'var(--color-muted)', textAlign: 'right' }}>
+              <div key={i} style={{ fontSize: 9, lineHeight: `${cellSize}px`, color: 'var(--color-muted)', textAlign: 'right' }}>
                 {label}
               </div>
             ))}
           </div>
 
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${HEATMAP_WEEKS}, ${COLUMN}px)`, height: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${HEATMAP_WEEKS}, ${cellSize + GAP}px)`, height: 16 }}>
               {labels.map((label, i) => (
                 <div key={i} style={{ fontSize: 9, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
                   {label}
@@ -117,9 +147,9 @@ export default function ConsistencyHeatmap({ workoutDays }) {
               data-testid="consistency-grid"
               style={{
                 display: 'grid',
-                gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${CELL}px)`,
+                gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${cellSize}px)`,
                 gridAutoFlow: 'column',
-                gridAutoColumns: `${CELL}px`,
+                gridAutoColumns: `${cellSize}px`,
                 gap: GAP,
               }}
             >
@@ -136,8 +166,8 @@ export default function ConsistencyHeatmap({ workoutDays }) {
                   onBlur={() => setActiveKey(null)}
                   onClick={() => setActiveKey(cell.key)}
                   style={{
-                    width: CELL,
-                    height: CELL,
+                    width: cellSize,
+                    height: cellSize,
                     padding: 0,
                     borderRadius: 2,
                     cursor: 'pointer',

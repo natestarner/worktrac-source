@@ -59,7 +59,11 @@ export const PLUS_BENEFITS = [
 export const PRO_ADDITIONS = [
   { id: 'private', label: "Clients can't see each other, and you can see all of them" },
   { id: 'assistants', label: 'Assistants who can log for every client, but not touch billing' },
-  { id: 'programs', label: 'Assign a program, with the weights and reps you want hit' },
+  // ⚠️ "Assign a program", NOT "with the weights and reps you want hit": a routine copied to a client
+  // carries no target numbers on screen yet (RoutineFormModal's `showTargetInputs` is off). Selling
+  // the numbers before they ship was the claim taken down on 2026-11-24 -- put them back with the
+  // feature, here and on pricing.html / for-trainers.html together.
+  { id: 'programs', label: 'Assign a program to one client or twenty, in one step' },
   { id: 'roster', label: 'A roster that shows you who has stopped showing up' },
 ];
 

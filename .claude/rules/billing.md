@@ -478,6 +478,15 @@ be sold Pro yearly.
   with an anchored regex (`/^Yearly/`). Pinned in `BillingTab.test.jsx`, `billingChannels.test.jsx`
   and `billing-pro-interval.spec.ts`.
 
+## "Start with Free, decide later" is for an arrival from sign-up only
+
+`BillingTab` shows it only when the screen was opened with `?intent=` (RegisterPage /
+ConfirmEmailPage send it when a marketing link named a plan), latched on first render because the
+param is stripped. Opened from the menu or the Go Plus badge, the household is already on Free, and
+offering to "start" it read as a mistake. The `none` channel's "Back to logging" is separate and
+always shows. Pinned in `BillingTab.test.jsx` and `billing.spec.ts` (absent from the menu) and
+`billing-onboarding-order.spec.ts` (present after sign-up).
+
 ## Label collisions this feature creates
 
 - Header badge is **"Go Plus"**; the billing screen's primary button is **"Upgrade to Plus"**. A Free
