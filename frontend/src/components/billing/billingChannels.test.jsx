@@ -456,3 +456,122 @@ describe("'embedded' -- the web, unchanged", () => {
     expect(screen.getByText(/Training clients/)).toBeInTheDocument();
   });
 });
+
+// ── The Pro card's own Monthly/Yearly, in each channel that sells ─────────────────────────────
+// App Review (1.3.0, 2026-11-23, guideline 2.1(b)) could not find the monthly Pro plans: the Plus
+// card's radio group silently priced Pro, the screen sat on Yearly, and Pro Unlimited -- which the
+// App Store sells monthly only -- was missing from the band list altogether.
+describe('the Pro card chooses its own interval', () => {
+  // As App Store Connect has it: every band monthly and yearly, except Unlimited, monthly only.
+  const STORE_OFFERED = [
+    { plan: 'PLUS', band: null, interval: 'YEAR', productId: 'huddle.plus.year' },
+    { plan: 'PLUS', band: null, interval: 'MONTH', productId: 'huddle.plus.month' },
+    { plan: 'PRO', band: 'STARTER', interval: 'MONTH', productId: 'huddle.pro.starter.month' },
+    { plan: 'PRO', band: 'STARTER', interval: 'YEAR', productId: 'huddle.pro.starter.year' },
+    { plan: 'PRO', band: 'UNLIMITED', interval: 'MONTH', productId: 'huddle.pro.unlimited.month' },
+  ];
+  const STORE_PRO_PRICES = [
+    { id: 'huddle.plus.year', displayPrice: '$29.99' },
+    { id: 'huddle.plus.month', displayPrice: '$3.99' },
+    { id: 'huddle.pro.starter.month', displayPrice: '$18.99' },
+    { id: 'huddle.pro.starter.year', displayPrice: '$189.99' },
+    { id: 'huddle.pro.unlimited.month', displayPrice: '$148.99' },
+  ];
+  const bandOptions = () =>
+    Array.from(screen.getByLabelText('How many clients?').querySelectorAll('option')).map((o) => o.value);
+
+  describe("'store'", () => {
+    beforeEach(() => {
+      useBillingChannel.mockReturnValue('store');
+      getStoreProducts.mockResolvedValue(STORE_OFFERED);
+      getProducts.mockResolvedValue(STORE_PRO_PRICES);
+    });
+
+    it('opens on monthly with Unlimited listed, though the Plus card shows yearly', async () => {
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      expect(await screen.findByRole('radio', { name: 'Pro monthly' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: /^Yearly/ })).toBeChecked();
+      expect(bandOptions()).toEqual(['STARTER', 'UNLIMITED']);
+      expect(screen.getByText('$18.99 / month')).toBeInTheDocument();
+    });
+
+    it('buys Unlimited monthly from the Pro card alone', async () => {
+      prepareStorePurchase.mockResolvedValue({ productId: 'huddle.pro.unlimited.month', accountToken: 'token-1' });
+      purchase.mockResolvedValue({ result: 'cancelled' });
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.change(await screen.findByLabelText('How many clients?'), { target: { value: 'UNLIMITED' } });
+      expect(screen.getByText('$148.99 / month')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+
+      await waitFor(() =>
+        expect(prepareStorePurchase).toHaveBeenCalledWith('app-store', { plan: 'PRO', band: 'UNLIMITED', interval: 'MONTH' }));
+    });
+
+    // On Yearly the store has no Unlimited: the card says where it is rather than dropping it silently,
+    // and going back to Monthly on the same card brings it (and the trainer's choice) back.
+    it('on yearly, says Unlimited is monthly only, and monthly brings it back', async () => {
+      prepareStorePurchase.mockResolvedValue({ productId: 'huddle.pro.starter.year', accountToken: 'token-1' });
+      purchase.mockResolvedValue({ result: 'cancelled' });
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.change(await screen.findByLabelText('How many clients?'), { target: { value: 'UNLIMITED' } });
+      fireEvent.click(screen.getByRole('radio', { name: 'Pro yearly' }));
+
+      expect(bandOptions()).toEqual(['STARTER']);
+      expect(screen.getByText('Unlimited is billed monthly only.')).toBeInTheDocument();
+      expect(screen.getByText('$189.99 / year')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+      await waitFor(() =>
+        expect(prepareStorePurchase).toHaveBeenCalledWith('app-store', { plan: 'PRO', band: 'STARTER', interval: 'YEAR' }));
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Pro monthly' }));
+      expect(screen.getByLabelText('How many clients?')).toHaveValue('UNLIMITED');
+      expect(screen.queryByText(/billed monthly only/)).not.toBeInTheDocument();
+    });
+
+    it("the Plus card's interval does not change Pro's", async () => {
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.click(await screen.findByRole('radio', { name: /^Monthly/ }));
+      fireEvent.click(screen.getByRole('radio', { name: /^Yearly/ }));
+
+      expect(screen.getByRole('radio', { name: 'Pro monthly' })).toBeChecked();
+      expect(bandOptions()).toEqual(['STARTER', 'UNLIMITED']);
+    });
+
+    // A store that prices Pro at one interval only has nothing to choose between: no control, and the
+    // card falls to the interval that IS sold rather than to an empty card.
+    it('shows no interval control when the store sells Pro at one interval only', async () => {
+      getStoreProducts.mockResolvedValue(OFFERED);
+      getProducts.mockResolvedValue(STORE_PRICES);
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      expect(await screen.findByText('$189.99 / year')).toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'Pay monthly or yearly?' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("'embedded'", () => {
+    beforeEach(() => {
+      useBillingChannel.mockReturnValue('embedded');
+      createCheckoutSession.mockResolvedValue({ clientSecret: 'cs_secret', publishableKey: 'pk_test' });
+    });
+
+    it('lists every band at both intervals, and checks out the interval the Pro card shows', async () => {
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      expect(await screen.findByRole('radio', { name: 'Pro monthly' })).toBeChecked();
+      expect(bandOptions()).toEqual(['STARTER', 'STUDIO', 'PRACTICE', 'UNLIMITED']);
+      fireEvent.click(screen.getByRole('radio', { name: 'Pro yearly' }));
+      expect(bandOptions()).toEqual(['STARTER', 'STUDIO', 'PRACTICE', 'UNLIMITED']);
+      expect(screen.queryByText(/billed monthly only/)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('How many clients?'), { target: { value: 'UNLIMITED' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+      await waitFor(() =>
+        expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'UNLIMITED' }));
+    });
+  });
+});
