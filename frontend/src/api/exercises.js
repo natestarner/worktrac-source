@@ -14,8 +14,17 @@ export function listExercises() {
 // primaryMuscles / secondaryMuscles are optional muscle codes (utils/muscles.js). The server drops
 // codes it does not know rather than refusing -- this is a durable write -- and ignores them when
 // the create resolves to an existing exercise.
-export function addExercise({ name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles }) {
-  return apiClient.post('/api/exercises', { name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles });
+// loadType is create-only and optional ('external' | 'bodyweight', utils/exerciseLoad.js); absent or
+// unknown reads as 'external' on the server, never a 400.
+export function addExercise({ name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles, loadType }) {
+  return apiClient.post('/api/exercises', { name, idempotencyKey, trackingType, primaryMuscles, secondaryMuscles, loadType });
+}
+
+// Sets whether a household exercise expects a weight ('external') or is done at bodyweight with
+// weight added on top ('bodyweight'). Online-only (gated), same "who may" as muscles; library
+// exercises refuse. Answers with the exercise's catalog row.
+export function updateExerciseLoadType(exerciseId, loadType) {
+  return apiClient.put(`/api/exercises/${exerciseId}/load-type`, { loadType });
 }
 
 // Replaces a household exercise's muscles. Online-only (gated): the person who added it, or the

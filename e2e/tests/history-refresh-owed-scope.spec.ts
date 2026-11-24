@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, dismissPrCelebration, pickExercise, logSetAt } from './support/exercises';
+import { backToPicker, dismissPrCelebration, pickExercise, logSetAt, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline } from './support/offline';
 import { expectHistoryMatchesServer } from './support/historyConvergence';
 
@@ -40,7 +40,7 @@ async function toExercise(page: Page, exercise: string) {
 
 // Repeats the prefilled set: any new row is a change History must show.
 async function logAnotherSet(page: Page, setNumber: number) {
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await page.waitForTimeout(300);
   await dismissPrCelebration(page);
   await expect(page.getByText(`Set ${setNumber}`, { exact: true })).toBeVisible();

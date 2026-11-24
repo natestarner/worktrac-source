@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, dismissPrCelebration, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, pickExercise, tapLogSet, logSetButton } from './support/exercises';
 
 // Following a routine doesn't lock you into it: you can back out to the exercise picker,
 // log something not on the routine, and then resume the routine at the same position --
@@ -19,7 +19,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await page.getByRole('button', { name: 'Start routine' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByText('1 of 2')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Back out to the picker -- routine position must survive being on the picker screen.
     await page.getByRole('button', { name: /All exercises/ }).click();
@@ -28,7 +28,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     // Log a set for an exercise that isn't part of the routine at all (search for it).
     await pickExercise(page, 'Barbell Back Squat');
     await expect(page.getByText('1 of 2')).toBeVisible(); // routine banner still shows, unmoved
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 
@@ -66,7 +66,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
 
     // Advancing from the picker opens the step it moved to, rather than leaving you on the picker
     // wondering whether the tap did anything.
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // ...and the early exit is reachable from the picker too.
     await page.getByRole('button', { name: /All exercises/ }).click();

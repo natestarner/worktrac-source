@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, logSetButton } from './support/exercises';
 
 // The suite had 51 specs and asserted nothing at all about accessibility, so a whole class of
 // defect was structurally invisible -- the same shape of gap the screenshot audit found for
@@ -43,7 +43,7 @@ test.describe('Accessibility baseline', () => {
   test('the Log screen, which is where the time is spent', async ({ page, request }) => {
     await registerHousehold(page, request, 'Ada');
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     const results = await analyze(page);
     expect(summarize(results), summarize(results)).toBe('');

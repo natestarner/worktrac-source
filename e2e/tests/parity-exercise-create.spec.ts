@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { logSetButton } from './support/exercises';
 import { registerHousehold } from './support/auth';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -82,7 +83,7 @@ forEachConnectivityMode<void>('creating an exercise opens its detail screen', {
   assert: async (page) => {
     // The detail screen, not the picker. Deliberately mode-independent -- offline the exercise is
     // still a temp id whose create is queued, and that must be just as loggable as a synced one.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     // The title is a styled div rather than a heading, so match its exact text (the same way
     // offline-exercise-create.spec.ts does). `exact` matters: the detail screen also carries the
     // name inside aria-labels, and a substring match would go strict-mode on a second element
@@ -112,6 +113,6 @@ forEachConnectivityMode<void>('creating an exercise opens its detail screen', {
     // Still on the same exercise once the create has synced and the selection has migrated from the
     // temp id to the real one -- not bounced back to the picker when the temp row leaves the cache.
     await expect(page.getByText(EXERCISE, { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
   },
 });

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, prCelebration } from './support/exercises';
+import { dismissPrCelebration, pickExercise, prCelebration, tapLogSet } from './support/exercises';
 
 // The rest timer is enabled by default and starts after every live set (see log-workout.spec.ts's
 // PR-celebration test). This covers the Settings screen's rest-timer section: it is household-wide
@@ -20,7 +20,7 @@ test.describe('Rest timer setting', () => {
     await registerHousehold(page, request, 'Nate');
     await pickExercise(page, 'Barbell Bench Press');
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(prCelebration(page)).toBeVisible();
     await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await expect(restReadout(page)).toBeVisible();
@@ -31,7 +31,7 @@ test.describe('Rest timer setting', () => {
     await page.getByRole('button', { name: 'Rest timer Off for Nate' }).click();
     await page.getByRole('button', { name: /Back/ }).click();
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(restReadout(page)).toHaveCount(0);
     // The bar itself stays -- only the timer slot inside it is suppressed.
@@ -43,7 +43,7 @@ test.describe('Rest timer setting', () => {
     await page.getByRole('button', { name: 'Rest timer On for Nate' }).click();
     await page.getByRole('button', { name: /Back/ }).click();
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(restReadout(page)).toBeVisible();
   });

@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, logSetAt, pickExercise, prCelebration, setStepper } from './support/exercises';
+import { dismissPrCelebration, logSetAt, pickExercise, prCelebration, setStepper, tapLogSet, logSetButton } from './support/exercises';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always celebrated),
 // confirm the celebration fires, then check every tab renders without error.
@@ -14,16 +14,16 @@ test.describe('Log workout', () => {
       page.getByText("Let's find your first exercise")
     ).toBeVisible();
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Selecting an exercise clears the search box, so returning to the picker starts
     // fresh instead of still showing the old search term.
     await page.getByRole('button', { name: '← All exercises' }).click();
     await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
 
     // A first-ever set always gets a card: the quiet "First Barbell Bench Press" once the server
     // has confirmed it, or "New PR!" if the tap beat the summary (first-time-celebration.spec.ts).
@@ -72,7 +72,7 @@ test.describe('Log workout', () => {
     await registerHousehold(page, request, 'Quinn');
     await pickExercise(page, 'Barbell Bench Press');
 
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
 
@@ -105,7 +105,7 @@ test.describe('Log workout', () => {
     // and clicking the result should select that exercise.
     await page.getByPlaceholder('Search all exercises').fill('barbell squat');
     await page.getByRole('button', { name: 'Barbell Back Squat' }).click();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
   });
 
   test('nudges a routine-less person to create one, links to Routines, and stays dismissed', async ({ page, request }) => {
@@ -127,17 +127,16 @@ test.describe('Log workout', () => {
   test('shows reps instead of a weight/1RM calc for a bodyweight PR', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
     await pickExercise(page, 'Pull-up');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
-    // No dialling down any more, and that IS the assertion: an exercise with no history has no
-    // prefilled weight at all (an em dash placeholder, not a number), and a blank weight logs as
-    // 0. A first-ever Pull-up is therefore correct with zero interaction. This used to require
+    // No dialling down any more, and that IS the assertion: Pull-up is a bodyweight exercise
+    // (load_type, V108), so once the screen knows it has no history the box reads 0 under "Added
+    // weight" and a first-ever Pull-up is correct with zero interaction. This used to require
     // opening the keypad and backspacing the prefilled "45" out first.
-    const weightInput = page.getByRole('textbox', { name: 'Weight (lb)' });
-    await expect(weightInput).toHaveValue('');
-    await expect(weightInput).toHaveAttribute('placeholder', '—');
+    const weightInput = page.getByRole('textbox', { name: 'Added (lb)' });
+    await expect(weightInput).toHaveValue('0');
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     // The first-ever set gets a card of its own (first-time-celebration.spec.ts); the record this
     // test is about is the NEXT one, which beats it.
     await expect(page.getByText(/^Set 1$/)).toBeVisible();
@@ -184,30 +183,32 @@ test.describe('Log workout', () => {
     const summary = await holdSummaryRequests(page);
     await pickExercise(page, 'Pull-up');
 
-    const weightInput = page.getByRole('textbox', { name: 'Weight (lb)' });
+    const weightInput = page.getByRole('textbox', { name: 'Added (lb)' });
     const repsInput = page.getByRole('textbox', { name: 'Reps' });
     await expect(weightInput).toBeVisible();
 
     // Sampled continuously rather than with a retrying matcher: "eventually not 185" would pass
     // even if 185 flashed first, and the flash IS the bug. Pull-up has no history, so the honest
-    // answer for this whole window is the em-dash placeholder -- never the bench press numbers
-    // still sitting in the per-person draft.
+    // answer for this whole window is the em-dash placeholder, or 0 once the History already on the
+    // device says it has never been done (Pull-up is a bodyweight exercise) -- never the bench press
+    // numbers still sitting in the per-person draft.
     const deadline = Date.now() + 1000;
     while (Date.now() < deadline) {
-      expect(await weightInput.inputValue()).toBe('');
+      expect(['', '0']).toContain(await weightInput.inputValue());
       expect(await repsInput.inputValue()).toBe('');
       await page.waitForTimeout(50);
     }
 
     summary.release();
     await expect(repsInput).toHaveValue('8');
-    await expect(weightInput).toHaveValue('');
+    // Pull-up is a bodyweight exercise: once its (empty) history is known, 0 under "Added".
+    await expect(weightInput).toHaveValue('0');
   });
 
   test('a late summary refetch does not overwrite a weight the person just typed', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Hold every summary response from here on -- the initial one has already landed, so the next
     // is the invalidation that logging a set triggers. Landing it AFTER the typing below is the
@@ -225,7 +226,7 @@ test.describe('Log workout', () => {
     await page.waitForTimeout(500);
 
     await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('315');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('315 lb × 2', { exact: true })).toBeVisible();
   });
@@ -241,7 +242,7 @@ test.describe('Log workout', () => {
     // Deliberately no Enter: tapping the button is what blurs the field, and handleLogSet reads
     // the value from its render closure. setStepper always presses Enter first, so nothing else
     // in the suite covers this ordering.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('225 lb × 8', { exact: true })).toBeVisible();
   });

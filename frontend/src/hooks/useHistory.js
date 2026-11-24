@@ -14,6 +14,15 @@ import { refreshHistory } from '../lib/queryClient';
 // the PRs board and Trends, which fold it a month at a time (hooks/useStatsFromHistory.js). It also
 // reports whether anything is held at all (`held`) and whether a fetch is stuck (`isPaused` /
 // `isError`), because "History has not reached this device" must never read as "no workouts".
+// ⚠️ ONE empty list for every render, never a fresh `[]`. With nothing held and the fetch paused
+// (a device that has never had this person's History, offline) `isLoading` is false, so readers
+// treat the empty list as the answer and memoize over it -- and a new array per render recomputes
+// everything downstream on every render. ExerciseDetail's prefill-recording effect then wrote the
+// draft on every render, which rendered again: a few hundred renders a second, enough to starve the
+// page so a set logged right then reached disk seconds late or not before a reload (2026-11-24,
+// offline-durability.spec.ts's create-then-log-set). Frozen so no reader can mutate the shared one.
+const NO_HISTORY = Object.freeze([]);
+
 export function useHistory(personId, { fetch = true, synced = false } = {}) {
   const queryClient = useQueryClient();
 
@@ -32,7 +41,7 @@ export function useHistory(personId, { fetch = true, synced = false } = {}) {
   const refetch = useCallback(() => refreshHistory(queryClient, personId), [queryClient, personId]);
 
   return {
-    history: synced ? query.data : query.data ?? [],
+    history: synced ? query.data : query.data ?? NO_HISTORY,
     held: query.data !== undefined,
     loading: query.isLoading,
     isFetching: query.isFetching,

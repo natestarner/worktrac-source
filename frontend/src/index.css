@@ -2412,6 +2412,23 @@ button.person-row {
   color: var(--color-muted);
 }
 
+/* A first set of an exercise that expects a weight, with none yet (ExerciseDetail's needsWeight).
+   A ring in the accent and a soft accent fill: "this is the one to fill in". The em dash stays as
+   the placeholder. Rounded like the steppers' own buttons. */
+.stepper-value--needed {
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 2px var(--color-accent);
+  background: var(--color-record-bg);
+}
+
+/* "No weight, just bodyweight", between the steppers and Log set -- only while a first set's weight
+   is missing. Centred like the PR nudge that can sit in the same place. */
+.first-set-weight-hint {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+}
+
 .stepper-value-sm {
   width: 64px;
   min-width: 64px;

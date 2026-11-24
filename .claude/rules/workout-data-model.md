@@ -79,6 +79,29 @@ exercise catalog predates V50's conversion of `Plank (sec)` / `Side Plank (sec)`
 holds that cache for its whole outage), and those numbers already *were* seconds. Widening the
 rejections here is a data-loss bug, not a strictness improvement.
 
+## How weight applies to an exercise (`exercises.load_type`, V107/V108)
+
+A second axis BESIDE `tracking_type`, never folded into it: `tracking_type` is what you count (reps,
+seconds, one day distance); `load_type` is whether a weight is expected. `'external'` (default) or
+`'bodyweight'` (the number is weight added on top). A future value (`'none'` for a run,
+`'assisted'` for a counterweight machine) is one constant, one CHECK and `utils/exerciseLoad.js`.
+
+- **It decides only the Log screen's first set and the weight box's label** (`log-screen.md`).
+  Records, volume and stats read each set's own weight, never this column.
+- **Unlike `tracking_type` it HAS a setter** (`PUT /api/exercises/{id}/load-type`, gated, the
+  muscles endpoint's "who may"; library rows refuse), because it reinterprets nothing logged.
+- **Lenient everywhere it is written:** a create is durable, so absent or unknown reads as
+  `'external'` (`Exercise.normalizeLoadType`), never a 400. A create that resolves to an existing
+  row leaves its load type alone, like the stamp and the muscles.
+- **Library rows are classified by V108 from a list Nate reviewed**, which THROWS on an unmatched
+  name; `ExerciseLoadTypeTest` pins the bodyweight count. V108 also made every household TIMED
+  exercise `'bodyweight'` (Time always meant "added weight"); household rep exercises stayed
+  `'external'`, the safe reading of "never asked".
+- **The Add exercise screen asks it in the SAME row as the measure** ("Measured in: Weight & reps ·
+  Bodyweight · Time", `EXERCISE_KIND_OPTIONS`), defaulting to Weight & reps with no guessing from
+  the name. That list is deliberately separate from `MEASURE_OPTIONS`, which also writes the
+  `(Reps)`/`(Time)` duplicate suffix: Weight & reps and Bodyweight are one movement family.
+
 ## Log-set idempotency (`workout_sets.client_key`, V40/V41)
 
 - `findDuplicate` returns the already-committed set (with `isPR = false`) instead of inserting a

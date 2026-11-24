@@ -34,6 +34,29 @@ public class Exercise {
         return TRACKING_TYPE_STRENGTH.equals(trackingType) || TRACKING_TYPE_DURATION.equals(trackingType);
     }
 
+    // How weight applies to a set of this exercise (V107). A second axis BESIDE tracking_type, never
+    // folded into it: tracking_type answers "what do you count" (reps, seconds, and one day
+    // distance), load_type answers "is a weight expected". Kept separate so a future value on either
+    // axis (distance; 'none' for a run, 'assisted' for a counterweight machine) is one constant and
+    // one CHECK, not a rework of the other.
+    //
+    // 'external'   -- a weight is expected every set (barbell, dumbbell, machine, weighted dips).
+    //                 The default, and what any unrecognised value is read as.
+    // 'bodyweight' -- usually just you; the number is weight ADDED on top (a vest, a belt).
+    //
+    // Unlike tracking_type this HAS a setter: it changes only how the Log screen asks for the first
+    // set's weight and what the weight box is called. Every logged set keeps its own weight, and
+    // records read that weight, never this column -- so changing it reinterprets nothing.
+    public static final String LOAD_TYPE_EXTERNAL = "external";
+    public static final String LOAD_TYPE_BODYWEIGHT = "bodyweight";
+
+    // Lenient on purpose: a create is a DURABLE write, and a 400 would discard it (and every set
+    // queued behind its temp id) for good. An unknown value -- a newer client's, or a typo -- is
+    // read as the safe default instead of refused (backend-core.md, "Validation strictness").
+    public static String normalizeLoadType(String loadType) {
+        return LOAD_TYPE_BODYWEIGHT.equals(loadType) ? LOAD_TYPE_BODYWEIGHT : LOAD_TYPE_EXTERNAL;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -48,6 +71,9 @@ public class Exercise {
 
     @Column(name = "tracking_type", nullable = false, length = 20)
     private String trackingType = TRACKING_TYPE_STRENGTH;
+
+    @Column(name = "load_type", nullable = false, length = 20)
+    private String loadType = LOAD_TYPE_EXTERNAL;
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
@@ -91,11 +117,17 @@ public class Exercise {
     }
 
     public Exercise(Account account, String name, String clientKey, String trackingType, Long createdByUserId) {
+        this(account, name, clientKey, trackingType, createdByUserId, LOAD_TYPE_EXTERNAL);
+    }
+
+    public Exercise(Account account, String name, String clientKey, String trackingType, Long createdByUserId,
+                    String loadType) {
         this.account = account;
         this.name = name;
         this.clientKey = clientKey;
         this.trackingType = trackingType;
         this.createdByUserId = createdByUserId;
+        this.loadType = normalizeLoadType(loadType);
     }
 
     @PrePersist
@@ -131,6 +163,14 @@ public class Exercise {
 
     public boolean isDurationTracked() {
         return TRACKING_TYPE_DURATION.equals(trackingType);
+    }
+
+    public String getLoadType() {
+        return loadType;
+    }
+
+    public void setLoadType(String loadType) {
+        this.loadType = normalizeLoadType(loadType);
     }
 
     public boolean isDeleted() {

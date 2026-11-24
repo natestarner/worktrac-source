@@ -9,6 +9,7 @@ import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { queryKeys } from '../../api/queryKeys';
 import { isTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
+import { isBodyweightLoad, weightLabel } from '../../utils/exerciseLoad';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets } from '../../api/sets';
@@ -107,6 +108,9 @@ export default function ExerciseDetail({
   // The library exercise's how-to video (utils/exerciseVideo.js), looked up from the catalog row by
   // LogTab like the muscles; null for no video.
   video = null,
+  // 'external' | 'bodyweight' from the CATALOG row (LogTab looks it up, like muscles): how the
+  // weight box is labelled and how a first set asks for its weight. utils/exerciseLoad.js.
+  loadType = 'external',
 }) {
   const { account, people } = useAuth();
   // The account-wide muscle highlighter switch: the strip's thumbnail and the About sheet's diagram.
@@ -329,6 +333,14 @@ export default function ExerciseDetail({
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
   const saveNoteMutation = useDurableMutation({ mutationKey: saveNoteMutationKey });
+
+  // Customize hands back the server's catalog row after a muscles or load-type change; written into
+  // the cached catalog in place (never building it), so the strip, the About sheet and the weight
+  // box update without a round trip.
+  const patchCatalogRow = (updated) =>
+    queryClient.setQueryData(queryKeys.exercises(), (rows) =>
+      rows === undefined ? undefined : rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+    );
   const favoriteMutation = useDurableMutation({ mutationKey: FAVORITE_MUTATION_KEY });
 
   // Save/clear a session note. Durable + optimistic: the note is written into cache immediately (so
@@ -778,8 +790,37 @@ export default function ExerciseDetail({
   // numbers on a fresh mount -- painting those would assert "this is your history for this
   // exercise", which is false. Reps gets a null state for the same reason weight has one: an
   // honest blank beats another exercise's rep count.
-  const shownWeight = userOwnsDraft ? weightDraft : (prefill?.weight ?? null);
-  const shownReps = userOwnsDraft ? repsDraft : (prefill?.reps ?? null);
+  const [weightTyping, setWeightTyping] = useState(false);
+  const shownWeightOrBlank = userOwnsDraft ? weightDraft : (prefill?.weight ?? null);
+  // ## A first set asks for its weight according to the exercise's load type (decided 2026-11-24)
+  //
+  // Blank means no history to fill in from: this person's first set of this exercise, nothing
+  // logged today. What blank should then MEAN depends on the exercise:
+  //   - bodyweight: 0, under "Added" (lb or kg on top of you) -- "just me" is the right first answer, one tap.
+  //   - external:   genuinely empty, and Log set waits for a number ("Enter a weight"), with
+  //                 "No weight, just bodyweight" for anyone who does it without. Before this a blank
+  //                 logged 0, so a new person's first Barbell Bench Press was recorded as a
+  //                 bodyweight set ("BW x 8") and took a Most reps record.
+  // Only blank is affected: a prefill, a carried-forward set or a typed 0 always logs as it reads.
+  // Not a connectivity branch -- the load type rides on the cached catalog row.
+  const bodyweightLoad = isBodyweightLoad(loadType);
+  // Both readings of a blank wait for `prefill` (the screen KNOWS there is no history): before that
+  // the em dash stays, or a bodyweight exercise with weighted history would flash 0 before its 25
+  // (`log-workout.spec.ts` / `parity-active-loop.spec.ts` sample every frame for that flash).
+  // "Known to have nothing to fill in from": the summary has answered (prefill exists), OR the
+  // device's own History already says there is no earlier session and nothing logged today. The
+  // second matters under lie-fi, where the summary request keeps retrying for seconds -- without it
+  // Log set read "Log set" and then flipped to "Enter a weight" under the thumb.
+  const blankIsKnown = prefill != null || (derivedSummary != null && !derivedSummary.lastSession && displaySets.length === 0);
+  const shownWeight = shownWeightOrBlank ?? (bodyweightLoad && blankIsKnown ? 0 : null);
+  // `prefill != null` is "the screen KNOWS there is nothing to fill in from" (it exists once a
+  // summary does, server or derived from History). While that is still loading, a blank must not
+  // flash "Enter a weight" over an exercise that has history. If it can never be known (a device
+  // that has never held this person's History, with no connection), the old reading stands: blank
+  // logs 0. That keeps Log set from ever being a button over a request that will not succeed.
+  // A number being typed counts: it commits on blur, which the tap on Log set itself causes, so the
+  // button must already be enabled when that tap lands (`log-workout.spec.ts`, "no blur first").
+  const needsWeight = !bodyweightLoad && blankIsKnown && shownWeight == null && !weightTyping;  const shownReps = userOwnsDraft ? repsDraft : (prefill?.reps ?? null);
   const shownDuration = userOwnsDraft ? durationDraft : (prefill?.durationSeconds ?? null);
 
   // Everything that has to produce a NUMBER -- stepping, and the logged value itself -- reads
@@ -899,6 +940,9 @@ export default function ExerciseDetail({
   }, [exercise.id, summary, lastSession, displaySets.length, userOwnsDraft]);
 
   function handleLogSet() {
+    // The button is disabled while a first set's weight is missing; this is the backstop for a
+    // keyboard Enter or a click that raced the render.
+    if (needsWeight) return;
     // A running hold is the value being logged -- take it rather than the stale draft, and clear
     // the timer so the next set starts from zero.
     let loggedDuration = durationValue;
@@ -1161,7 +1205,15 @@ export default function ExerciseDetail({
   // portrait once a name like "Est. 1RM" and a date both had to fit ("Best · Est. 1RM · Sep 12").
   // Named by the record the best set actually holds, through the same helper History's badge and
   // the PR overlay use, so the three cannot call one record different things.
-  const bestCardLabel = effectiveBest ? est1rmLabelForSet(effectiveBest) : isDuration ? 'Longest hold' : 'Est. 1RM';
+  // Before any set: name the record a first set will actually take -- reps on a bodyweight
+  // exercise, where "Est. 1RM" promised a weight-based number that would never appear.
+  const bestCardLabel = effectiveBest
+    ? est1rmLabelForSet(effectiveBest)
+    : isDuration
+      ? 'Longest hold'
+      : bodyweightLoad
+        ? 'Most reps'
+        : 'Est. 1RM';
   // The same pair `lastLabel` uses above -- toLocalDateStr first, because slicing a UTC ISO string
   // directly lands on the wrong day either side of midnight (see utils/datetime.js).
   const bestDateLabel = effectiveBest?.sessionStartedAt
@@ -1526,7 +1578,9 @@ export default function ExerciseDetail({
           >
             <div className="stepper-pair" data-tour-anchor={TOUR_ANCHORS.SET_ENTRY}>
               <WeightRepsStepper
-                label={`Weight (${defaultUnit})`}
+                label={weightLabel(loadType, defaultUnit)}
+                highlight={needsWeight}
+                onTypingChange={setWeightTyping}
                 // Null, not 0: "we have no history for this exercise" and "you are lifting
                 // zero" are different claims, and only one of them is ours to make.
                 // WeightRepsStepper renders a null value as an em dash.
@@ -1629,8 +1683,28 @@ export default function ExerciseDetail({
                 mid-set, which is the whole point. */}
             {/* The screen's one primary action, and the one that matters most here: a member
                 must never be able to log a set onto somebody else's history. */}
+            {/* Only while a first set's weight is missing (needsWeight above). Under the steppers rather
+                than under the weight box, so the side-by-side layout on a wide screen keeps its two
+                halves level. Outside ReadOnlyWrap, which wraps exactly one child;
+                inside its own, because it writes this person's draft. */}
+            {needsWeight && (
+              <div className="first-set-weight-hint">
+                <ReadOnlyWrap personId={personId}>
+                <Button variant="ghost" size="sm" onClick={() => commitDraft({ weight: 0 })}>
+                  No weight, just bodyweight
+                </Button>
+                </ReadOnlyWrap>
+              </div>
+            )}
             <ReadOnlyWrap personId={personId}>
-            <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth data-tour-anchor={TOUR_ANCHORS.LOG_SET}>
+            <Button
+              onClick={handleLogSet}
+              variant="primary"
+              size="lg"
+              fullWidth
+              disabled={needsWeight}
+              data-tour-anchor={TOUR_ANCHORS.LOG_SET}
+            >
               <span
                 style={{
                   display: 'block',
@@ -1639,7 +1713,11 @@ export default function ExerciseDetail({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {activePersonFirstName ? `Log set for ${activePersonFirstName}` : 'Log set'}
+                {needsWeight
+                  ? 'Enter a weight'
+                  : activePersonFirstName
+                    ? `Log set for ${activePersonFirstName}`
+                    : 'Log set'}
               </span>
             </Button>
             </ReadOnlyWrap>
@@ -1848,11 +1926,9 @@ export default function ExerciseDetail({
           // The server's row, written into the cached catalog in place (muscles live there), so the
           // strip and sheet show the change at once. Patches an existing entry only -- never builds
           // the catalog from one row (offline-internals.md).
-          onMusclesSaved={(updated) =>
-            queryClient.setQueryData(queryKeys.exercises(), (rows) =>
-              rows === undefined ? undefined : rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
-            )
-          }
+          onMusclesSaved={patchCatalogRow}
+          loadType={loadType}
+          onLoadTypeSaved={patchCatalogRow}
         />
       )}
 

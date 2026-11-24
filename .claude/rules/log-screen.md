@@ -339,11 +339,22 @@ offline/lie-fi stretch, so the flag would be dead in precisely the modes this fe
 `utils/formulas.js#computePrefillDraft` resolves in one fixed order — the prior session's set at
 the same index, else **the last set logged today**, else `weight: null`. Three things must hold:
 
-- **`null` is a display state, not a validation gate.** `ExerciseDetail` renders it as an em dash
-  and `handleLogSet` sends `weightValue` (`weightDraft ?? 0`). Blank must never disable "Log set":
-  0 is exactly right for a first-ever pull-up or plank, and 0 already means "bodyweight"
-  everywhere downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`).
-  The old 45 lb default was right only for a barbell.
+- **What a blank weight means depends on the exercise's LOAD TYPE (decided 2026-11-24, reversing
+  "blank is never a gate").** `exercises.load_type` (V107, `utils/exerciseLoad.js`) is read from
+  the CATALOG row, which `LogTab` passes in as `loadType` like the muscles:
+  - **`bodyweight`** (pull-ups, planks; set by V108 for the library, chosen on Add exercise for
+    your own): a blank shows as **0** under **"Added"** (`Added (lb)`; "Added weight (lb)" wrapped to two lines on an iPhone), and Log set is one tap.
+  - **`external`** (the default, and what any unknown or missing value reads as): a blank stays an
+    em dash, the box is highlighted (`stepper-value--needed`), **Log set is disabled and reads
+    "Enter a weight"**, and **"No weight, just bodyweight"** sets 0. Before this, a blank logged 0
+    for every exercise, so a new person's first Barbell Bench Press was a bodyweight set ("BW x 8")
+    with a Most reps record.
+  - **Only blank is affected** (`needsWeight`): a prefill, a carried-forward set or a typed 0 logs
+    as it reads, so after the first set nothing changes. 0 still means "bodyweight" everywhere
+    downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`); records
+    never read the load type. Not a connectivity branch: the load type rides on the cached catalog.
+  - The "No weight" link sits between the steppers and Log set, **outside** Log set's
+    `ReadOnlyWrap` (which wraps exactly one child) and inside its own.
 - **The effect reads `displaySets`, never `sessionSets`** — and is declared below `displaySets`
   for that reason. Offline, `contextSessionId` stays null for the person's whole outage, so the
   `sessionSets` query never runs and its data stays `[]` however many sets they log. Reading it

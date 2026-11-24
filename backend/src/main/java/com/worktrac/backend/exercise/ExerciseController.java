@@ -60,6 +60,14 @@ public class ExerciseController {
         return exerciseService.updateMuscles(currentUser.access(), exerciseId, request);
     }
 
+    // Same shape again: EDIT_OWN admits every member, and ExerciseService.updateLoadType refuses
+    // someone who neither added the exercise nor owns the account, and any library exercise.
+    @PutMapping("/{exerciseId}/load-type")
+    @RequiresPermission(Permission.EDIT_OWN_SHARED_RESOURCE)
+    public ExerciseDto updateLoadType(@PathVariable Long exerciseId, @RequestBody ExerciseLoadTypeRequest request) {
+        return exerciseService.updateLoadType(currentUser.access(), exerciseId, request);
+    }
+
     @DeleteMapping("/{exerciseId}")
     @RequiresPermission(Permission.DELETE_SHARED_RESOURCE)
     @ResponseStatus(HttpStatus.NO_CONTENT)

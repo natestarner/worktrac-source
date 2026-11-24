@@ -21,6 +21,10 @@ import java.util.List;
 // video is a library exercise's how-to video (V94), or null: no video, a video the checker found
 // unavailable, or a household's own exercise. Never a URL (ExerciseVideoDto).
 //
+// loadType is 'external' or 'bodyweight' (V107): whether a weight is expected on a set. A catalog
+// cached before it lacks the field, and a newer server may send a value this build doesn't know;
+// the client reads both as 'external' (resilience.md, axis D).
+//
 // aliases are other names a library exercise goes by ("OHP", "Military Press"), for search only
 // (V95/V96). Empty for a household's own exercise; absent in a catalog cached before them.
 public record ExerciseDto(
@@ -34,7 +38,8 @@ public record ExerciseDto(
         List<String> primaryMuscles,
         List<String> secondaryMuscles,
         ExerciseVideoDto video,
-        List<String> aliases
+        List<String> aliases,
+        String loadType
 ) {
     public static ExerciseDto from(Exercise exercise, ExerciseAttribution attribution, ExerciseMuscles muscles,
                                    ExerciseVideoDto video, List<String> aliases) {
@@ -49,6 +54,7 @@ public record ExerciseDto(
                 muscles.primary(),
                 muscles.secondary(),
                 video,
-                aliases);
+                aliases,
+                exercise.getLoadType());
     }
 }

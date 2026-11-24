@@ -5,7 +5,8 @@ import { queryKeys } from '../../api/queryKeys';
 import { CREATE_EXERCISE_MUTATION_KEY, FAVORITE_MUTATION_KEY } from '../../lib/queryClient';
 import { isTempExerciseId, newTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
-import { MAX_EXERCISE_NAME_LENGTH, MEASURE_OPTIONS, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
+import { MAX_EXERCISE_NAME_LENGTH, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
+import { DEFAULT_EXERCISE_KIND, EXERCISE_KIND_OPTIONS, fieldsForKind } from '../../utils/exerciseLoad';
 import { FIELD_LIMITS } from '../../utils/fieldLimits';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useExercises } from '../../hooks/useExercises';
@@ -42,7 +43,10 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   const [nameError, setNameError] = useState(false);
   // What a set of this exercise measures. Create-only: the backend has no setter for it, because
   // flipping it would silently reinterpret every set already logged against the exercise.
-  const [trackingType, setTrackingType] = useState('strength');
+  // One "Measured in" choice standing for both axes (utils/exerciseLoad.js): Weight & reps, Bodyweight
+  // or Time. Defaults to Weight & reps with no guessing from the name.
+  const [kind, setKind] = useState(DEFAULT_EXERCISE_KIND);
+  const { trackingType, loadType } = fieldsForKind(kind);
   // Muscles worked, optional and create-only (changed later from Customize). `null` means the
   // person has not touched the picker, so it shows the suggestion derived from the name below;
   // once they tap a chip their choice is theirs and the suggestion stops following the name.
@@ -121,7 +125,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // requireSyncedExercise.
   const saveSynced = run(
     async (trimmed) => {
-      const created = await addExercise({ name: trimmed, trackingType, ...musclesPayload });
+      const created = await addExercise({ name: trimmed, trackingType, loadType, ...musclesPayload });
       if (personId) await favoriteExercise(personId, created.id);
       onSaved(created);
     },
@@ -236,6 +240,9 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       // stepper for a timed exercise and log reps against it -- which the backend rejects with a
       // 400 on sync, and a 4xx permanently discards a durable write.
       trackingType,
+      // On the temp row too: the Log screen reads it while the create is still queued (offline, the
+      // whole outage) to decide how the first set asks for its weight.
+      loadType,
       isGlobal: false,
       isFavorite: true,
       tags: [],
@@ -255,6 +262,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       tempId,
       name: finalName,
       trackingType,
+      loadType,
       personId,
       idempotencyKey: newId(),
       ...musclesPayload,
@@ -295,9 +303,9 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
         </div>
       )}
 
-      {/* Create-only: an exercise's measure is fixed once sets exist against it. Two options, one
-          line -- the only new decision this feature asks anyone to make, and only when they are
-          adding their own exercise. */}
+      {/* Create-only here; Customize changes Weight & reps <-> Bodyweight later, but never to or
+          from Time (an exercise's measure is fixed once sets exist). Three options, one line -- the
+          same row that used to offer Reps / Time, so the form asks nothing new. */}
       {!isEditing && (
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-muted)', marginBottom: 8 }}>
@@ -306,9 +314,9 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
           <SegmentedToggle
             ariaLabel="Measured in"
             fill
-            value={trackingType}
-            onChange={setTrackingType}
-            options={MEASURE_OPTIONS}
+            value={kind}
+            onChange={setKind}
+            options={EXERCISE_KIND_OPTIONS}
           />
         </div>
       )}
