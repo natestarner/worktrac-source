@@ -677,9 +677,17 @@ export default function HelpTab() {
           in History so you can tell at a glance which kind of record each one was.
         </p>
         <p>
-          The <strong>first set of a brand-new exercise</strong> is treated as a starting point
-          rather than a record. It still appears in History as your best &mdash; it is &mdash; but
-          there&rsquo;s nothing to beat yet, so it gets a quieter welcome.
+          The <strong>very first set you log of an exercise</strong> is your starting mark, not a
+          record &mdash; there&rsquo;s nothing to beat yet. Instead of &ldquo;New PR!&rdquo; it gets a
+          quieter card (&ldquo;First Bench Press&rdquo;) with no confetti. It still shows in History
+          as your best, because it is. Any set after it that beats it is a new PR, even later in the
+          same workout.
+        </p>
+        <p>
+          The quieter card only shows when Huddle can check with the server that you really
+          haven&rsquo;t logged that exercise before. With no signal it can&rsquo;t check, so a first
+          set gets the full &ldquo;New PR!&rdquo; instead &mdash; it would rather celebrate twice than
+          miss a real record.
         </p>
         <p>
           <strong>This all works with no signal.</strong> Records are worked out on your device from

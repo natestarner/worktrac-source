@@ -122,36 +122,62 @@ describe('PRCelebration', () => {
     });
   });
 
-  describe('a first-ever set is a baseline, not a record', () => {
+  describe('a first-ever set is a starting mark, not a record', () => {
     // The first set of anything beats nothing, so it technically takes every record at once.
-    // Claiming three PRs for it is how the celebration gets cheap.
-    it('drops the confetti and says so', () => {
-      useUI.mockReturnValue({
-        celebration: celebrate('Overhead Press', [{ type: 'est1rm', valueText: '105 lb', caption: 'Est. 1RM · 95 lb × 3' }], true),
-        dismissCelebration: vi.fn(),
-      });
+    // Claiming PRs for it is how the celebration gets cheap -- a new person's first workout popped
+    // "New PR!" on 5 of 6 sets. Same card, quieter: see PRCelebration.jsx's header.
+    const STARTING_MARK = [{ type: 'startingMark', valueText: '135 lb × 8', caption: 'Your starting mark' }];
+    const confettiIn = (container) =>
+      Array.from(container.querySelectorAll('span')).filter((el) => (el.getAttribute('style') || '').includes('confettiFall'));
+
+    it('says "First <exercise>", shows the set as the starting mark, and says what beating it means', () => {
+      useUI.mockReturnValue({ celebration: celebrate('Barbell Bench Press', STARTING_MARK, true), dismissCelebration: vi.fn() });
       const { container } = render(<PRCelebration />);
 
-      expect(screen.getByText(/First time logging this one/)).toBeInTheDocument();
-      // The confetti spans are the only elements carrying the confettiFall animation.
-      const confetti = Array.from(container.querySelectorAll('span')).filter((el) =>
-        (el.getAttribute('style') || '').includes('confettiFall'),
-      );
-      expect(confetti).toHaveLength(0);
+      expect(screen.getByRole('dialog', { name: 'First Barbell Bench Press' })).toBeInTheDocument();
+      expect(screen.getByText('135 lb × 8')).toBeInTheDocument();
+      expect(screen.getByText('Your starting mark')).toBeInTheDocument();
+      expect(screen.getByText('Beat it and it’s a new PR.')).toBeInTheDocument();
+      // Not a record: no "New PR!", no record badge, no confetti.
+      expect(screen.queryByText('New PR!')).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Personal record|Est\. 1RM|Top weight/i)).not.toBeInTheDocument();
+      expect(confettiIn(container)).toHaveLength(0);
+      // The same exits as every celebration.
+      expect(screen.getByRole('button', { name: 'Nice' })).toBeInTheDocument();
     });
 
-    it('keeps the confetti for a genuine record', () => {
+    it("names the person when the caller passes one (\"Sam's first ...\")", () => {
       useUI.mockReturnValue({
-        celebration: celebrate('Overhead Press', [{ type: 'est1rm', valueText: '115 lb', caption: 'Est. 1RM · 105 lb × 3' }]),
+        celebration: { ...celebrate('Barbell Bench Press', STARTING_MARK, true), personFirstName: 'Sam' },
+        dismissCelebration: vi.fn(),
+      });
+      render(<PRCelebration />);
+
+      expect(screen.getByRole('dialog', { name: 'Sam’s first Barbell Bench Press' })).toBeInTheDocument();
+    });
+
+    it('dismisses on Escape, the button and a scrim tap, like the full card', () => {
+      const dismissCelebration = vi.fn();
+      useUI.mockReturnValue({ celebration: celebrate('Plank', STARTING_MARK, true), dismissCelebration });
+      const { container } = render(<PRCelebration />);
+
+      fireEvent.keyDown(document, { key: 'Escape' });
+      fireEvent.click(screen.getByRole('button', { name: 'Nice' }));
+      fireEvent.click(container.firstChild);
+      expect(dismissCelebration.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('keeps the confetti, the record badge and "New PR!" for a genuine record', () => {
+      useUI.mockReturnValue({
+        celebration: celebrate('Overhead Press', [{ type: 'est1rm', label: 'Est. 1RM', valueText: '115 lb', caption: '105 lb × 3' }]),
         dismissCelebration: vi.fn(),
       });
       const { container } = render(<PRCelebration />);
 
-      expect(screen.queryByText(/First time logging this one/)).not.toBeInTheDocument();
-      const confetti = Array.from(container.querySelectorAll('span')).filter((el) =>
-        (el.getAttribute('style') || '').includes('confettiFall'),
-      );
-      expect(confetti.length).toBeGreaterThan(0);
+      expect(screen.getByRole('dialog', { name: 'New PR!' })).toBeInTheDocument();
+      expect(screen.getByText('Est. 1RM')).toBeInTheDocument();
+      expect(screen.queryByText('Beat it and it’s a new PR.')).not.toBeInTheDocument();
+      expect(confettiIn(container).length).toBeGreaterThan(0);
     });
   });
 

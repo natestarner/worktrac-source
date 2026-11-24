@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, dismissPrCelebration } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, prCelebration } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -83,7 +83,7 @@ test.describe('Routines', () => {
     // rather than starting a fresh one -- that is the point of cycling back.
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 3')).toBeVisible();

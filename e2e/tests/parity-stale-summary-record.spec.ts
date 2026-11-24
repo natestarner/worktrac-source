@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, setStepperPair } from './support/exercises';
 import { delayNetwork } from './support/faults';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
@@ -53,7 +53,7 @@ async function logReps(page: Page, reps: number) {
 // could pass before the overlay had rendered at all.
 async function expectNoRecord(page: Page) {
   await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
-  await expect(page.getByText('New PR!')).toBeHidden();
+  await expect(prCelebration(page)).toBeHidden();
 }
 
 forEachConnectivityMode<Record<string, never>>('no false "first time" record after an ordinary workout', {

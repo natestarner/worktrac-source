@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { comparableValue } from './formulas';
-import { isFirstEver, setPrTypes } from './prDetection';
+import { isCertainFirstEver, isFirstEver, setPrTypes, startingMarkText, summaryConfirmsNeverLogged } from './prDetection';
 
 // The four shapes a set can take in this app. Every assertion below is driven across them rather
 // than hand-picked per case: the bugs this module can have are COMBINATIONS (a hold that is also
@@ -105,5 +105,84 @@ describe('isFirstEver', () => {
     expect(isFirstEver(undefined)).toBe(true);
     expect(isFirstEver({ comparable: 0, heaviestLb: null })).toBe(false);
     expect(isFirstEver({ comparable: 171, heaviestLb: 135 })).toBe(false);
+  });
+});
+
+// ## The quiet "First <exercise>" card -- only when the app is CERTAIN
+//
+// Nate's rule: never miss a celebration for an actual PR. A first-ever set gets the quiet card, but
+// "nothing found" is not proof of "never logged": a Free household's device holds 90 days of
+// History, and offline the server summary (which reads FULL history) is not there. So the quiet card
+// needs a summary the server answered this visit; anything less falls back to the full "New PR!".
+const NO_HISTORY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null };
+const SERVER_FRESH = { status: 'success', fetchStatus: 'idle', data: NO_HISTORY };
+
+describe('summaryConfirmsNeverLogged', () => {
+  it('is true for a settled server answer that holds no best', () => {
+    expect(summaryConfirmsNeverLogged(SERVER_FRESH)).toBe(true);
+  });
+
+  // The Free case. History older than 90 days is hidden from the device but NOT from the summary,
+  // which is computed over everything -- so a deadlift logged five months ago still shows up here.
+  it('is false when the server knows of a best the device cannot see (Free, older than 90 days)', () => {
+    const old = { ...NO_HISTORY, best: { weight: 225, reps: 5, est1rm: 262.5, unit: 'lb' }, heaviestWeightLb: 225 };
+    expect(summaryConfirmsNeverLogged({ ...SERVER_FRESH, data: old })).toBe(false);
+  });
+
+  it('is false when only a top weight is known', () => {
+    expect(summaryConfirmsNeverLogged({ ...SERVER_FRESH, data: { ...NO_HISTORY, heaviestWeightLb: 95 } })).toBe(false);
+  });
+
+  // Hard offline and the user pin pause the fetch; the cached answer may be from any earlier day.
+  it('is false offline (fetch paused), even with a cached "never logged"', () => {
+    expect(summaryConfirmsNeverLogged({ ...SERVER_FRESH, fetchStatus: 'paused' })).toBe(false);
+  });
+
+  // Lie-fi, cold start past the abort, DB down: the fetch errored, keeping whatever was cached.
+  it('is false when the fetch failed', () => {
+    expect(summaryConfirmsNeverLogged({ ...SERVER_FRESH, status: 'error' })).toBe(false);
+  });
+
+  // A restored cache paints instantly and revalidates; until that lands it is unconfirmed.
+  it('is false while a revalidation is still in flight', () => {
+    expect(summaryConfirmsNeverLogged({ ...SERVER_FRESH, fetchStatus: 'fetching' })).toBe(false);
+  });
+
+  it('is false before any answer', () => {
+    expect(summaryConfirmsNeverLogged({ status: 'pending', fetchStatus: 'fetching', data: undefined })).toBe(false);
+    expect(summaryConfirmsNeverLogged(undefined)).toBe(false);
+  });
+});
+
+describe('isCertainFirstEver', () => {
+  it('is the first set of an exercise the server confirms was never logged', () => {
+    expect(isCertainFirstEver(NOTHING, true)).toBe(true);
+  });
+
+  // Not certain -> the full "New PR!", exactly as before this card existed.
+  it('is false when the server could not confirm it (offline, lie-fi, Free with hidden history)', () => {
+    expect(isCertainFirstEver(NOTHING, false)).toBe(false);
+  });
+
+  // Option (c): only the first set ever is quiet. Set 2 of the same first workout has set 1 folded
+  // into its prior bests (mergeBestWithLocalSets) -- so a heavier set 2 is a real "New PR!".
+  it('is false for every later set, including later sets of the same first workout', () => {
+    expect(isCertainFirstEver({ comparable: 171.0, heaviestLb: 135 }, true)).toBe(false);
+  });
+
+  // A bodyweight or hold prior has no top weight -- the comparable alone must still count.
+  it('is false once anything at all has a prior, on either measure', () => {
+    expect(isCertainFirstEver({ comparable: 10, heaviestLb: null }, true)).toBe(false);
+    expect(isCertainFirstEver({ comparable: null, heaviestLb: 95 }, true)).toBe(false);
+  });
+});
+
+describe('startingMarkText', () => {
+  it('writes each kind of set the way a person would say it', () => {
+    expect(startingMarkText(LOADED)).toBe('135 lb × 8');
+    expect(startingMarkText(BODYWEIGHT)).toBe('10 reps');
+    expect(startingMarkText({ ...BODYWEIGHT, reps: 1 })).toBe('1 rep');
+    expect(startingMarkText(HOLD)).toBe('1:00');
+    expect(startingMarkText(WEIGHTED_HOLD)).toBe('25 lb × 1:00');
   });
 });

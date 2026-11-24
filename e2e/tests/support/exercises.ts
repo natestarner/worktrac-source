@@ -97,6 +97,17 @@ export async function setStepperPair(page: Page, weight: number, reps: number) {
     .toBe(`${weight}x${reps}`);
 }
 
+// The celebration card, whichever headline it carries: "New PR!" for a record, or the quiet
+// "First Barbell Bench Press" a first-ever set gets when the server has confirmed it really is the
+// first (prDetection.js#isCertainFirstEver). Which one a brand-new exercise's first set shows
+// depends on whether its summary had landed before the tap -- a spec that taps straight after
+// pickExercise can get either, and both are correct. Use this wherever a spec only needs "the card
+// is up / dismiss it"; assert getByText('New PR!') only where the set is a genuine record (it beats
+// an earlier set), and getByRole('dialog', { name: 'First …' }) only after waiting for the summary.
+export function prCelebration(page: Page) {
+  return page.locator('[role="dialog"][aria-labelledby="pr-celebration-title"]');
+}
+
 // Dismisses the PR celebration if one is on screen, and does nothing if not.
 //
 // NEEDED AFTER EVERY BARE "Log set" CLICK. The overlay is a full-viewport fixed scrim, so while
@@ -109,8 +120,11 @@ export async function setStepperPair(page: Page, weight: number, reps: number) {
 // PR detection is client-side and runs at dispatch, so if a record fell the overlay is already
 // rendered by the time click() resolves. Back when it waited on the log-set response, this exact
 // helper would have been flaky.
+//
+// Either card: the full "New PR!" or the quiet "First <exercise>" a confirmed first-ever set gets
+// (prCelebration below).
 export async function dismissPrCelebration(page: Page) {
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   if (await celebration.isVisible()) {
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();
@@ -138,8 +152,8 @@ export async function endWorkout(page: Page) {
   }
 }
 
-// Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so the
-// PR celebration fires each time and must be dismissed before the next set can be logged.
+// Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so a
+// celebration (the first-time card, then "New PR!") fires each time and must be dismissed before the next set can be logged.
 //
 // Use this rather than driving setStepper yourself -- see setStepperPair above for why, and note
 // the failure mode is remote from the cause: a 315x2 logged as 45x2 is no longer a PR, so what you
@@ -151,7 +165,8 @@ export async function logSetAt(page: Page, weight: number, reps: number) {
   await setStepperPair(page, weight, reps);
   await page.getByRole('button', { name: 'Log set' }).click();
 
-  const celebration = page.getByText('New PR!');
+  // The first set of a new exercise may get the quiet first-time card rather than "New PR!".
+  const celebration = prCelebration(page);
   await expect(celebration).toBeVisible();
   await celebration.click({ force: true });
   await expect(celebration).toBeHidden();
@@ -226,7 +241,7 @@ export async function logHoldAt(page: Page, seconds: number, { expectPr = true }
   await page.getByRole('button', { name: 'Log set' }).click();
 
   if (expectPr) {
-    const celebration = page.getByText('New PR!');
+    const celebration = prCelebration(page);
     await expect(celebration).toBeVisible();
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();

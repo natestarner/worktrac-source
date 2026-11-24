@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, setStepperPair } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, setStepperPair } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -37,7 +37,7 @@ forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment i
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 135, 5);
     await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
     await expect(first).toBeHidden();
@@ -122,7 +122,7 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 100, 10);
     await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
     await expect(first).toBeHidden();
@@ -180,25 +180,24 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     // (the record chasing itself, which is what including the current session in the prior best
     // would cause) the overlay would still be up here.
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(3);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
   },
 });
 
 // Volume is measured in each exercise's own unit (utils/sessionVolume.js): total reps for an
 // unloaded exercise, which weight x reps used to flatten to a permanent 0 lb so the record could
 // never fire. And an exercise's FIRST workout is the volume baseline, never a volume record --
-// while its first set still takes the set-level record, which is what makes the overlay appear
-// in setup at all.
+// while its first set still gets a card, which is what makes the overlay appear in setup at all.
 forEachConnectivityMode<{ personName: string }>('a bodyweight volume record counts reps, and a first workout claims none', {
   setup: async (page, request) => {
     const personName = 'BwVol';
     await registerHousehold(page, request, personName);
-    // Baseline: one workout of 10 chin-ups. The first-ever set celebrates its rep count, and
-    // must NOT list a volume record alongside it.
+    // Baseline: one workout of 10 chin-ups. The first-ever set gets a card (the quiet first-time
+    // one, or "New PR!" if its summary had not landed yet), and it must NOT list a volume record.
     await pickExercise(page, 'Chin-up');
     await setStepperPair(page, 0, 10);
     await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await expect(page.getByRole('dialog')).not.toContainText('Volume');
     await first.click({ force: true });
@@ -238,7 +237,7 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     await setStepperPair(page, 0, 6);
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
 
     await setStepperPair(page, 0, 6);
     await page.getByRole('button', { name: 'Log set' }).click();

@@ -1,9 +1,9 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, logSetAt, pickExercise, setStepper } from './support/exercises';
+import { dismissPrCelebration, logSetAt, pickExercise, prCelebration, setStepper } from './support/exercises';
 
-// Full golden-path smoke: register a new household, log the first-ever set (always a
-// PR), confirm the celebration fires, then check every tab renders without error.
+// Full golden-path smoke: register a new household, log the first-ever set (always celebrated),
+// confirm the celebration fires, then check every tab renders without error.
 test.describe('Log workout', () => {
   test('register, log a set, see PR celebration, browse all tabs', { tag: '@critical' }, async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
@@ -25,10 +25,11 @@ test.describe('Log workout', () => {
 
     await page.getByRole('button', { name: 'Log set' }).click();
 
-    // First-ever set is always a PR -- the celebration overlay should appear.
-    await expect(page.getByText('New PR!')).toBeVisible();
+    // A first-ever set always gets a card: the quiet "First Barbell Bench Press" once the server
+    // has confirmed it, or "New PR!" if the tap beat the summary (first-time-celebration.spec.ts).
+    await expect(prCelebration(page)).toBeVisible();
     await page.screenshot({ path: 'test-results/pr-celebration.png' });
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     // Logging a set starts the session, so the bottom session bar appears -- carrying the rest
     // timer, which counts UP from 0:00. The readout is deliberately bare digits (no visible "Rest"
@@ -137,19 +138,25 @@ test.describe('Log workout', () => {
     await expect(weightInput).toHaveAttribute('placeholder', '—');
 
     await page.getByRole('button', { name: 'Log set' }).click();
+    // The first-ever set gets a card of its own (first-time-celebration.spec.ts); the record this
+    // test is about is the NEXT one, which beats it.
+    await expect(page.getByText(/^Set 1$/)).toBeVisible();
+    await dismissPrCelebration(page);
 
-    // First-ever set is always a PR -- Epley's 1RM collapses to a meaningless 0 at
-    // weight 0, so the celebration should show the rep count instead.
-    // Scoped to the overlay: the Best card behind it names the same record ("Most reps · 8 reps").
+    // A real bodyweight record -- Epley's 1RM collapses to a meaningless 0 at weight 0, so the
+    // celebration shows the rep count instead. Scoped to the overlay: the Best card behind it names
+    // the same record ("Most reps · 10 reps").
+    await setStepper(page, 'Reps', 10);
+    await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     const celebration = page.getByRole('dialog');
-    await expect(celebration.getByText('8 reps')).toBeVisible();
+    await expect(celebration.getByText('10 reps')).toBeVisible();
     await expect(celebration.getByText('Bodyweight')).toBeVisible();
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('link', { name: 'PRs' }).click();
     await expect(page.getByText('Pull-up')).toBeVisible();
-    await expect(page.getByText('8 reps')).toBeVisible();
+    await expect(page.getByText('10 reps')).toBeVisible();
     await expect(page.getByText('Bodyweight')).toBeVisible();
   });
 

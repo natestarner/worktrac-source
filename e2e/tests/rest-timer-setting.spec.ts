@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, prCelebration } from './support/exercises';
 
 // The rest timer is enabled by default and starts after every live set (see log-workout.spec.ts's
 // PR-celebration test). This covers the Settings screen's rest-timer section: it is household-wide
@@ -21,8 +21,8 @@ test.describe('Rest timer setting', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await expect(restReadout(page)).toBeVisible();
 
     await page.locator('.header-bar').getByRole('button').click();

@@ -1,6 +1,6 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, setStepperPair } from './support/exercises';
 import { holdNetwork } from './support/faults';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -71,10 +71,10 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
   const heldLiveRead = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live$/);
   const heldCreate = await holdNetwork(page, /\/api\/people\/\d+\/live-sets$/);
   await page.getByRole('button', { name: 'Log set' }).click();
-  // A first-ever set always takes a record, and the overlay is decided on the device, so it is up
+  // A first-ever set always gets a card, and the overlay is decided on the device, so it is up
   // while the create is still held. Waited for explicitly: dismissPrCelebration only checks, and
   // an overlay that arrives a beat later sits animating over the End confirm.
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   await expect(celebration).toBeVisible();
   await celebration.click({ force: true });
   await expect(celebration).toBeHidden();
@@ -144,7 +144,7 @@ forEachConnectivityMode<State>('a workout ended mid-save still counts toward the
   // the overlay had rendered at all.
   assert: async (page, { heldEnd }) => {
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
     heldEnd.release();
   },
 });
