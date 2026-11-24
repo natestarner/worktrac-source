@@ -458,6 +458,26 @@ as a `BillingEvent`, and clearing that table first would delete the only record 
 cleanup) — see the comments on `AccountDeletionService` and `StripeSubscriptionCanceller` for the
 full reasoning; don't move it back in front of the deletes.
 
+## ⚠️ Each upgrade card owns its billing period
+
+`BillingTab` keeps two intervals: `interval` (the Plus card's `PlanChooser`, Yearly first) and
+`proInterval` (the Pro card's `ProIntervalChooser`, Monthly first, matching for-trainers.html's
+table). **Don't link them back into one.** The Plus card's radio group used to price Pro too, with
+nothing on the Pro card saying so; App Review (1.3.0, 2026-11-23, 2.1(b)) couldn't find the monthly
+Pro plans, and Pro Unlimited, which the App Store sells monthly only, vanished on Yearly. The
+Plus screen's Plus -> Pro path also had no interval control at all, so a Plus household could only
+be sold Pro yearly.
+
+- `ProUpgradeCard` sends its own interval (`onUpgrade({ plan: 'PRO', band, interval })`); the `?buy=`
+  path sets whichever card's interval the product belongs to.
+- In the store channel the card offers only the intervals some band is priced at (one → no
+  control), falls back to one that is if its state names one that isn't, and names a band sold only
+  at the other interval ("Unlimited is billed monthly only.") rather than dropping it silently.
+- The Pro radios are named **"Pro monthly" / "Pro yearly"** (visible text "Monthly"/"Yearly"):
+  bare "Monthly" is a substring of the Plus radio "Monthly: $3.99 / month". Select the Plus radios
+  with an anchored regex (`/^Yearly/`). Pinned in `BillingTab.test.jsx`, `billingChannels.test.jsx`
+  and `billing-pro-interval.spec.ts`.
+
 ## Label collisions this feature creates
 
 - Header badge is **"Go Plus"**; the billing screen's primary button is **"Upgrade to Plus"**. A Free

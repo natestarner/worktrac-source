@@ -23,6 +23,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import HuddleMark from '../shared/HuddleMark';
 import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
+import ProIntervalChooser from './ProIntervalChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import PlusCelebration from './PlusCelebration';
 import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
@@ -63,7 +64,16 @@ export default function BillingTab() {
   const goBack = useGoBack();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  // The PLUS card's interval. Pro has its own, below -- the two are deliberately not linked.
   const [interval, setInterval] = useState('YEAR');
+  // ⚠️ The PRO card's interval, chosen ON the Pro card (ProIntervalChooser). It used to be the Plus
+  // card's `interval` above, which silently priced Pro too; App Review could not find the monthly
+  // Pro plans because nothing on the Pro card said where its billing period was set. Monthly first
+  // because the trainer page (for-trainers.html) leads its price table with the Monthly column, and
+  // the price must not change shape between the page someone read and the screen they pay on --
+  // the same rule that pre-selects Yearly for Plus. It is also the interval every band is sold at
+  // in the App Store (Unlimited is monthly only there).
+  const [proInterval, setProInterval] = useState('MONTH');
   // Smallest band pre-selected. A trainer arriving here has one or two clients far more often than
   // forty, and pre-selecting a bigger band would quote them a price they did not ask for.
   const [proBand, setProBand] = useState(PRO_BANDS[0].id);
@@ -228,7 +238,9 @@ export default function BillingTab() {
       showToast("That plan isn't available here right now.", { tone: 'info' });
       return;
     }
-    setInterval(product.interval);
+    // Leave the screen showing what was bought, on the card that sells it.
+    if (product.plan === 'PRO') setProInterval(product.interval);
+    else setInterval(product.interval);
     if (product.band) setProBand(product.band);
     handleUpgrade({ plan: product.plan, band: product.band ?? null, interval: product.interval });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -457,7 +469,8 @@ export default function BillingTab() {
           subscription={subscription}
           pending={pending}
           pausableLogins={pausableLogins}
-          interval={interval}
+          proInterval={proInterval}
+          onProIntervalChange={setProInterval}
           proBand={proBand}
           onProBandChange={setProBand}
           {...paidControls(channel, subscription?.billingSource, {
@@ -475,9 +488,11 @@ export default function BillingTab() {
           storeFinePrint={channel === 'store' ? storeFinePrint() : null}
           onRestore={channel === 'store' ? handleRestore : null}
           interval={interval}
+          onIntervalChange={setInterval}
+          proInterval={proInterval}
+          onProIntervalChange={setProInterval}
           proBand={proBand}
           onProBandChange={setProBand}
-          onIntervalChange={setInterval}
           pending={pending}
           onUpgrade={handleUpgrade}
           onStartFree={() => navigate('/app/log')}
@@ -583,7 +598,8 @@ function PaidSummary({
   billedInStore = null,
   onRequestRefund = null,
   pausableLogins = [],
-  interval,
+  proInterval,
+  onProIntervalChange,
   proBand,
   onProBandChange,
   onUpgrade,
@@ -699,7 +715,8 @@ function PaidSummary({
           than blending into the surface behind it. */}
       {plan === 'PLUS' && onUpgrade && (
         <ProUpgradeCard
-          interval={interval}
+          interval={proInterval}
+          onIntervalChange={onProIntervalChange}
           band={proBand}
           onBandChange={onProBandChange}
           pending={pending}
@@ -768,6 +785,8 @@ function renewalLine(cancelling, periodEnd, name, plan) {
 function FreeSummary({
   interval,
   onIntervalChange,
+  proInterval,
+  onProIntervalChange,
   proBand,
   onProBandChange,
   pending,
@@ -828,7 +847,8 @@ function FreeSummary({
       </div>
 
       <ProUpgradeCard
-        interval={interval}
+        interval={proInterval}
+        onIntervalChange={onProIntervalChange}
         band={proBand}
         onBandChange={onProBandChange}
         pending={pending}
@@ -863,7 +883,12 @@ function FreeSummary({
  *
  * ⚠️ "Subscribe to Pro" is checked against every other control on this screen for the substring
  * rule -- Upgrade to Plus / Start with Free, decide later / Manage billing / Go Plus. It shares no
- * substring with any of them, and none contains it.
+ * substring with any of them, and none contains it. Its interval radios ("Pro monthly",
+ * "Pro yearly") are checked the same way against the Plus card's ("Monthly: $3.99 / month", ...).
+ *
+ * Used on the FREE screen and on the PLUS screen's Plus -> Pro path. The PLUS screen has no Plus
+ * interval control at all, which is why the Pro card must carry its own: before it did, a Plus
+ * household on the web could only ever be sold Pro yearly.
  *
  * `ctaVariant` defaults to 'secondary' for the FREE screen below, which already spends its one
  * variant="primary" on "Upgrade to Plus" sitting above this card -- a second primary button on
@@ -875,6 +900,7 @@ function FreeSummary({
  */
 function ProUpgradeCard({
   interval,
+  onIntervalChange,
   band,
   onBandChange,
   pending,
@@ -883,16 +909,28 @@ function ProUpgradeCard({
   ctaVariant = 'secondary',
   prices = null,
 }) {
-  // In the store channel, only the bands the store actually offers.
-  const bands = prices ? PRO_BANDS.filter((b) => prices({ plan: 'PRO', band: b.id, interval })) : PRO_BANDS;
+  // ⚠️ THIS CARD OWNS ITS INTERVAL. It used to take the Plus card's, so Plus's Monthly/Yearly
+  // silently priced Pro and decided which bands were listed here -- App Review could not find the
+  // monthly Pro plans, and Unlimited (monthly only in the App Store) vanished on Yearly. See
+  // ProIntervalChooser's header.
+  //
+  // In the store channel, only what the store actually prices: an interval is offered when any band
+  // is sold at it, and a band when it is sold at the interval shown. On the web, everything.
+  const sold = (b, iv) => !prices || Boolean(prices({ plan: 'PRO', band: b.id, interval: iv }));
+  const intervals = PRO_INTERVAL_ORDER.filter((iv) => PRO_BANDS.some((b) => sold(b, iv)));
+  // The interval asked for if it can be bought here, else the first that can -- never a card with
+  // no bands because the state names an interval the store doesn't sell.
+  const shown = intervals.includes(interval) ? interval : intervals[0];
+  const bands = shown ? PRO_BANDS.filter((b) => sold(b, shown)) : [];
   const selected = bands.find((b) => b.id === band) ?? bands[0];
   if (!selected) return null;
-  // The interval chosen above drives this price too, so the two cards can never quote different
-  // billing periods on one screen. In the store channel it is the store's own price string.
-  const webPrice = interval === 'YEAR' ? selected.year : selected.month;
-  const price = prices
-    ? `${prices({ plan: 'PRO', band: selected.id, interval })} / ${interval === 'YEAR' ? 'year' : 'month'}`
-    : webPrice;
+  // Bands sold only at the OTHER interval (Unlimited in the App Store, on Yearly). Said rather than
+  // silently left out of the list, so a trainer looking for one knows where it is.
+  const other = intervals.find((iv) => iv !== shown);
+  const elsewhere = other ? PRO_BANDS.filter((b) => !sold(b, shown) && sold(b, other)) : [];
+  const unit = shown === 'YEAR' ? 'year' : 'month';
+  // In the store channel the price is the store's own string; on the web, PRO_BANDS' `month`/`year`.
+  const price = prices ? `${prices({ plan: 'PRO', band: selected.id, interval: shown })} / ${unit}` : selected[unit];
 
   return (
     <>
@@ -924,6 +962,14 @@ function ProUpgradeCard({
           ))}
         </select>
 
+        <ProIntervalChooser value={shown} onChange={onIntervalChange} intervals={intervals} />
+        {elsewhere.length > 0 && (
+          <p style={{ ...mutedLineStyle, fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+            {elsewhere.map((b) => b.name).join(' and ')} {elsewhere.length === 1 ? 'is' : 'are'} billed{' '}
+            {other === 'YEAR' ? 'yearly' : 'monthly'} only.
+          </p>
+        )}
+
         <p style={{ ...planHeadingStyle, marginTop: 'var(--space-3)' }}>{price}</p>
 
         <ul style={benefitListStyle}>
@@ -939,7 +985,7 @@ function ProUpgradeCard({
             its one primary above this card), primary on the PLUS screen (which has none). */}
         <OfflineDisabledWrap message="Upgrading needs a connection.">
           <Button variant={ctaVariant} size="lg" fullWidth
-                  onClick={() => onUpgrade({ plan: 'PRO', band: selected.id })} disabled={pending}>
+                  onClick={() => onUpgrade({ plan: 'PRO', band: selected.id, interval: shown })} disabled={pending}>
             Subscribe to Pro
           </Button>
         </OfflineDisabledWrap>
@@ -951,6 +997,9 @@ function ProUpgradeCard({
     </>
   );
 }
+
+// Monthly first on the Pro card, matching for-trainers.html's price table (Monthly | Yearly).
+const PRO_INTERVAL_ORDER = ['MONTH', 'YEAR'];
 
 const bandSelectStyle = {
   width: '100%',
