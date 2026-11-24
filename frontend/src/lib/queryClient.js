@@ -716,6 +716,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // absent as none and drops codes it does not know, so neither can refuse the create.
         primaryMuscles: vars.primaryMuscles,
         secondaryMuscles: vars.secondaryMuscles,
+        // Absent on every create a build before 1.4 queued; the server reads absent as 'external',
+        // which is what those creates always meant.
+        loadType: vars.loadType,
       });
       if (vars.personId) await favoriteExercise(vars.personId, created.id);
       return created;

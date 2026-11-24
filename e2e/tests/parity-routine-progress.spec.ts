@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, dismissPrCelebration } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const BENCH = 'Barbell Bench Press';
@@ -43,7 +43,7 @@ forEachConnectivityMode<{ personName: string }>('routine pills show what was log
     // Skip straight past Bench and Press to Squat, and log it.
     await pill(page, SQUAT).click();
     await expect(page.getByText('3 of 3')).toBeVisible();
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
 
@@ -62,7 +62,7 @@ forEachConnectivityMode<{ personName: string }>('routine pills show what was log
     await expect(page.getByRole('button', { name: 'Finish routine' })).toBeVisible();
 
     // Log Press, then finish: the toast owns up to the one step that was skipped.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Finish routine' }).click();

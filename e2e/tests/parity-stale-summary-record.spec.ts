@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { delayNetwork } from './support/faults';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
@@ -28,7 +28,7 @@ async function workout(page: Page, reps: number) {
   if (await back.isVisible()) await back.click();
   await pickExercise(page, 'Chin-up');
   await setStepperPair(page, 0, reps);
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
   await dismissPrCelebration(page);
   await waitForOutboxDrain(page);
@@ -45,7 +45,7 @@ async function reopenChinUp(page: Page) {
 
 async function logReps(page: Page, reps: number) {
   await setStepperPair(page, 0, reps);
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
 }
 
 // The row first, THEN the overlay. The celebration is decided before the set is written, so once

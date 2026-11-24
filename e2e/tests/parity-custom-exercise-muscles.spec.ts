@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { logSetButton } from './support/exercises';
 import { registerHousehold } from './support/auth';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -38,7 +39,7 @@ forEachConnectivityMode<void>('your own exercise keeps the muscles you picked', 
     await dialog.getByRole('button', { name: 'Add', exact: true }).last().click();
   },
   assert: async (page) => {
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     await expect(page.getByRole('button', { name: ABOUT })).toBeVisible();
   },
   afterReconnect: async (page) => {

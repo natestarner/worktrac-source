@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, endWorkout, logSetAt, pickExercise, prCelebration, setStepperPair } from './support/exercises';
+import { backToPicker, endWorkout, logSetAt, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // ⚠️ THIS IS THE SPEC THAT KEEPS THE LOG SCREEN AND HISTORY TELLING THE SAME STORY.
@@ -47,7 +47,7 @@ async function logSetTakingNoRecord(page: Page, weight: number, reps: number) {
   const setRows = page.getByText(/^Set \d+$/);
   const rowsBefore = await setRows.count();
   await setStepperPair(page, weight, reps);
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await expect(setRows).toHaveCount(rowsBefore + 1);
   // If this ever DID raise a celebration the set was not the no-record set this helper promises,
   // and every count below would be measuring something else.

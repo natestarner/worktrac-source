@@ -479,6 +479,11 @@ each held month's fingerprint and keeps every month the server does not resend
 - **Every reader gets the flat, newest-first array through `select: flattenHistory`** (`useHistory`,
   `AppSettingsTab`). A raw `getQueryData(queryKeys.history(...))` is the synced shape, not a list —
   only `getHistory` itself reads it that way.
+- **With nothing held, `useHistory` returns ONE frozen empty list (`NO_HISTORY`), never `?? []`.**
+  Offline with no History, the fetch is paused and `isLoading` is false, so readers memoize over
+  the empty list; a fresh one per render looped `ExerciseDetail`'s prefill effect and starved the
+  page (`docs/incidents/2026-11-24-empty-history-render-loop-delayed-outbox-persist.md`). The same
+  goes for any hook's default: a stable value, or every dependent effect runs every render.
 - **`flattenHistory` passes a plain array through untouched.** That is a cache persisted by a build
   from before the sync (axis D): it must still render, and `heldForSync` treats it as holding
   nothing, so the first sync replaces it. Many unit tests seed History as an array for the same

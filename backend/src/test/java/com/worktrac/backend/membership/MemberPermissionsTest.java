@@ -515,6 +515,31 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                     .andExpect(status().isOk());
         }
 
+        // PUT /{id}/load-type is the same shape as /muscles: EDIT_OWN admits every member, and
+        // ExerciseService.updateLoadType is the only thing refusing a member somebody else's.
+        @Test
+        void aMemberMayChangeTheLoadTypeOfTheirOwnExerciseOnly() throws Exception {
+            long own = createExerciseAs(memberToken, "Sam's Dip");
+            long owners = createExerciseAs(ownerToken, "Nate's Dip");
+            String body = objectMapper.writeValueAsString(Map.of("loadType", "bodyweight"));
+
+            mockMvc.perform(put("/api/exercises/" + own + "/load-type")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk());
+            mockMvc.perform(put("/api/exercises/" + owners + "/load-type")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(put("/api/exercises/" + own + "/load-type")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk());
+        }
+
         @Test
         void aMemberMayRenameTheExerciseTheyCreated() throws Exception {
             long id = createExerciseAs(memberToken, "Sam's Curl");

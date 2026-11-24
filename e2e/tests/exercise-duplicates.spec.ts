@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise, addOwnTimedExercise, backToPicker, openExistingViaAddOwn } from './support/exercises';
+import { addOwnExercise, addOwnTimedExercise, backToPicker, openExistingViaAddOwn, logSetButton } from './support/exercises';
 
 // Adding an exercise that already exists used to create a second one, indistinguishable from the
 // first: the picker, History, PRs, Trends and the routine strip all render a bare name. Now the
@@ -17,14 +17,14 @@ test.describe('duplicate exercises', () => {
     await registerHousehold(page, request, 'Halloway');
 
     await addOwnExercise(page, 'Zercher Squat');
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Back to the picker, then try to add the very same exercise again.
     await backToPicker(page);
     await openExistingViaAddOwn(page, 'Zercher Squat');
 
     // Lands on the SAME exercise's detail screen -- not a second one, and not the picker.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     await expect(page.getByText('Zercher Squat', { exact: true })).toBeVisible();
 
     // And there is still exactly one of it in the picker. `exact` because the chip's whole text is
@@ -100,7 +100,7 @@ test.describe('duplicate exercises', () => {
     // it also favorites it, it is in the picker afterwards exactly as a created one would be.
     await openExistingViaAddOwn(page, 'Barbell Bench Press');
 
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     await backToPicker(page);
     await expect(page.getByRole('button', { name: 'Barbell Bench Press', exact: true })).toHaveCount(1);
   });

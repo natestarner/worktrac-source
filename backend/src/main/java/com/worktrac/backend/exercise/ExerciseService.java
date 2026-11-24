@@ -200,8 +200,10 @@ public class ExerciseService {
         // Stamped only on the branch that genuinely inserts. Both dedup branches above return
         // somebody else's existing row untouched -- re-attributing it to whoever happened to
         // replay a create would quietly transfer authorship, and with it who may rename it.
+        // The load type only on the branch that genuinely inserts, like the stamp and the muscles: a
+        // replay or a duplicate-name match leaves the existing row's choice alone.
         Exercise exercise = new Exercise(account, name, deduped ? clientKey : null, trackingType,
-                access.userId());
+                access.userId(), request.loadType());
         // ⚠️ Real attribution, not a placeholder: CREATE_EXERCISE's onSettled swaps this response
         // over the optimistic row, so a wrong answer here makes a just-created exercise render as
         // somebody else's.
@@ -233,6 +235,25 @@ public class ExerciseService {
         }
         muscleWriter.replace(exercise.getId(), request.primaryMuscles(), request.secondaryMuscles());
         return toDto(access, exercise);
+    }
+
+    // Sets whether one of the household's OWN exercises expects a weight ('external') or is done at
+    // bodyweight with weight added on top ('bodyweight'). Exactly updateMuscles' shape: library
+    // exercises are not editable (their types are reviewed and set by migration), and the "who may"
+    // is rename's without rename's in-use 409 -- this changes no logged set and no record, only how
+    // the Log screen asks for a first set's weight. A gated (online-only) write on the client, so a
+    // refusal here is honest. An unknown value is read as 'external', never refused.
+    @Transactional
+    public ExerciseDto updateLoadType(AccountAccess access, Long exerciseId, ExerciseLoadTypeRequest request) {
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
+        if (exercise.isGlobal()) {
+            throw new ForbiddenException("The type of a preloaded exercise can't be changed");
+        }
+        if (!access.mayEditSharedResource(exercise.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this exercise, or the account owner, can change its type");
+        }
+        exercise.setLoadType(request.loadType());
+        return toDto(access, exerciseRepository.save(exercise));
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared

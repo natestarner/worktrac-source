@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { addMemberLogin, registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -90,7 +90,7 @@ forEachConnectivityMode<void>('a set logged after switching household behaves th
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    await page.getByRole('button', { name: /^Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
   },
   // The parity claim. No branch on ctx.mode: the row is on screen in every mode, because a durable

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise, dismissPrCelebration } from './support/exercises';
+import { addOwnExercise, dismissPrCelebration, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // PR 4 of offline mode: create a brand-new exercise AND log sets against it with no connection, then
@@ -17,7 +17,7 @@ test.describe('Offline mode — create an exercise and log against it', () => {
 
     // Log a set against the not-yet-synced exercise; both the create and the set are now queued
     // (already editable/deletable -- see offline-outbox.spec.ts's note on paused rows).
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
     await expect(outboxCountText(page, 2)).toBeVisible();

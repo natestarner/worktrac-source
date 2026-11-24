@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { loadTypeOf } from '../../utils/exerciseLoad';
 import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
 import { queryClient, refreshHistoryForEveryone, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
@@ -600,6 +601,9 @@ export default function LogTab() {
               // Muscles live on the catalog row, not the person's picker row selectedExercise usually
               // is. Looked up by id; anything missing them answers empty lists (utils/muscles.js).
               muscles={exerciseMuscles(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
+              // So is the load type (utils/exerciseLoad.js): how the weight box is labelled, and how
+              // a first set asks for its weight. Unknown reads as 'external'.
+              loadType={loadTypeOf(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
               // The how-to video lives on the catalog row too (library exercises only).
               video={exerciseVideo(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
               personId={activePersonId}

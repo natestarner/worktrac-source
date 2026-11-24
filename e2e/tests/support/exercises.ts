@@ -18,6 +18,38 @@ export async function addExerciseToRoutine(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
 }
 
+// The exercise screen's one big button, whatever it reads: "Log set" (or "Log set for Sam"), or
+// "Enter a weight" on the first set of an exercise that expects one. For "is the exercise screen
+// open?" checks; tap it with tapLogSet.
+export function logSetButton(page: Page) {
+  return page.getByRole('button', { name: /^(Log set|Enter a weight)/ });
+}
+
+// Taps Log set for whatever is on screen, the way every spec did before load types (2026-11-24).
+//
+// A person's FIRST set of an exercise that expects a weight (load_type 'external', e.g. Barbell
+// Back Squat) now asks for one: Log set is disabled and reads "Enter a weight". A blank used to log
+// 0, a bodyweight set, so a spec that tapped Log set there meant exactly that -- and
+// "No weight, just bodyweight" is the button that still logs it. Anywhere else this is just the tap.
+//
+// ⚠️ It waits for the summary cards first ("Last time"), because that is when the screen KNOWS
+// whether there is history: before then nothing is asked (ExerciseDetail's `prefill != null`), so
+// an earlier check would see an enabled button that then flips.
+export async function tapLogSet(page: Page) {
+  await expect(page.getByText(/^Last time/).first()).toBeVisible();
+  const noWeight = page.getByRole('button', { name: 'No weight, just bodyweight' });
+  const logSet = page.getByRole('button', { name: /^Log set/ });
+  // Polled, not checked once: on a just-created exercise under lie-fi the cards can draw a beat
+  // before the device's History answers, and only then does the screen know to ask.
+  await expect
+    .poll(async () => {
+      if (await noWeight.isVisible()) await noWeight.click();
+      return (await logSet.count()) > 0 && (await logSet.first().isEnabled());
+    })
+    .toBe(true);
+  await logSet.first().click();
+}
+
 // Back to the Log picker from an exercise's detail screen. NOT the "Log" tab link: routing to
 // /app/log is a no-op when you are already there, and the picker only renders while
 // `selectedExerciseId` is null -- so the tab link leaves you on the exercise you were already on.
@@ -47,9 +79,14 @@ export type StepperLabel = 'Weight' | 'Reps' | 'Time';
 // expect.poll because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the
 // summary / session-sets queries settle, which can land after this and stomp the value -- the
 // same race offline-reads.spec.ts's setWeight documents.
+// The weight row is "Weight (lb)" on a Weight & reps exercise and "Added (lb)" on a bodyweight one
+// (utils/exerciseLoad.js#weightLabel); both are the Weight stepper.
+function stepperRow(page: Page, label: StepperLabel) {
+  return page.locator('.stepper-row').filter({ hasText: label === 'Weight' ? /^(Weight|Added) \(/ : label });
+}
+
 export async function setStepper(page: Page, label: StepperLabel, target: number) {
-  const row = page.locator('.stepper-row').filter({ hasText: label });
-  const value = row.locator('.stepper-value');
+  const value = stepperRow(page, label).locator('.stepper-value');
 
   await expect
     .poll(
@@ -65,7 +102,7 @@ export async function setStepper(page: Page, label: StepperLabel, target: number
 }
 
 function stepperValue(page: Page, label: StepperLabel) {
-  return page.locator('.stepper-row').filter({ hasText: label }).locator('.stepper-value');
+  return stepperRow(page, label).locator('.stepper-value');
 }
 
 // Sets BOTH steppers, then re-checks them together.
@@ -266,6 +303,9 @@ export async function addOwnTimedExercise(page: Page, name: string) {
 export async function openExistingViaAddOwn(page: Page, name: string, measure: 'Reps' | 'Time' = 'Reps') {
   await page.getByRole('button', { name: '+ Add your own exercise' }).click();
   await page.getByPlaceholder('Exercise name').fill(name);
-  await page.getByRole('dialog').getByRole('button', { name: measure, exact: true }).click();
+  // "Measured in" offers Weight & reps / Bodyweight / Time; a rep exercise is the first (the
+  // default, and the same movement family as Bodyweight for the duplicate check).
+  const option = measure === 'Time' ? 'Time' : 'Weight & reps';
+  await page.getByRole('dialog').getByRole('button', { name: option, exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: `Open ${name}`, exact: true }).click();
 }

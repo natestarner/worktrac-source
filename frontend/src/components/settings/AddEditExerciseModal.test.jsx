@@ -50,7 +50,7 @@ describe('AddEditExerciseModal', () => {
   // The measure toggle is the only new decision this feature asks anyone to make, and only when
   // adding their own exercise. It is create-only: the backend has no setter for trackingType,
   // because flipping it would reinterpret every set already logged against the exercise.
-  describe('the Reps/Time measure toggle', () => {
+  describe('the "Measured in" toggle: Weight & reps, Bodyweight or Time', () => {
     it('creates a timed exercise when Time is chosen, and carries it on the optimistic row', async () => {
       const onSaved = vi.fn();
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
@@ -72,14 +72,41 @@ describe('AddEditExerciseModal', () => {
           name: 'Ring Support Hold',
           idempotencyKey: expect.any(String),
           trackingType: 'duration',
+          // Time is "added weight" by nature: a vest on a hold.
+          loadType: 'bodyweight',
         }),
       );
     });
 
-    it('defaults to Reps', () => {
+    // No guessing from the name (decided 2026-11-24): most custom exercises are the gym's odd
+    // machine, and a wrong guess is worse than a predictable default.
+    it('defaults to Weight & reps', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
-      expect(screen.getByRole('button', { name: 'Reps' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Weight & reps' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: 'Time' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('creates a bodyweight exercise when Bodyweight is chosen, on the optimistic row too', async () => {
+      const onSaved = vi.fn();
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Ring Dip' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Bodyweight' }));
+      fireEvent.click(lastAddButton());
+
+      // The Log screen reads this temp row while the create is queued, offline for the whole outage.
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Ring Dip', trackingType: 'strength', loadType: 'bodyweight', optimistic: true }),
+      );
+      await waitFor(() =>
+        expect(addExercise).toHaveBeenCalledWith({
+          name: 'Ring Dip',
+          idempotencyKey: expect.any(String),
+          trackingType: 'strength',
+          loadType: 'bodyweight',
+        }),
+      );
     });
 
     it('is not offered when renaming -- the measure is fixed once sets exist against it', () => {
@@ -108,6 +135,7 @@ describe('AddEditExerciseModal', () => {
         name: 'Cable Row',
         idempotencyKey: expect.any(String),
         trackingType: 'strength',
+        loadType: 'external',
       }),
     );
     await waitFor(() => expect(favoriteExercise).toHaveBeenCalledWith(5, 7));
@@ -139,7 +167,9 @@ describe('AddEditExerciseModal', () => {
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
       fireEvent.click(lastAddButton());
 
-      await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row', trackingType: 'strength' }));
+      await waitFor(() =>
+        expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row', trackingType: 'strength', loadType: 'external' }),
+      );
       await waitFor(() => expect(favoriteExercise).toHaveBeenCalledWith(5, 7));
       expect(onSaved).toHaveBeenCalledWith({ id: 7 });
     });
@@ -291,6 +321,7 @@ describe('AddEditExerciseModal', () => {
           name: 'Plank (Time)',
           idempotencyKey: expect.any(String),
           trackingType: 'duration',
+          loadType: 'bodyweight',
         }),
       );
     });

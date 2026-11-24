@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, prCelebration, setStepperPair } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -36,7 +36,7 @@ forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment i
     // rather than a first-ever set (which is deliberately presented as a baseline, not a PR).
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 135, 5);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
@@ -68,7 +68,7 @@ forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment i
   act: async (page) => {
     // Heavier AND more reps, so this takes both set-level records at once.
     await setStepperPair(page, 185, 8);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
   },
 
   assert: async (page) => {
@@ -121,7 +121,7 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     // A one-set baseline workout: 100 x 10 = 1000 lb of volume to beat.
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 100, 10);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
@@ -157,7 +157,7 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     let fired = 0;
     for (let i = 0; i < 3; i++) {
       await setStepperPair(page, 60, 10);
-      await page.getByRole('button', { name: 'Log set' }).click();
+      await tapLogSet(page);
       const celebration = page.getByText('New PR!');
       if (await celebration.isVisible()) {
         // Whatever fires here must be the VOLUME record. Every set is 60x10, below the 100x10
@@ -196,7 +196,7 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     // one, or "New PR!" if its summary had not landed yet), and it must NOT list a volume record.
     await pickExercise(page, 'Chin-up');
     await setStepperPair(page, 0, 10);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const first = prCelebration(page);
     await expect(first).toBeVisible();
     await expect(page.getByRole('dialog')).not.toContainText('Volume');
@@ -235,12 +235,12 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     // Two sets of 6: neither beats the 10-rep best set, so the only record available is volume --
     // 6 total (short of 10), then 12 (past it). The SECOND set is the crossing.
     await setStepperPair(page, 0, 6);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
     await expect(prCelebration(page)).toBeHidden();
 
     await setStepperPair(page, 0, 6);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const celebration = page.getByText('New PR!');
     await expect(celebration).toBeVisible();
   },

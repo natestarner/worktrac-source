@@ -1,4 +1,5 @@
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import { logSetButton } from './support/exercises';
 import { registerHousehold } from './support/auth';
 
 // The Log picker's exercise groups are bounded by ROWS of chips, not by a count of items, and the
@@ -112,7 +113,7 @@ test.describe('Log picker bounds', () => {
 
     await page.getByRole('button', { name: 'Show all 40 favorites' }).click();
     await page.getByRole('button', { name: last, exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
   });
 
   // Every chip must be exactly one row tall, or the clip stops landing on a row boundary. A long

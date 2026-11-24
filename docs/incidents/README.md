@@ -54,6 +54,7 @@ need the "why" or the debugging story.
 | 2026-11-19 | [A forgotten legacy column made households undeletable](2026-11-19-legacy-users-account-id-blocked-account-deletion.md) — `users.account_id` was unmapped in phase 2 but never dropped; its FK failed the final `DELETE FROM accounts` for any pre-phase-2 login that also belonged to another household, a 503 on every attempt | Account / schema |
 | 2026-11-21 | [A tap on History slid off its button in WebKit, so the menu never opened](2026-11-21-history-tap-slid-away-in-webkit.md) — Playwright's scroll reached the page only with the click, blocks drawn by it shrank 60px mid-press, and the click went to the card; #440, a nightly flake for a month | e2e / WebKit |
 | 2026-11-24 | [Sets logged on a just-created exercise vanished from its screen after reconnecting](2026-11-24-new-exercise-sets-vanish-on-reconnect.md) — the set-saved handlers refreshed the list under the exercise's temp id after the screen had moved to the real one ("Set 1" only, even after a reload), and the queued-set readers stopped drawing them at the remap | Offline / log screen |
+| 2026-11-24 | [A fresh empty History list per render looped the Log screen](2026-11-24-empty-history-render-loop-delayed-outbox-persist.md) — offline with no History held, `useHistory`'s `?? []` re-ran the prefill effect every render; the storm delayed saving an offline set past a reload | Frontend state / offline |
 
 ## Adding a new incident
 

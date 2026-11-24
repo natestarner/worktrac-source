@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { failNetwork, failWithStatus } from './support/faults';
 import { outboxCountText, waitForOutboxDrain } from './support/offline';
 
@@ -20,7 +20,7 @@ test.describe('Session resilience around a backend/DB outage', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     const faults = await failNetwork(page, '**/api/**');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 

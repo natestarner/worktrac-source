@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold, setBillingPlan, setMemberVisibility } from './support/auth';
-import { addOwnExercise } from './support/exercises';
+import { addOwnExercise, logSetButton } from './support/exercises';
 import { addPerson } from './support/people';
 
 // Pro's promise -- the one printed on the pricing page -- is that a trainer's clients do not see
@@ -62,7 +62,7 @@ test.describe('Pro — private clients', () => {
     // The create itself must succeed: a member may always create a shared resource, private or not.
     await addOwnExercise(page, privateName);
     // Landing on the detail screen is how every other spec confirms the create actually took.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     await loginAs(page, alex.email, alex.password);
     await page.getByPlaceholder('Search all exercises').fill(privateName);

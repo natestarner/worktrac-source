@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, prCelebration } from './support/exercises';
+import { pickExercise, prCelebration, tapLogSet } from './support/exercises';
 import { delayNetwork } from './support/faults';
 
 const HISTORY_REQUEST = /\/api\/people\/\d+\/history\/sync$/;
@@ -20,7 +20,7 @@ test.describe('Background-refresh indicator', () => {
     await pickExercise(page, 'Barbell Bench Press');
     // The weight is incidental here (a blank prefill logs as a bodyweight set, which is fine --
     // this spec never compares lifts); all that matters is History having a row to measure.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(prCelebration(page)).toBeVisible();
     await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 

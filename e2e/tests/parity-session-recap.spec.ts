@@ -1,6 +1,6 @@
 import { APIRequestContext, Locator, Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, logSetAt, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, logSetAt, pickExercise, tapLogSet } from './support/exercises';
 import { delayNetwork, holdNetwork } from './support/faults';
 import { expectHistoryMatchesServer } from './support/historyConvergence';
 import { pinOfflineViaSettings, unpinOfflineViaSettings, waitForOutboxDrain } from './support/offline';
@@ -64,16 +64,16 @@ forEachConnectivityMode<{ personName: string }>('ending a workout reports what w
   // other and from the number of taps. A recap that accidentally counted sets as exercises, or
   // dropped the pending rows, cannot pass this.
   act: async (page) => {
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2')).toBeVisible();
 
     await page.getByRole('button', { name: '← All exercises' }).click();
     await pickExercise(page, 'Barbell Back Squat');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 
@@ -138,7 +138,7 @@ test.describe('The end-workout sheet asks who else trains with you', () => {
     await registerHousehold(page, request, 'Solo');
 
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: 'End workout' }).click();
@@ -160,7 +160,7 @@ test.describe('The end-workout sheet asks who else trains with you', () => {
 
     // A second workout: the question has been answered, so the sheet no longer asks it.
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     const asking = page.getByRole('dialog', { name: 'End this workout?' });
@@ -179,7 +179,7 @@ test.describe('The end-workout sheet asks who else trains with you', () => {
     const sheet = page.getByRole('dialog', { name: 'Workout done' });
 
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: 'End workout' }).click();
@@ -189,7 +189,7 @@ test.describe('The end-workout sheet asks who else trains with you', () => {
 
     await page.reload();
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     const asking = page.getByRole('dialog', { name: 'End this workout?' });
@@ -211,10 +211,10 @@ test.describe('Session recap after deleting everything logged', () => {
     await registerHousehold(page, request, 'Del');
 
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2')).toBeVisible();
 
@@ -258,7 +258,7 @@ test.describe('Session recap after deleting everything logged', () => {
     const email = await registerHousehold(page, request, 'Mid');
 
     await pickExercise(page, 'Barbell Back Squat');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: '← All exercises' }).click();
@@ -271,7 +271,7 @@ test.describe('Session recap after deleting everything logged', () => {
     const firstBenchSynced = page.waitForResponse(
       (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()) && r.ok(),
     );
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await firstBenchSynced;
@@ -279,7 +279,7 @@ test.describe('Session recap after deleting everything logged', () => {
     const secondBenchLanded = page.waitForResponse(
       (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()),
     );
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2')).toBeVisible();
 
@@ -342,7 +342,7 @@ test.describe('Session recap around a late live-session answer', () => {
     await pinOfflineViaSettings(page);
     await page.getByRole('link', { name: 'Log' }).click();
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 
@@ -352,12 +352,12 @@ test.describe('Session recap around a late live-session answer', () => {
     await answered;
     await expect(page.getByText(/^Session in progress/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2')).toBeVisible();
     await page.getByRole('button', { name: '← All exercises' }).click();
     await pickExercise(page, 'Barbell Back Squat');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 

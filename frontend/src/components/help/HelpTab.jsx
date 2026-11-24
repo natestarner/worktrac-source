@@ -271,7 +271,7 @@ export default function HelpTab() {
         <p>
           Open an exercise and you get two steppers, weight and reps, and one big{' '}
           <T>Log set for&hellip;</T> button with the active person&rsquo;s name on it. The steppers
-          prefill from what you did last time, so a repeat set really is one tap. Press and hold{' '}
+          fill in from what you did last time, so a repeat set really is one tap. Press and hold{' '}
           <T>&minus;</T> or <T>+</T> to run through numbers quickly instead of tapping one at a
           time; how big each tap or hold-step is can be set per person in{' '}
           <T>App Settings</T> &rarr; <T>Steppers</T>.
@@ -285,6 +285,24 @@ export default function HelpTab() {
           <T>This session</T> lists what you&rsquo;ve logged so far, newest at the top, with edit and
           delete on every row.
         </p>
+
+        <h3 className="help-h3">The first time you do an exercise</h3>
+        <p>
+          With nothing to fill in from yet, the weight box depends on the kind of exercise:
+        </p>
+        <ul>
+          <li>
+            <strong>Weight &amp; reps</strong> (a barbell, dumbbells, a machine): the box starts empty
+            and highlighted, and the button reads <T>Enter a weight</T> until you put a number in.
+            If you did it with nothing in your hands, tap <T>No weight, just bodyweight</T> under it.
+          </li>
+          <li>
+            <strong>Bodyweight</strong> (pull-ups, push-ups, dips) and anything measured in{' '}
+            <strong>time</strong>: the box is called <T>Added</T> and starts at 0, so the first
+            set is one tap. Wearing a vest or a belt? Put its weight there.
+          </li>
+        </ul>
+        <p>After that first set, the numbers fill in from last time as usual.</p>
 
         <Note title="A weight of 0 means bodyweight">
           <p>
@@ -416,8 +434,11 @@ export default function HelpTab() {
             you&rsquo;d already typed a name into the search box, it arrives prefilled.
           </li>
           <li>
-            Choose whether it&rsquo;s measured in <strong>Reps</strong> or <strong>Time</strong>. This
-            decides what the second stepper means every time you use it.
+            Choose what it&rsquo;s measured in: <strong>Weight &amp; reps</strong> (the usual, for
+            anything you load), <strong>Bodyweight</strong> (reps with nothing in your hands, weight
+            added only if you wear some) or <strong>Time</strong> (a hold). Time decides what the
+            second stepper means for good; you can switch between the other two later in{' '}
+            <T>Customize</T>.
           </li>
           <li>Save. You land straight on the new exercise&rsquo;s screen, ready to log.</li>
         </ol>
@@ -838,6 +859,12 @@ export default function HelpTab() {
         <p>
           The star and note icons sit in the row just under the exercise&rsquo;s name; the rest live
           behind the <T>Customize</T> button beside them (the one drawn as three sliders).
+        </p>
+        <p>
+          For an exercise your household added, <T>Customize</T> also lets whoever added it, or the
+          account owner, switch it between <strong>Weight &amp; reps</strong> and{' '}
+          <strong>Bodyweight</strong>. That only changes how the first set asks for a weight; nothing
+          you logged changes. <ChipWait />
         </p>
         <p>
           The little figure in a circle at the start of that row is about the muscles the exercise

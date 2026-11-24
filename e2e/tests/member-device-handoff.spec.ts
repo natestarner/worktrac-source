@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { addMemberLogin, loginAs, registerHousehold } from './support/auth';
 import { outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 
 // The write endpoint, blocked on its own rather than by taking the whole browser offline.
 //
@@ -96,7 +96,7 @@ test.describe('Two members sharing a device', () => {
     await loginAs(page, sam.email, sam.password);
     await pickExercise(page, 'Barbell Bench Press');
     const blocked = await failNetwork(page, LIVE_SETS);
-    await page.getByRole('button', { name: /^Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
@@ -155,7 +155,7 @@ test.describe('Two members sharing a device', () => {
     // Sam queues one, and leaves without logging out.
     await loginAs(page, sam.email, sam.password);
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /^Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
     await endSessionWithoutLoggingOut(page);
@@ -165,7 +165,7 @@ test.describe('Two members sharing a device', () => {
     // -- and that eviction persists against the pointer, which by then names Alex.
     await loginAs(page, alex.email, alex.password);
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /^Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
     await endSessionWithoutLoggingOut(page);

@@ -2465,7 +2465,7 @@ describe('ExerciseDetail weight prefill', () => {
   // would show what the test seeded rather than what the component computed. Mirrors the reducer's
   // SET_DRAFT case exactly -- all five fields written together, starting unowned so the prefill is
   // free to seed it.
-  function Harness({ liveSession = null }) {
+  function Harness({ liveSession = null, loadType }) {
     const [slice, setSlice] = useState({
       weightDraft: null,
       repsDraft: 8,
@@ -2494,6 +2494,7 @@ describe('ExerciseDetail weight prefill', () => {
         liveSession={liveSession}
         refetchLiveSession={vi.fn().mockResolvedValue()}
         onBack={vi.fn()}
+        loadType={loadType}
       />
     );
   }
@@ -2521,16 +2522,105 @@ describe('ExerciseDetail weight prefill', () => {
     expect(weightInput).toHaveAttribute('placeholder', '—');
   });
 
-  it('logs a blank weight as 0 instead of refusing the tap', async () => {
-    // The bodyweight case: a first-ever pull-up is correct with no interaction at all, and
-    // blocking the button would punish it to protect a weighted lift where the em dash is
-    // already visibly not a number.
+  // ## A first set asks for its weight according to the exercise's load type (2026-11-24)
+  //
+  // This used to be "logs a blank weight as 0 instead of refusing the tap", for every exercise:
+  // right for a pull-up, and how a new person's first Barbell Bench Press got recorded as a
+  // bodyweight set ("BW x 8") with a Most reps record. Now the exercise says which it is.
+
+  it('asks for a weight on the first set of an exercise that expects one', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+
+    const button = await screen.findByRole('button', { name: 'Enter a weight' });
+    expect(button).toBeDisabled();
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('');
+    expect(screen.getByLabelText('Weight (lb)')).toHaveClass('stepper-value--needed');
+    fireEvent.click(button);
+    expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  it('logs once any weight is entered, and reads "Log set" again', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    const weight = await screen.findByLabelText('Weight (lb)');
+    fireEvent.focus(weight);
+    fireEvent.change(weight, { target: { value: '135' } });
+    fireEvent.blur(weight);
+
+    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 135, reps: 8 })));
+  });
+
+  it('"No weight, just bodyweight" logs the first set at 0', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'No weight, just bodyweight' }));
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('0');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  });
+
+  // A first-ever pull-up is right with no interaction at all.
+  it('starts a bodyweight exercise at 0 under "Added", one tap to log', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="bodyweight" />);
+
+    await waitFor(() => expect(screen.getByLabelText('Added (lb)')).toHaveValue('0'));
+    expect(await screen.findByText('Most reps')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  });
+
+  // Typing a number and tapping straight away: the tap is what blurs (and so commits) the field,
+  // so the button has to be enabled already. Otherwise the first tap is swallowed.
+  it('enables Log set as soon as a weight is typed, before the field commits', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    const weight = await screen.findByLabelText('Weight (lb)');
+    await screen.findByRole('button', { name: 'Enter a weight' });
+    fireEvent.focus(weight);
+    fireEvent.change(weight, { target: { value: '95' } });
+
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeEnabled();
+    fireEvent.blur(weight);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 95 })));
+  });
+
+  // Until the screen knows there is no history it must not claim there is none: no flash of
+  // "Enter a weight" over an exercise whose last session is still loading.
+  it('does not ask for a weight while the summary is still loading', async () => {
+    getExerciseSummary.mockReturnValue(new Promise(() => {}));
+
+    renderWithQuery(<Harness loadType="external" />);
+    expect(await screen.findByRole('button', { name: 'Log set' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Enter a weight' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+  });
+
+  // A catalog cached before load types existed (axis D) has no loadType: the safe reading.
+  it('treats an exercise with no load type as expecting a weight', async () => {
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
 
     renderWithQuery(<Harness />);
-    fireEvent.click(await screen.findByText('Log set'));
+    expect(await screen.findByRole('button', { name: 'Enter a weight' })).toBeDisabled();
+  });
 
-    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  // Only BLANK is affected: history still fills in, and a carried-forward set still logs as it reads.
+  it('never asks when last session fills the weight in', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: { sets: [{ weight: 0, reps: 10, unit: 'lb' }] }, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('0'));
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeEnabled();
   });
 
   it("carries today's last set forward when there is no prior session", async () => {

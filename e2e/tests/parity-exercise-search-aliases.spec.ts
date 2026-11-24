@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { logSetButton } from './support/exercises';
 import { registerHousehold } from './support/auth';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -39,7 +40,7 @@ forEachConnectivityMode<void>('the exercise search finds other names and muscles
     // Picking a result found by its other name opens the exercise itself.
     await search.fill('ohp');
     await result.click();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     await expect(page.getByText('Barbell Overhead Press', { exact: true }).first()).toBeVisible();
   },
 });

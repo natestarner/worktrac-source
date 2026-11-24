@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
+import { addOwnExercise, dismissPrCelebration, pickExercise, tapLogSet, logSetButton } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
 import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText, waitForQueryCachePersist } from './support/offline';
 import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
@@ -48,7 +48,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await registerHousehold(page, request, 'Morgan');
     await pickExercise(page, 'Barbell Bench Press');
     const mark = await sync.mark();
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page.getByText('Barbell Bench Press').first()).toBeVisible();
@@ -119,14 +119,14 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     // Confirm the exercise selection actually landed (and had a moment to persist to
     // IndexedDB -- AppStateContext writes on every dispatch, but that write is async) before
     // reloading, or the reload below can race it and land back on the picker instead.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     await page.reload();
     await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     await page.context().setOffline(true);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -182,7 +182,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
   test('an ended workout stays ended across a reload, instead of resurfacing as "This session"', async ({ page, request }) => {
     await registerHousehold(page, request, 'Quinn');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -231,12 +231,12 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     // handleExerciseCreated no longer awaits a catalog/picker refetch, so this needs no generous
     // timeout and there is no in-flight refetch left to be stranded by the setOffline below. The
     // wait stays because the set logged next targets this screen.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Genuinely offline for the dependent set -- submitted after the create, landing in the
     // opposite (paused) cohort if the create's own retry hasn't also flipped to paused yet.
     await page.context().setOffline(true);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 2)).toBeVisible();
 
