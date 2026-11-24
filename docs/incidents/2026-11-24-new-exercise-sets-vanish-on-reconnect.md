@@ -98,6 +98,18 @@ It lasts one render, roughly 250ms on a 4x-slowed CPU. It is pre-existing and se
 spec deliberately tolerates a single-row frame (and says why) rather than assert it. It is a
 follow-up.
 
+**A reload within a second of creating an exercise offline drops it from the screen until the
+connection returns.** Found when this incident's reload spec flaked once in three on its first
+lower deploy (the two sets were logged 0.9s after the create). The optimistic row lives in the
+query cache, whose persist is throttled to once a second (`offline-internals.md`), so a reload
+inside that second boots without it: an empty picker, and the selected temp id resolves to
+nothing. The queued create and sets are in the outbox (its own key, written on every change), so
+nothing is lost and the screen recovers when the create lands. Reproduced 8 of 8 locally by
+reloading right after an offline create, against 0 of 8 once the cache persist is awaited. The
+spec now awaits it, as `waitForQueryCachePersist` exists to do. The app-side behaviour is
+pre-existing and is a follow-up. A real reload that fast needs `swUpdate.js`'s forced reload
+landing on a navigation in that same second.
+
 ## Item 15, decided against on evidence
 
 The same investigation looked at the two requests the screen sends while the id is still temp
