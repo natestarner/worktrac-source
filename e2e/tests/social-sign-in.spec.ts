@@ -330,9 +330,13 @@ test.describe('sign in with Apple or Google', () => {
     await page.getByRole('button', { name: 'Send reset code' }).click();
 
     await expect(page).toHaveURL(/\/reset-password/);
-    await expect(page.getByTestId('reset-no-code-provider-hint')).toContainText(
-      'No code? If you signed up with Test provider, your account has no password to reset',
-    );
+    // Names every provider this environment offers: only the test provider locally, Apple, Google
+    // AND the test provider on lower. So assert the sentence around the list, and that the list
+    // includes the provider this spec can drive -- never the exact list.
+    const hint = page.getByTestId('reset-no-code-provider-hint');
+    await expect(hint).toContainText('No code? If you signed up with');
+    await expect(hint).toContainText('Test provider');
+    await expect(hint).toContainText('your account has no password to reset');
     await page.getByRole('link', { name: 'Log in screen' }).click();
     await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
   });
