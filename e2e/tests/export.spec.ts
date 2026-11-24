@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, prCelebration } from './support/exercises';
 
 test.describe('CSV export', () => {
   test('exporting data from History triggers a file download', async ({ page, request }) => {
@@ -9,8 +9,8 @@ test.describe('CSV export', () => {
     // Log a set first so the export isn't trivially empty.
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
 
     await page.getByRole('link', { name: 'History' }).click();
     const downloadPromise = page.waitForEvent('download');
@@ -40,8 +40,8 @@ test.describe('CSV export', () => {
     await page.getByRole('link', { name: 'Log' }).click();
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
 
     await page.getByRole('link', { name: 'History' }).click();
     await expect(historyExport).toBeEnabled();

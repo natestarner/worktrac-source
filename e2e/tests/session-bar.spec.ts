@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, pickExercise, prCelebration } from './support/exercises';
 
 // The load-bearing half of moving the session banner into fixed bottom chrome: the bar must never
 // cover the end of a tab.
@@ -77,8 +77,8 @@ async function startASession(page: Page, request: Parameters<typeof registerHous
   await registerHousehold(page, request, name);
   await pickExercise(page, 'Barbell Bench Press');
   await logSet(page).click();
-  await expect(page.getByText('New PR!')).toBeVisible();
-  await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+  await expect(prCelebration(page)).toBeVisible();
+  await prCelebration(page).click({ force: true }); // dismiss (scrim click)
   await expect(sessionBar(page)).toBeVisible();
 }
 
@@ -137,8 +137,8 @@ test.describe('Session bar stacking', () => {
     await page.getByRole('button', { name: 'Start routine' }).click();
 
     await logSet(page).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(sessionBar(page)).toBeVisible();
 
     await page.getByRole('button', { name: 'End routine' }).click();

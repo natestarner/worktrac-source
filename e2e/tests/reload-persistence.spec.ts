@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, endWorkout, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, endWorkout, pickExercise, prCelebration } from './support/exercises';
 
 function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
@@ -62,8 +62,8 @@ test.describe('State survives reload and stays live without a full reload', () =
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await expect(liveSessionDot(page, 'Alex')).toBeVisible();
     await expect(liveSessionDot(page, 'Sam')).toHaveCount(0);

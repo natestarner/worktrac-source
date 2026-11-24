@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -213,8 +213,8 @@ test.describe('Multi-person switching', () => {
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(restReadout(page)).toBeVisible();
     await expect(restRing(page, 'Alex')).toBeVisible();
 
@@ -250,8 +250,8 @@ test.describe('Multi-person switching', () => {
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(restRing(page, 'Alex')).toBeVisible();
 
     // Hand the device to Sam, then reload -- the post-deploy forced reload does exactly this.
@@ -270,8 +270,8 @@ test.describe('Multi-person switching', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await expect(restReadout(page)).toBeVisible();
     await expect(restRing(page, 'Alex')).toBeVisible();
 

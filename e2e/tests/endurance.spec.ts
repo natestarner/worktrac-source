@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, setHoldSeconds } from './support/exercises';
+import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, prCelebration, setHoldSeconds } from './support/exercises';
 import { goHardOffline, goOnline, waitForOutboxDrain } from './support/offline';
 
 // The "This session" list. Scoping to it matters: the Best card above renders the SAME string
@@ -68,7 +68,7 @@ test.describe('endurance exercises', () => {
     await setHoldSeconds(page, 20);
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('Set 3')).toBeVisible();
-    await expect(page.getByText('New PR!')).toHaveCount(0);
+    await expect(prCelebration(page)).toHaveCount(0);
   });
 
   test('the Best card names the record a hold actually has', async ({ page, request }) => {

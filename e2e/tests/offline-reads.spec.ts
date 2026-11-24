@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration } from './support/exercises';
 import { goHardOffline, goOnline, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
@@ -191,8 +191,8 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     await registerHousehold(page, request, 'Marlowe');
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('link', { name: 'PRs' }).click();
     // toHaveURL as well as the name: "Barbell Bench Press" is ALSO the Log screen's own title, so
@@ -219,8 +219,8 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     await registerHousehold(page, request, 'Adair');
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
 
     await page.getByRole('link', { name: 'PRs' }).click();
     // toHaveURL + networkidle for the same two reasons as the hard-offline test above.
@@ -253,8 +253,8 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // Explicit, not the prefill -- see the note on the 'Indigo' test above.
     await setWeight(page, 45);
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await endWorkout(page);
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();

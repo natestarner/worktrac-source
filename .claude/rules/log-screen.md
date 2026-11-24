@@ -205,6 +205,25 @@ gym basement was silently never celebrated.
   Losing a rep because the confetti broke is the worst possible trade.
 - **It cannot double-fire.** A replay has no observer, so `handleLogSet` is never reached twice for
   one set.
+- **The quiet "First <exercise>" card needs the SERVER to have confirmed it (2026-11-24).** A
+  first-ever set shows the same card with the Huddle mark, "First Bench Press" ("Sam's first …" with
+  2+ people), one "Your starting mark" row, no confetti and the lighter `'complete'` haptic. It is
+  decided by `prDetection.js#isCertainFirstEver(priorBests, summaryConfirmsNeverLogged(summaryQuery))`:
+  no prior on either measure **and** the summary query settled this visit (`status === 'success'`,
+  `fetchStatus === 'idle'`) with no best and no top weight. **Never relax that to "nothing found"**
+  (`isFirstEver` alone): a Free device holds 90 days of History, and a cached or paused summary may be
+  from another day or another device — either way a real PR would be shown as a "first", and Nate's
+  hard rule is that an actual PR is never missed. Unconfirmed → the full "New PR!", which is what
+  every first set showed before (register row in `resilience.md`).
+  - **Only the very first set is quiet (option (c)).** Set 2 has set 1 folded into `effectiveBest`
+    (`mergeBestWithLocalSets`), so beating it in the same workout is a full "New PR!" by the ordinary
+    rule -- and independently, once set 1 is logged the summary is re-asked under the new session
+    id (unconfirmed while pending) and answers with set 1 in it. Either alone keeps set 2 from
+    reading as "first", which is why `first-time-celebration.spec.ts`'s parity block only goes red
+    when both are broken. There is deliberately no "first workout" state; a "starting-mark day" rule (no pop-ups for
+    improvements on day one) was considered and deferred — add it on top if first workouts still pop
+    too often.
+  - The "New PR!" literal stays pinned for every other card (`PRCelebration.jsx` header).
 - **Prior bests come from `exerciseSummary`, checked against `history` — never replaced by it.**
   `getSummary` applies no Free-tier window (unlike `getPrList`), so a Free household is never
   congratulated for beating a 90-day best; deriving the priors from the window-clamped `history`

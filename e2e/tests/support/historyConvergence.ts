@@ -1,4 +1,5 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
+import { prCelebration } from './exercises';
 import { waitForOutboxDrain, waitForQueryCachePersist } from './offline';
 
 // The History sync's promise, checked at the end of every parity spec: once connectivity is back and
@@ -13,7 +14,7 @@ import { waitForOutboxDrain, waitForQueryCachePersist } from './offline';
 // Not a connectivity branch and not sync chrome: it asserts the result, in every mode alike.
 export async function expectHistoryMatchesServer(page: Page, request: APIRequestContext) {
   // A PR celebration left up by the spec would sit over the tab bar.
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   if (await celebration.isVisible()) {
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();

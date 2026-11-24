@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
-import { pickExercise, logSetAt } from './support/exercises';
+import { logSetAt, pickExercise, prCelebration } from './support/exercises';
 
 // Import through the real UI: pick a person, pick a file, confirm what it says, and check the data
 // landed where it was supposed to and nowhere else.
@@ -55,7 +55,7 @@ test.describe('CSV import', () => {
     await logSetAt(page, 135, 8);
     // logSetAt already waits for the Set row, so the celebration may or may not still be up by
     // now. Dismiss it only if it is, rather than waiting on a transient.
-    const celebration = page.getByText('New PR!');
+    const celebration = prCelebration(page);
     if (await celebration.isVisible().catch(() => false)) {
       await celebration.click({ force: true });
     }

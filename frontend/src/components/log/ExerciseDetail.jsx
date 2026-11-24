@@ -23,7 +23,7 @@ import {
 import { deleteQueuedSet } from '../../lib/offlineSetEdits';
 import { isSessionEnded } from '../../lib/endedSessions';
 import { comparableValue, computePrefillDraft, convertWeight, epley } from '../../utils/formulas';
-import { isFirstEver, setPrTypes } from '../../utils/prDetection';
+import { isCertainFirstEver, setPrTypes, startingMarkText, summaryConfirmsNeverLogged } from '../../utils/prDetection';
 import {
   crossesSessionVolume,
   formatVolume,
@@ -939,7 +939,9 @@ export default function ExerciseDetail({
         comparable: effectiveBest ? comparableValue(effectiveBest) : null,
         heaviestLb: effectiveHeaviestLb,
       };
-      const firstTime = isFirstEver(priorBests);
+      // The quiet "First <exercise>" card, only when the server has confirmed this person never
+      // logged it -- otherwise the full "New PR!" below. See prDetection.js#isCertainFirstEver.
+      const firstTime = isCertainFirstEver(priorBests, summaryConfirmsNeverLogged(summaryQuery));
       const prTypes = setPrTypes(loggedSet, priorBests);
 
       // Session volume is the one celebrated measure that is not a property of this set, so it is
@@ -978,7 +980,16 @@ export default function ExerciseDetail({
         recordVolumePrCelebrated(exercise.id, { kind: volumeKind, value: volumeAfter });
       }
 
-      if (prTypes.length > 0) {
+      if (firstTime) {
+        // A starting mark, not a record: one row, the set itself. Nothing else can fire alongside
+        // it -- a never-logged exercise has no prior session volume to cross.
+        showCelebration({
+          exerciseName: exercise.name,
+          personFirstName: activePersonFirstName ?? null,
+          firstTime: true,
+          prs: [{ type: 'startingMark', valueText: startingMarkText(loggedSet), caption: 'Your starting mark' }],
+        });
+      } else if (prTypes.length > 0) {
         const setText = formatSetSpaced({
           weight: loggedSet.weight,
           reps: loggedSet.reps,
@@ -1041,7 +1052,7 @@ export default function ExerciseDetail({
             caption,
           };
         });
-        showCelebration({ exerciseName: exercise.name, prs: rows, firstTime });
+        showCelebration({ exerciseName: exercise.name, prs: rows, firstTime: false });
       }
     } catch {
       // Deliberately silent. There is nothing a person could do about it and nothing to retry;

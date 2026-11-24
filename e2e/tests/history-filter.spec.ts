@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
-import { pickExercise, logSetAt } from './support/exercises';
+import { logSetAt, pickExercise, prCelebration } from './support/exercises';
 
 // Tags an exercise via its Customize modal, one tag at a time. Submits via the "New tag"
 // input's own Enter handler rather than its "Add" button -- ConfigureExerciseModal has a SECOND
@@ -16,8 +16,8 @@ async function tagExercise(page, tagName: string) {
 
 async function logSetAndDismissCelebration(page) {
   await page.getByRole('button', { name: 'Log set' }).click();
-  await expect(page.getByText('New PR!')).toBeVisible();
-  await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+  await expect(prCelebration(page)).toBeVisible();
+  await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 }
 
 // Covers requirements 2-5 from the History/PRs search-and-tag redesign: tags show and filter both
