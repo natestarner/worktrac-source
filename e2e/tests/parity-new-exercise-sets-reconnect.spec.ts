@@ -2,7 +2,7 @@ import { expect, Page, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, logSetAt } from './support/exercises';
 import { API_ONLY, delayNetwork, failNetwork } from './support/faults';
-import { outboxCountText, waitForOutboxDrain } from './support/offline';
+import { outboxCountText, waitForOutboxDrain, waitForQueryCachePersist } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
 // Create an exercise, log two sets on it, reconnect: the exercise screen must show both sets the
@@ -200,10 +200,18 @@ test('a new exercise keeps both sets through a reload while queued, then the rec
   await addOwnExercise(page, EXERCISE);
   await logSetAt(page, 50, 10);
   await logSetAt(page, 60, 10);
-  // Wait for the queue to reach IndexedDB before reloading (the outbox persists on its own key; a
-  // reload inside that write would test a different thing -- a lost write, which it is not).
+  // Wait for BOTH stores to reach IndexedDB before reloading; a reload inside either write tests a
+  // different thing.
+  //  - The outbox (its own key, written on every change): the queued create and both sets.
+  //  - The query cache (throttled to one write a second): the optimistic exercise row in the picker
+  //    lists. Without this the reload can boot from a snapshot taken before the exercise existed --
+  //    the picker is empty, the selected temp id resolves to nothing, and the screen never
+  //    reopens. On lower the two sets were logged 0.9s after the create, inside the throttle, and
+  //    that failed 1 run in 3 during the first deploy's burn-in. That is the throttled-persist
+  //    hazard waitForQueryCachePersist exists for, not what this spec is about.
   await expect(outboxCountText(page, 3)).toBeVisible();
   await waitForOutboxPersist(page, 3);
+  await waitForQueryCachePersist(page, `"name":"${EXERCISE}"`);
 
   await page.reload();
   await expect(page.getByText(EXERCISE, { exact: true })).toBeVisible();
