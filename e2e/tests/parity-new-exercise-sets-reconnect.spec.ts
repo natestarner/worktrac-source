@@ -1,7 +1,8 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, logSetAt } from './support/exercises';
-import { delayNetwork } from './support/faults';
+import { API_ONLY, delayNetwork, failNetwork } from './support/faults';
+import { outboxCountText, waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
 // Create an exercise, log two sets on it, reconnect: the exercise screen must show both sets the
@@ -79,6 +80,39 @@ async function stopRowSampler(page: Page) {
   });
 }
 
+// Polls the durable outbox's own IndexedDB key (`worktrac-outbox:<account>:<login>`,
+// outboxPersistence.js) until it holds `count` queued writes. It is written on every mutation-cache
+// change, but asynchronously -- so this, not the banner, is what says a reload will find them.
+async function waitForOutboxPersist(page: Page, count: number) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            new Promise<number>((resolve) => {
+              const open = indexedDB.open('keyval-store');
+              open.onerror = () => resolve(-1);
+              open.onsuccess = () => {
+                try {
+                  const store = open.result.transaction('keyval', 'readonly').objectStore('keyval');
+                  const keys = store.getAllKeys();
+                  const values = store.getAll();
+                  values.onsuccess = () => {
+                    const i = (keys.result as IDBValidKey[]).findIndex((k) => String(k).startsWith('worktrac-outbox:'));
+                    resolve(i === -1 ? 0 : (values.result[i]?.mutations?.length ?? 0));
+                  };
+                  values.onerror = () => resolve(-1);
+                } catch {
+                  resolve(-1);
+                }
+              };
+            }),
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(count);
+}
+
 const LOGGED = ['50 lb × 10', '60 lb × 10'];
 // The final stretch of the watch that must show both sets, settled.
 const SETTLED_MS = 1000;
@@ -148,3 +182,41 @@ function spec(title: string, { slowSetSaves }: { slowSetSaves: boolean }) {
 
 spec('a new exercise keeps both sets through the reconnect', { slowSetSaves: false });
 spec('a new exercise keeps both sets through the reconnect, at lower speed', { slowSetSaves: true });
+
+// The same flow with a RELOAD while everything is still queued. After a reload the queued create
+// and sets are not the mutations this page dispatched: restoreOutbox rebuilds them from IndexedDB
+// (outboxPersistence.js), and the temp->real map comes back from its own key (exerciseIdMap.js).
+// Both halves of the fix read what that restore rebuilds -- the screen's queued-set reader matches
+// on the restored mutation KEY's exercise id, and LOG_SET's onSettled resolves through the
+// restored map -- so this pins them on the restored path, not just the live one.
+//
+// Lie-fi, because it is the one degraded mode a reload can be driven in under `vite dev`: the fault
+// matches /api/ only, so the app shell still loads (hard offline would need the service worker --
+// offline-durability.spec.ts -- and setOffline does not survive a reload, e2e-tests.md).
+test('a new exercise keeps both sets through a reload while queued, then the reconnect', async ({ page, request }) => {
+  await registerHousehold(page, request, 'Okafor');
+  const fault = await failNetwork(page, API_ONLY);
+
+  await addOwnExercise(page, EXERCISE);
+  await logSetAt(page, 50, 10);
+  await logSetAt(page, 60, 10);
+  // Wait for the queue to reach IndexedDB before reloading (the outbox persists on its own key; a
+  // reload inside that write would test a different thing -- a lost write, which it is not).
+  await expect(outboxCountText(page, 3)).toBeVisible();
+  await waitForOutboxPersist(page, 3);
+
+  await page.reload();
+  await expect(page.getByText(EXERCISE, { exact: true })).toBeVisible();
+  await expectBothSets(page);
+
+  await startRowSampler(page);
+  await fault.stop();
+  await waitForOutboxDrain(page);
+  const samples = await stopRowSampler(page);
+  expectRowsHeld(samples);
+  await expectBothSets(page);
+
+  await page.reload();
+  await expect(page.getByText(EXERCISE, { exact: true })).toBeVisible();
+  await expectBothSets(page);
+});
