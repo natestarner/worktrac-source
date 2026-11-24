@@ -1949,6 +1949,62 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     }
   });
 
+  // A set queued while this exercise was still a temp id is keyed under that temp id. Once the
+  // create lands, LogTab moves the screen to the real id while the set is still queued -- and it
+  // must stay drawn until it lands (docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md).
+  function queueSetUnder(queryClient, exerciseId, { weight, reps, tempId }) {
+    const mutationKey = ['logSet', 7, exerciseId];
+    return act(async () => {
+      new MutationObserver(queryClient, { ...queryClient.getMutationDefaults(mutationKey), mutationKey })
+        .mutate({
+          mode: 'live', personId: 7, sessionId: null, exerciseId, unit: 'lb', weight, reps,
+          tempId, idempotencyKey: `idem-${tempId}`, clientLoggedAt: new Date().toISOString(),
+        })
+        .catch(() => {});
+    });
+  }
+
+  it('keeps drawing a set queued under the temp id once the screen has moved to the real id', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const tempId = newTempExerciseId();
+    setExerciseIdMapping(tempId, exercise.id);
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      await queueSetUnder(queryClient, tempId, { weight: 60, reps: 10, tempId: 'test-temp-remapped' });
+
+      const row = (await screen.findByText('60 lb × 10')).parentElement;
+      expect(within(row).getByText('Set 1')).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  // ...and resolving must not widen the match: a temp id that maps to ANOTHER exercise, or that has
+  // not mapped yet, is somebody else's set.
+  it('does not draw a set queued under a temp id that is not this exercise', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const otherTemp = newTempExerciseId();
+    setExerciseIdMapping(otherTemp, 999);
+    const unmappedTemp = newTempExerciseId();
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      await queueSetUnder(queryClient, otherTemp, { weight: 70, reps: 10, tempId: 'test-temp-other' });
+      await queueSetUnder(queryClient, unmappedTemp, { weight: 80, reps: 10, tempId: 'test-temp-unmapped' });
+      // A set for THIS exercise as a positive control, so the absences below are not vacuous.
+      await queueSetUnder(queryClient, exercise.id, { weight: 90, reps: 10, tempId: 'test-temp-mine' });
+
+      expect(await screen.findByText('90 lb × 10')).toBeInTheDocument();
+      expect(screen.queryByText('70 lb × 10')).not.toBeInTheDocument();
+      expect(screen.queryByText('80 lb × 10')).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   // Nothing exists server-side to key a "session in progress" banner/dot on until this
   // queued write actually replays, so onMutate optimistically seeds a provisional session
   // (id: null, so it can never leak into contextSessionId/activeSessionId or any id-keyed

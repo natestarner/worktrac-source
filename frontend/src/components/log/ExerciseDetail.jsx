@@ -273,6 +273,18 @@ export default function ExerciseDetail({
   // advances between exercises), and useMutationState below can filter on the key alone instead
   // of re-checking personId/exerciseId by hand.
   const saveNoteMutationKey = ['saveNote', personId, exercise.id];
+  // The READERS of this exercise's queued writes (pendingLiveNote, unsyncedLogSets) match on the
+  // RESOLVED exercise id, not on the raw key. A write queued against a just-created exercise is
+  // keyed under its TEMP id, and LogTab moves this screen to the real id the moment the create
+  // lands -- while the sets and notes queued behind it are still waiting their turn. Matched on the
+  // raw key they stopped being drawn from that moment until each one landed: a blink online at
+  // lower's speed, and for a whole outage if the connection went again in between
+  // (docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md). For any exercise with no
+  // temp past, resolving is the identity and this matches exactly what the key prefix did.
+  // useMutationState re-reads its filters on every render, so the id map being a plain module
+  // value is fine here: the create's own success notification is what re-renders this.
+  const isForThisExercise = (mutation) =>
+    resolveExerciseId(mutation.options.mutationKey?.[2]) === resolveExerciseId(exercise.id);
 
   // sessionExerciseNote fallback for the same collapsed-null-key gap documented above on
   // summaryQuery/derivedSummary and on pendingBeforeSession below: contextSessionId stays null
@@ -286,7 +298,7 @@ export default function ExerciseDetail({
   // `mode: 'session'` note (editing a past session) always has a real, already-known
   // editingSessionId and so never hits this gap.
   const pendingLiveNote = useMutationState({
-    filters: { mutationKey: saveNoteMutationKey },
+    filters: { mutationKey: ['saveNote', personId], predicate: isForThisExercise },
     select: (mutation) => ({
       status: mutation.state.status,
       // Immutable, app-assigned (see outboxSequence.js) -- unlike submittedAt, never re-stamped
@@ -521,7 +533,7 @@ export default function ExerciseDetail({
   // exactly as visible and durable as a paused one; only a definitive 4xx (the server's real
   // answer, rolled back by onError above) is excluded here.
   const unsyncedLogSets = useMutationState({
-    filters: { mutationKey: logSetMutationKey },
+    filters: { mutationKey: ['logSet', personId], predicate: isForThisExercise },
     select: (mutation) => ({
       tempId: mutation.state.variables?.tempId,
       status: mutation.state.status,
