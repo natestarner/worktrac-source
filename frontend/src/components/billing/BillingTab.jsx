@@ -44,6 +44,7 @@ import {
 } from '../../lib/native';
 import { syncAndFinish } from '../../lib/storeSync';
 import { findStoreProduct, useStoreCatalog } from '../../hooks/useStoreCatalog';
+import BenefitList from './BenefitList';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -983,14 +984,7 @@ function ProUpgradeCard({
 
         <p style={{ ...planHeadingStyle, marginTop: 'var(--space-3)' }}>{price}</p>
 
-        <ul style={benefitListStyle}>
-          {PRO_ADDITIONS.map((benefit) => (
-            <li key={benefit.id} style={benefitItemStyle}>
-              <BenefitCheck />
-              <span>{benefit.label}</span>
-            </li>
-          ))}
-        </ul>
+        <BenefitList benefits={PRO_ADDITIONS} />
 
         {/* See ctaVariant's header comment above: secondary on the FREE screen (which already has
             its one primary above this card), primary on the PLUS screen (which has none). */}
@@ -1025,45 +1019,6 @@ const bandSelectStyle = {
   borderRadius: 'var(--radius-md)',
 };
 
-// Deliberately the same treatment as the marketing site's pricing card -- an accent tick per
-// benefit -- so the page someone read before signing up and the screen they upgrade on feel like
-// one product rather than two.
-//
-// --color-accent is the right token here: it fails AA as small TEXT, but icons, borders and the
-// focus ring are exactly what it is for (see .claude/rules/frontend-core.md).
-function BenefitCheck() {
-  return (
-    <svg
-      width="19"
-      height="19"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-accent)"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0, marginTop: 2 }}
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-function BenefitList({ benefits = PLUS_BENEFITS }) {
-  return (
-    <ul style={benefitListStyle}>
-      {benefits.map((benefit) => (
-        <li key={benefit.id} style={benefitItemStyle}>
-          <BenefitCheck />
-          <span>{benefit.label}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 const cardStyle = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
@@ -1096,22 +1051,6 @@ const warningLineStyle = {
   borderRadius: 'var(--radius-sm)',
   padding: 'var(--space-3)',
   margin: 'var(--space-3) 0 0 0',
-};
-
-const benefitListStyle = {
-  listStyle: 'none',
-  padding: 0,
-  margin: '0 0 var(--space-5) 0',
-  display: 'grid',
-  gap: 'var(--space-3)',
-};
-
-const benefitItemStyle = {
-  color: 'var(--color-text)',
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 'var(--space-3)',
-  lineHeight: 1.45,
 };
 
 const finePrintStyle = {

@@ -1,4 +1,5 @@
 import HuddleMark from '../shared/HuddleMark';
+import BenefitList from './BenefitList';
 import { PLANS, planCopy } from './planCopy';
 
 // The moment a checkout actually lands, mirroring PRCelebration's shape (shared/PRCelebration.jsx)
@@ -75,6 +76,10 @@ export default function PlusCelebration({ plan, onDismiss }) {
           padding: '40px 36px',
           width: 340,
           maxWidth: '90vw',
+          // Five benefit lines make it taller than a landscape phone; scroll inside rather than run
+          // off the screen. (A scroll is not a tap, so it does not dismiss.)
+          maxHeight: '90dvh',
+          overflowY: 'auto',
           textAlign: 'center',
           boxShadow: '0 24px 60px rgba(0,0,0,0.3)',
           animation: 'celebPop .45s cubic-bezier(.34,1.56,.64,1)',
@@ -122,6 +127,12 @@ export default function PlusCelebration({ plan, onDismiss }) {
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-muted)', lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
           {copy.welcome}
         </div>
+        {/* What this tier just unlocked, as a list (TestFlight 1.4, 2026-11-25): the same lines the
+            billing screen sold it with, from the same map, so the two cannot disagree. */}
+        <BenefitList
+          benefits={copy.benefits}
+          style={{ margin: 'var(--space-5) 0 0', textAlign: 'left', fontSize: 'var(--text-sm)', position: 'relative', zIndex: 1 }}
+        />
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PlusCelebration from './PlusCelebration';
+import { PLUS_BENEFITS, PRO_ADDITIONS } from './planCopy';
 
 describe('PlusCelebration', () => {
   it('shows the welcome message', () => {
@@ -27,15 +28,20 @@ describe('PlusCelebration', () => {
     render(<PlusCelebration plan="PRO" onDismiss={vi.fn()} />);
 
     expect(screen.getByText('Welcome to Huddle Pro')).toBeInTheDocument();
-    expect(screen.getByText(/clients get their own logins/)).toBeInTheDocument();
-    expect(screen.queryByText(/import are unlocked/)).not.toBeInTheDocument();
+    for (const { label } of PRO_ADDITIONS) expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByText(PLUS_BENEFITS[0].label)).not.toBeInTheDocument();
   });
 
-  it('welcomes a Plus checkout to Plus', () => {
+  // TestFlight 1.4 (2026-11-25): the welcome named three unlocks in a sentence. It now lists every
+  // one, the same lines the billing screen sold Plus with (history, records, import, personal
+  // logins, Trusted logins).
+  it('welcomes a Plus checkout to Plus, listing everything Plus unlocked', () => {
     render(<PlusCelebration plan="PLUS" onDismiss={vi.fn()} />);
 
     expect(screen.getByText('Welcome to Huddle Plus')).toBeInTheDocument();
-    expect(screen.getByText(/import are unlocked/)).toBeInTheDocument();
+    const items = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(items).toEqual(PLUS_BENEFITS.map((b) => b.label));
+    expect(items).toHaveLength(5);
   });
 
   // ⚠️ The OPPOSITE call from PlanBadge's, deliberately. The badge renders nothing for a tier it
@@ -59,6 +65,6 @@ describe('PlusCelebration', () => {
 
     expect(screen.queryByText('Welcome to Huddle Free')).not.toBeInTheDocument();
     expect(screen.getByText('Welcome to Huddle Plus')).toBeInTheDocument();
-    expect(screen.getByText(/import are unlocked/)).toBeInTheDocument();
+    expect(screen.getByText(PLUS_BENEFITS[0].label)).toBeInTheDocument();
   });
 });
