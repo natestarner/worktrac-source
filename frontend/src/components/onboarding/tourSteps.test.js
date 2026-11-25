@@ -52,13 +52,17 @@ describe('TOUR_STEPS', () => {
     }
   });
 
-  // The tour opens a weighted exercise for a brand-new person, so the button step 6 spotlights is
-  // disabled and reads "Enter a weight" (#602). Its copy must not describe it as ready to press
-  // (#606); step 5 is the one that says to enter a weight, and both have to stay true together.
-  it('says the Log set button needs a weight first, as it does on the screen the tour opens', () => {
+  // The tour opens a weighted exercise for a brand-new person, where the weight is blank and Log set
+  // reads a disabled "Enter a weight" (#602). Steps 5-6 therefore carry a sample draft, so the
+  // spotlit button is a working "Log set" and step 6 may describe it as one (TestFlight 1.4,
+  // 2026-11-25; #613 had only changed the copy). Copy and sample have to stay true together.
+  it('puts a sample weight in on the steps that spotlight the steppers and Log set', () => {
     const steps = Object.fromEntries(TOUR_STEPS.map((s) => [s.id, s]));
+    expect(steps['set-entry'].screen.sampleDraft).toBe(true);
+    expect(steps['log-set'].screen.sampleDraft).toBe(true);
+    expect(steps['customize-exercise'].screen.sampleDraft).toBeUndefined();
     expect(steps['set-entry'].body).toMatch(/enter the weight/i);
-    expect(steps['log-set'].body).toMatch(/^Once there’s a weight,/);
+    expect(steps['log-set'].body).toMatch(/^This button starts the session/);
   });
 
   // Mirrors chartHelp.test.js's mutual-non-containment check: "Step N of 9" is rendered beside the
