@@ -99,3 +99,19 @@ export function monthLabels(cells) {
   }
   return labels;
 }
+
+// The first week column whose month label can be drawn whole at this scroll position.
+//
+// On a phone the 26 weeks overflow the card, so the grid scrolls sideways and opens scrolled to
+// today, and the weekday column (Mon/Wed/Fri) is pinned over its left edge with an opaque
+// background. A month label is drawn from its column's left edge, so the label of a column that
+// has slid under the weekday column was cut to its last letters ("ul" for Jul). Any label left of
+// the column returned here is hidden instead: a whole label or none, never a fragment.
+//
+// Column i starts at labelsGap + i * (cellSize + gap) past the weekday column's own width, and
+// the visible area past that column starts at scrollLeft -- so column i is clear when
+// labelsGap + i * (cellSize + gap) >= scrollLeft.
+export function firstClearLabelColumn(scrollLeft, cellSize, gap, labelsGap) {
+  if (!(scrollLeft > labelsGap)) return 0;
+  return Math.ceil((scrollLeft - labelsGap) / (cellSize + gap));
+}

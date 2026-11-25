@@ -10,7 +10,7 @@ import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
 const ABOUT = 'About this exercise: works Chest, helped by Shoulders and Triceps';
-const NOTE = 'The muscle highlighter is off by default. To turn it on, visit the Settings page.';
+const NOTE = 'Want to see these muscles on a body diagram? Turn on the muscle highlighter on the Settings page.';
 
 async function warmCatalog(page: Page) {
   const search = page.getByPlaceholder('Search all exercises');

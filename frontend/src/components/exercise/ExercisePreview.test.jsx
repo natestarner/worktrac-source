@@ -72,7 +72,7 @@ describe('previewing an exercise', () => {
   it('does not link away from the routine editor', () => {
     useMuscleMap.mockReturnValue({ on: false, canChange: true, owner: 'household owner' });
     render(<ExercisePreviewContent exerciseId={7} exerciseName="Barbell Bench Press" />);
-    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('visit the Settings page.');
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('Turn on the muscle highlighter on the Settings page.');
     expect(screen.queryByRole('link', { name: 'Settings page' })).toBeNull();
   });
 

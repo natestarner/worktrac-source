@@ -139,7 +139,7 @@ describe('ExerciseAboutSheet', () => {
     expect(screen.queryByRole('img', { name: 'Front of the body' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Body diagram' })).toBeNull();
     expect(screen.getByTestId('muscle-map-off')).toHaveTextContent(
-      'The muscle highlighter is off by default. To turn it on, visit the Settings page.',
+      'Want to see these muscles on a body diagram? Turn on the muscle highlighter on the Settings page.',
     );
     expect(screen.getByRole('link', { name: 'Settings page' })).toHaveAttribute('href', '/app/settings');
     expect(screen.getByText('Primary muscles')).toBeTruthy();
@@ -156,7 +156,7 @@ describe('ExerciseAboutSheet', () => {
   it('names who can turn it on when this login cannot', () => {
     renderSheet({ bodyFigure: 'male', muscleMap: { on: false, canChange: false, owner: 'trainer' } });
     expect(screen.getByTestId('muscle-map-off')).toHaveTextContent(
-      'The muscle highlighter is off by default. Your trainer can turn it on from the Settings page.',
+      'Body diagrams are turned off. Your trainer can turn on the muscle highlighter on the Settings page.',
     );
   });
 
@@ -165,7 +165,7 @@ describe('ExerciseAboutSheet', () => {
     render(
       <ExerciseAboutContent exerciseName="Barbell Bench Press" muscles={BENCH} bodyFigure="male" onChooseFigure={vi.fn()} muscleMap={OFF} settingsLink={false} />,
     );
-    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('visit the Settings page.');
+    expect(screen.getByTestId('muscle-map-off')).toHaveTextContent('Turn on the muscle highlighter on the Settings page.');
     expect(screen.queryByRole('link')).toBeNull();
   });
 
