@@ -79,14 +79,17 @@ test.describe('marketing landing page', () => {
     await expect(importRow.getByRole('img', { name: 'Not included', exact: true })).toHaveCount(1);
   });
 
-  test('the hero offers both plans, and the legal pages are reachable', async ({ page }) => {
+  test('the hero offers both ways in, Plus is on its card, and the legal pages are reachable', async ({ page }) => {
     await page.goto('/');
 
-    // "Go Plus" appears twice on the page (hero and pricing card), so this is scoped to the hero
-    // rather than matched globally -- an unscoped getByRole would be a strict-mode violation.
+    // Two ways in from the hero, the web app and the App Store (2026-11-25). "Go Plus" left the
+    // hero: somebody arriving cold hasn't yet seen what Plus adds, so the ask lives on its pricing
+    // card, which must still carry the plan intent the app's billing screen reads.
     const hero = page.locator('.hero');
     await expect(hero.getByRole('link', { name: 'Start free' })).toBeVisible();
-    await expect(hero.getByRole('link', { name: 'Go Plus' })).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'Download on the App Store' })).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'Go Plus' })).toHaveCount(0);
+    await expect(page.locator('#pricing').getByRole('link', { name: 'Go Plus' })).toHaveAttribute('href', /\/register\?plan=plus$/);
 
     // Taking payment without these is not something to discover in production.
     const footer = page.locator('.site-footer');
@@ -321,15 +324,18 @@ test.describe('marketing landing page', () => {
     }
   });
 
-  // The hero photo's one hard rule: the phone covers the dad's face, at every screen size. The
-  // first mockup only managed it at one width -- the photo was cropped by the viewport's shape and
-  // the phone placed by the page's, so his whole face showed beside the phone on a laptop and the
-  // phone vanished on phones. Asserted from what the browser actually hit-tests on top: a grid of
-  // points over his face (in the photo's own coordinates, so it follows any crop) must all land on
-  // the phone. Re-measure FACE if hero-row.jpg is ever replaced.
-  test('the hero phone covers the dad\'s face at every screen size', async ({ browser }) => {
-    // x 73.5-84.5%, y 21-37% of hero-row.jpg (1800 x 1200): his head, ears and beard, with margin.
+  // The hero photo's one hard rule: the device (an iPad on desktop, an iPhone at 900px and below)
+  // covers the dad's face, at every screen size. The first mockup only managed it at one width: the
+  // photo was cropped by the viewport's shape and the phone placed by the page's, so his whole face
+  // showed beside the phone on a laptop and the phone vanished on phones. Asserted from what the
+  // browser actually hit-tests on top: a grid of points over his face (in the photo's own
+  // coordinates, so it follows any crop) must all land on the device, and the device must keep
+  // clear of the boy's face and of the headline. Re-measure FACE and KID if hero-row.jpg changes.
+  test('the hero device covers the dad\'s face, and only his, at every screen size', async ({ browser }) => {
+    // In hero-row.jpg (1800 x 1200). FACE: his head, ears and beard, with margin. KID: the boy's
+    // face, which must stay visible -- he is the hero.
     const FACE = { left: 0.735, right: 0.845, top: 0.21, bottom: 0.37 };
+    const KID = { left: 0.48, right: 0.55, top: 0.29, bottom: 0.41 };
     const viewports = [
       [320, 568], [360, 740], [375, 667], [390, 844], [430, 932], [844, 390], [768, 1024],
       [820, 1180], [900, 1000], [901, 700], [1024, 768], [1180, 820], [1280, 720], [1366, 768],
@@ -340,30 +346,54 @@ test.describe('marketing landing page', () => {
       const page = await context.newPage();
       await page.goto('/');
       await page.locator('.hero__stage-img').evaluate((img: HTMLImageElement) => img.decode());
-      const misses = await page.evaluate((face) => {
+      const result = await page.evaluate(({ face, kid }) => {
         const stage = document.querySelector('.hero__stage')!.getBoundingClientRect();
         const frame = document.querySelector('.hero__photo')!.getBoundingClientRect();
-        const phone = document.querySelector('.hero__phone')!;
-        const out: string[] = [];
-        let visible = 0;
-        for (let i = 0; i <= 6; i++) {
-          for (let j = 0; j <= 6; j++) {
-            const x = stage.left + stage.width * (face.left + ((face.right - face.left) * i) / 6);
-            const y = stage.top + stage.height * (face.top + ((face.bottom - face.top) * j) / 6);
-            // A part of his face cropped out of the frame (or below a landscape phone's fold) isn't
-            // on screen to cover, and elementFromPoint can't see it.
-            if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) continue;
-            if (x < 0 || x >= window.innerWidth || y < 0 || y >= window.innerHeight) continue;
-            visible++;
-            const hit = document.elementFromPoint(x, y);
-            if (!hit || !phone.contains(hit)) out.push(`(${Math.round(x)},${Math.round(y)}) hit ${hit?.className ?? 'nothing'}`);
+        const device = document.querySelector('.hero__device')!;
+        const copy = document.querySelector('.hero__copy')!;
+        // Points over a box in the photo's coordinates that are actually on screen: a part cropped
+        // out of the frame (or below a landscape phone's fold) can't be hit-tested.
+        const pointsIn = (box: typeof face) => {
+          const pts: [number, number][] = [];
+          for (let i = 0; i <= 6; i++) {
+            for (let j = 0; j <= 6; j++) {
+              const x = stage.left + stage.width * (box.left + ((box.right - box.left) * i) / 6);
+              const y = stage.top + stage.height * (box.top + ((box.bottom - box.top) * j) / 6);
+              if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) continue;
+              if (x < 0 || x >= window.innerWidth || y < 0 || y >= window.innerHeight) continue;
+              pts.push([x, y]);
+            }
+          }
+          return pts;
+        };
+        const at = ([x, y]: [number, number]) => document.elementFromPoint(x, y);
+        const label = ([x, y]: [number, number]) => `(${Math.round(x)},${Math.round(y)}) hit ${at([x, y])?.className ?? 'nothing'}`;
+
+        const dad = pointsIn(face);
+        const boy = pointsIn(kid);
+        // Every visible word and button of the hero copy stays on top of the device.
+        const words: [number, number][] = [];
+        for (const el of copy.querySelectorAll('.hero__title, .hero__lead, .hero__actions > *')) {
+          const r = el.getBoundingClientRect();
+          for (const fx of [0.02, 0.5, 0.98]) for (const fy of [0.1, 0.5, 0.9]) {
+            const p: [number, number] = [r.left + r.width * fx, r.top + r.height * fy];
+            if (p[1] < window.innerHeight) words.push(p);
           }
         }
-        // Vacuous if the crop hid his whole face: then nothing was checked.
-        return { visible, out };
-      }, FACE);
-      expect(misses.visible, `${width}x${height}: his face should be in the frame`).toBeGreaterThan(30);
-      expect(misses.out, `${width}x${height}`).toEqual([]);
+        return {
+          dadVisible: dad.length,
+          boyVisible: boy.length,
+          dadUncovered: dad.filter((p) => !device.contains(at(p))).map(label),
+          boyCovered: boy.filter((p) => device.contains(at(p))).map(label),
+          wordsCovered: words.filter((p) => device.contains(at(p))).map(label),
+        };
+      }, { face: FACE, kid: KID });
+      // Each is vacuous if the crop hid the face entirely: then nothing was checked.
+      expect(result.dadVisible, `${width}x${height}: his face should be in the frame`).toBeGreaterThan(30);
+      expect(result.boyVisible, `${width}x${height}: the boy's face should be in the frame`).toBeGreaterThan(30);
+      expect.soft(result.dadUncovered, `${width}x${height}: the dad's face`).toEqual([]);
+      expect.soft(result.boyCovered, `${width}x${height}: the boy's face`).toEqual([]);
+      expect.soft(result.wordsCovered, `${width}x${height}: the headline and buttons`).toEqual([]);
       await context.close();
     }
   });
