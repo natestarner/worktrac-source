@@ -23,6 +23,8 @@ import { addExerciseToRoutine } from './support/exercises';
 
 // iPhone portrait width, with the height left above an open keyboard.
 const KEYBOARD_UP = { width: 390, height: 420 };
+// The same phone with the keyboard down.
+const PHONE = { width: 390, height: 844 };
 
 // The dialog's entrance animation holds it off its resting box until it finishes (e2e-tests.md,
 // "Before measuring pixels inside a Modal").
@@ -122,6 +124,32 @@ test.describe('the keyboard and scrolling', () => {
     await expect
       .poll(async () => {
         const g = await gap();
+        return g >= 4 && g <= 30 ? 'just below the chrome' : `gap ${g}px`;
+      })
+      .toBe('just below the chrome');
+  });
+
+  // Reported on TestFlight 2026-11-25: tapping the search stopped bringing it to the top. The spec
+  // above types first, which holds the space below the field a screen tall and so lets it reach the
+  // top; a bare tap with a short list below the field (a new person, or anyone before they type)
+  // had no room to scroll into, the browser clamped, and the field stayed where it was.
+  test('tapping the empty search on a short page still brings it up under the chrome', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    // The tap lands on a FULL-height phone screen; the keyboard (the app's window shrinking above
+    // it) arrives after the focus scroll has already started. Sizing the window short first, as
+    // the spec above does, hides the bug: a short window needs far less page below the field.
+    await page.setViewportSize(PHONE);
+    const search = page.getByPlaceholder('Search all exercises');
+    await expect(search).toHaveValue('');
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    await search.click();
+    await page.setViewportSize(KEYBOARD_UP);
+    const chrome = page.locator('.app-chrome');
+    await expect
+      .poll(async () => {
+        const c = await box(chrome);
+        const g = Math.round((await box(search)).y - (c.y + c.height));
         return g >= 4 && g <= 30 ? 'just below the chrome' : `gap ${g}px`;
       })
       .toBe('just below the chrome');

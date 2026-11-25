@@ -611,6 +611,15 @@ BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or
 from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
 `keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
 
+**The same space is held from the first TAP, and the focus scroll waits a frame for it.** Tapping
+the empty search is meant to bring the field to the top, but the space was held only while
+searching, and on a page about one screen tall the scroll clamped at 0: the field stayed where it
+was (TestFlight 1.4, 2026-11-25). `searchEngaged` holds `.picker-search-body` from the first focus
+for the rest of the visit (never dropped on blur, which would shorten the page under the person),
+and the scroll runs in `requestAnimationFrame` so that space is laid out first. Pinned by
+`keyboard-scroll.spec.ts`'s "tapping the empty search on a short page" (taps at full phone height,
+THEN shrinks the window, as the keyboard does; red against the old code by 102px).
+
 ## The picker is BOUNDED but never REORDERED
 
 `ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to
