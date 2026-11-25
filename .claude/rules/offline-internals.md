@@ -458,6 +458,14 @@ placeholder from its own time, and the recap dropped every set before it
 - **It only ever keeps a placeholder, and only on a `null`.** A real session always replaces it
   (that is how it gets its id), a `null` over a `null` stays `null` (End workout writes that), and
   with nothing queued the `null` clears it as before.
+- **An answer naming a workout this device already ENDED counts as a `null` (2026-11-25).**
+  Ending one workout and starting the next straight away leaves the End in flight, so a read that
+  left before it landed names the ended workout. As "a real session" it replaced the new
+  workout's placeholder; `useLiveSession` suppresses an ended id, so the bar vanished for a round
+  trip and closed an open "End this workout?" sheet (`SessionBar`). The check is `isSessionEnded`
+  on the answer, before the real-session shortcut. With nothing queued it is returned as answered,
+  exactly as before. `session-bar-back-to-back.spec.ts` (red 5/5 without it) and
+  `liveSession.test.js` pin it; `docs/incidents/2026-11-25-ended-session-answer-blinks-session-bar.md`.
 - **A create the End recorded (`markCreatesEnded`) does not count.** It belongs to a finished
   workout, and a reload inside the 1s persist window can restore that workout's placeholder.
 - **Not "cancel the in-flight fetch when seeding" — that was considered and rejected.** After a
