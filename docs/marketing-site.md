@@ -385,11 +385,14 @@ App Store listing only).
 hero, and the app stands where the parent would. It cannot be done with `background-size: cover`
 or `object-fit: cover`, because those crop the photo by the viewport's shape while the phone is
 placed by the page's, so the two drift apart (the first mockup covered his face at 1440px only).
-Instead `.hero__photo` is a size container and `.hero__stage` is the photo at its own 3:2 shape,
-scaled to cover it and slid to a focal point; the device is the stage's child, placed in
-percentages of the photo. Desktop shows the iPad capture in a tablet frame, with the words on the
-left over a scrim; at 900px and below it becomes the iPhone capture in a phone frame (one
-`<picture>`, so only one is downloaded), the photo is a frame on top and the words sit below it.
+Instead `.hero__photo` is a container and `.hero__stage` is the photo at its own 3:2 shape, zoomed
+and slid to a focal point inside a rounded, clipping `.hero__card`. The device sits in an
+unclipped twin of that stage (`.hero__stage--over`, same geometry), placed in percentages of the
+photo, so it follows his face and still breaks out past the card's edge: a device clipped inside a
+full-bleed photo read as pasted into the scene (review, 2026-11-25). Desktop shows the words on the
+left and the card on the right with the iPad capture in a tablet frame standing out past its right
+edge; at 900px and below it becomes the iPhone capture in a phone frame (one `<picture>`, so only
+one is downloaded), angled and hanging below the card's bottom edge, with the words under it.
 The hero's two ways in are Start free and the App Store; Plus is asked for on its pricing card.
 
 `landing.spec.ts` ("the hero device covers the dad's face") hit-tests his face (covered), the boy's

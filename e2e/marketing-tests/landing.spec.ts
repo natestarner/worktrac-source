@@ -348,7 +348,8 @@ test.describe('marketing landing page', () => {
       await page.locator('.hero__stage-img').evaluate((img: HTMLImageElement) => img.decode());
       const result = await page.evaluate(({ face, kid }) => {
         const stage = document.querySelector('.hero__stage')!.getBoundingClientRect();
-        const frame = document.querySelector('.hero__photo')!.getBoundingClientRect();
+        // What of the photo is on screen: the card clips it.
+        const frame = document.querySelector('.hero__card')!.getBoundingClientRect();
         const device = document.querySelector('.hero__device')!;
         const copy = document.querySelector('.hero__copy')!;
         // Points over a box in the photo's coordinates that are actually on screen: a part cropped

@@ -741,63 +741,79 @@ img {
 }
 
 /* ============================================================================
-   Photo hero (index.html) -- a full-bleed photo with the real app held over the dad's face
+   Photo hero (index.html) -- the words, then a photo card with the real app laid over it
    (an iPad in the desktop layout, an iPhone at 900px and below)
    ========================================================================= */
 
-/* The ONE hard requirement: the device covers the dad's face at every width. That is impossible to
-   guarantee with `background-size: cover` or `object-fit: cover`, because those crop the photo by
-   the viewport's shape while the phone is placed by the page's -- the two drift apart, which is
-   exactly what the first mockup did (covered at 1440px, his whole face beside the phone at 1024px,
-   phone hidden below 860px).
+/* Two hard requirements.
 
-   So the crop is done by hand. .hero__photo is a size container; .hero__stage is the photo at its
-   OWN 3:2 shape, scaled to cover that container, and slid so a focal point (--fx, --fy) stays in
-   view without ever exposing an edge. The device is a child of the stage, placed in percentages
-   of the photo, so it moves and scales with the face whatever the crop.
+   1. The device covers the dad's face at every width. That is impossible with
+      `background-size: cover` or `object-fit: cover`, because those crop the photo by the box's
+      shape while the device is placed by the page's, and the two drift apart (the first mockup
+      covered his face at 1440px only). So the crop is done by hand: .hero__photo is an inline-size
+      container, .hero__stage is the photo at its OWN 3:2 shape, zoomed (--zoom) and slid so a focal
+      point (--fx, --fy) stays in view without exposing an edge, and the device is placed in
+      percentages of that same stage.
 
-   In hero-row.jpg (1800 x 1200) the dad's face spans x 74-84%, y 22-36%. The iPad is 36% of the
-   photo wide, centred on x 77% from y 15% down; the iPhone 28%, centred on x 79% from y 16%. Both
-   overhang the face on every side even with their lean, and both stop short of the boy's face
-   (x 46-55%). Re-measure if the photo is ever replaced; landing.spec.ts checks the cover at 18
-   real viewport sizes.
+   2. The device reads as a layer ON the photo, not part of it. A device inside the photo, clipped
+      by its edges, looked pasted into the scene (2026-11-25 review). So the photo is a rounded card
+      (.hero__card clips it) and the device sits in a second, unclipped copy of the stage
+      (.hero__stage--over) with identical geometry, so it can break out past the card's edge: the
+      right edge on desktop, the bottom edge on phones.
+
+   In hero-row.jpg (1800 x 1200) the dad's face spans x 74-84%, y 22-36%, the boy's x 48-55%,
+   y 29-41%. Re-measure both if the photo is ever replaced; landing.spec.ts checks the cover, the
+   boy and the headline at 18 real viewport sizes.
 
    No entrance animation on the device, on purpose: anything that starts it elsewhere or
    transparent shows his face for that moment. */
 .hero--photo {
   --hero-night: #1c1b19;
   --hero-cream: #f7f5f1;
-  position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr);
   align-items: center;
-  /* Tall enough to feel like a photo, capped by width too so a tall, narrow desktop window doesn't
-     crop the photo so hard that the phone runs into the headline. */
-  min-height: clamp(600px, min(88svh, 72vw), 1100px);
-  padding: 0;
+  gap: clamp(32px, 4vw, 72px);
+  /* Room under the header, which sits on this ground; wide screens hold a 1360px column. */
+  padding: clamp(104px, 9vw, 136px) max(clamp(20px, 5vw, 72px), calc((100% - 1360px) / 2))
+    clamp(56px, 6vw, 96px);
   background: var(--hero-night);
   color: var(--hero-cream);
 }
 
 .hero__photo {
+  position: relative;
+  /* 84%: the iPad breaks out past the card's right edge by ~17% of the card, inside this column. */
+  width: 84%;
+  aspect-ratio: 5 / 4;
+  container-type: inline-size;
+  /* Everything below is in the card's own width (cqw), substituted where it is used. */
+  --card-h: 80cqw;
+  --zoom: 1.35;
+  --stage-w: calc(max(100cqw, var(--card-h) * 1.5) * var(--zoom));
+  --stage-h: calc(var(--stage-w) / 1.5);
+  --fx: 0.63;
+  --fy: 0.45;
+  --dev-w: calc(var(--stage-w) * 0.46);
+}
+
+.hero__card {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--card-h);
   overflow: hidden;
-  container-type: size;
-  /* The stage's width: wide enough to cover the container in both directions. Substituted where
-     it is used, so the cq units there resolve against this container. */
-  --stage-w: max(100cqw, 150cqh);
-  --fx: 0.7;
-  --fy: 0.35;
-  /* The capped width still overhangs his face by 100px+ a side on a 3440px ultrawide. */
-  --dev-w: min(calc(var(--stage-w) * 0.36), 960px);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .hero__stage {
   position: absolute;
   width: var(--stage-w);
-  height: calc(var(--stage-w) / 1.5);
+  height: var(--stage-h);
   left: clamp(calc(100cqw - var(--stage-w)), calc(50cqw - var(--fx) * var(--stage-w)), 0px);
-  top: clamp(calc(100cqh - var(--stage-w) / 1.5), calc(50cqh - var(--fy) * var(--stage-w) / 1.5), 0px);
+  top: clamp(calc(var(--card-h) - var(--stage-h)), calc(var(--card-h) / 2 - var(--fy) * var(--stage-h)), 0px);
 }
 
 .hero__stage-img {
@@ -806,19 +822,23 @@ img {
   max-width: none;
 }
 
+/* The unclipped twin: same box as the photo's stage, holding only the device. */
+.hero__stage--over {
+  z-index: 2;
+}
+
 /* The bezel is the site's own .device; every size on it is a fraction of the device's width,
    since it scales with the photo rather than with the viewport. Desktop: an iPad in landscape,
-   like the one on our gym wall, big enough to read. */
+   like the one on our gym wall, upright, standing out past the card's right edge. */
 .hero__stage .hero__device {
   position: absolute;
-  z-index: 2; /* above .hero__scrim, which comes later in the DOM */
-  left: 77%;
-  top: 15%;
+  left: 81%;
+  top: 14%;
   width: var(--dev-w);
   padding: calc(var(--dev-w) * 0.022);
   border-radius: calc(var(--dev-w) * 0.055);
-  transform: translateX(-50%) rotate(2deg);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14),
+  transform: translateX(-50%);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.16),
     inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -826,25 +846,7 @@ img {
   border-radius: calc(var(--dev-w) * 0.035);
 }
 
-/* Dark from the left where the words sit, clear over the people; a fade at the top for the header
-   and at the floor so the proof strip meets it without a seam. */
-.hero__scrim {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(28, 27, 25, 0.94) 0%, rgba(28, 27, 25, 0.84) 38%, rgba(28, 27, 25, 0.45) 56%, rgba(28, 27, 25, 0) 76%),
-    linear-gradient(180deg, rgba(28, 27, 25, 0.6) 0%, rgba(28, 27, 25, 0) 18%),
-    linear-gradient(0deg, rgba(28, 27, 25, 0.8) 0%, rgba(28, 27, 25, 0) 26%);
-}
-
 .hero__copy {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  /* 50%: at every desktop width the iPad's left edge stays to the right of that. */
-  max-width: min(600px, 50%);
-  margin-left: clamp(20px, 5vw, 72px);
-  padding: 120px 0 clamp(56px, 6vw, 88px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -854,11 +856,10 @@ img {
 
 .hero--photo .hero__title {
   color: var(--hero-cream);
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
 }
 
-/* On the photo the accent settles on amber, not --color-accent-text (a deep rust made for the
-   light page, too dark to read here). */
+/* On the dark ground the accent settles on amber, not --color-accent-text (a deep rust made for
+   the light page, too dark to read here). */
 .hero--photo .hero__title em {
   animation-name: hero-accent-in-photo;
 }
@@ -870,7 +871,7 @@ img {
 }
 
 .hero--photo .hero__lead {
-  color: rgba(247, 245, 241, 0.9);
+  color: rgba(247, 245, 241, 0.86);
   max-width: 34em;
 }
 
@@ -890,7 +891,7 @@ img {
 }
 
 .hero--photo .hero__trust {
-  color: rgba(247, 245, 241, 0.75);
+  color: rgba(247, 245, 241, 0.72);
   text-align: left;
 }
 
@@ -902,8 +903,7 @@ img {
   }
 }
 
-/* Desktop: the header sits on the photo. Below 901px it is back in the page's flow, above the
-   photo, because there the phone stands near the top of the frame and the header would sit on it. */
+/* Desktop: the header sits on the hero's dark ground. Below 901px it is back in the page's flow. */
 @media (min-width: 901px) {
   .site-header--over-photo {
     position: absolute;
@@ -928,22 +928,36 @@ img {
   }
 }
 
-/* Phones and portrait tablets: the photo becomes a frame on top, the words go below it on the same
-   dark ground. Same stage, same phone, same percentages -- only the frame and the focal point
-   change, and the phone takes a bigger share of the photo so the app is still legible. */
+/* Phones and portrait tablets: the photo card on top, the words below. The card is 4:3, and the
+   iPhone, angled like the App Store header's, hangs below the card's bottom edge -- the container
+   is taller than the card by that overhang, so the words start under the phone, not under it. */
 @media (max-width: 900px) {
   .hero--photo {
-    display: block;
-    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-6);
+    padding: var(--space-5) clamp(20px, 5vw, 72px) var(--space-10);
   }
 
   .hero__photo {
-    position: relative;
-    inset: auto;
-    height: clamp(320px, 100vw, 560px);
-    --fx: 0.66;
-    --fy: 0.4;
-    --dev-w: calc(var(--stage-w) * 0.28);
+    order: -1;
+    width: 100%;
+    max-width: 560px;
+    margin-inline: auto;
+    /* Card (75cqw) plus the phone's overhang below it. */
+    aspect-ratio: 1 / 1.1;
+    --card-h: 75cqw;
+    --zoom: 1.37;
+    --fx: 0.625;
+    --fy: 0.42;
+    --dev-w: calc(var(--stage-w) * 0.27);
+  }
+
+  .hero__copy {
+    width: 100%;
+    max-width: 560px;
+    margin-inline: auto;
   }
 
   .hero__stage .hero__device {
@@ -971,16 +985,6 @@ img {
     height: calc(var(--dev-w) * 0.055);
     border-radius: var(--radius-full);
     background: #14130f;
-  }
-
-  .hero__scrim {
-    background: linear-gradient(0deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0.6) 14%, rgba(28, 27, 25, 0) 34%);
-  }
-
-  .hero__copy {
-    max-width: none;
-    margin: 0;
-    padding: var(--space-6) clamp(20px, 5vw, 72px) var(--space-10);
   }
 }
 
