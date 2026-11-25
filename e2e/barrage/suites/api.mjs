@@ -3,11 +3,13 @@
 // GET /history is the truth.
 import { Device, Mismatch, expectEqual } from '../lib/device.mjs';
 import { log, sleep } from '../lib/config.mjs';
+import { dataAnchor, monthsBackFrom } from '../lib/months.mjs';
 
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 const p95 = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.max(0, Math.round(s.length * 0.95) - 1)]; };
 const ms = (x) => `${Math.round(x)} ms`;
-const monthsBack = (n) => { const d = new Date(); d.setUTCDate(15); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 7); };
+// Counted from the account's newest workout, not today (lib/months.mjs); each suite anchors on its own truth.
+const monthsBackIn = (truth) => monthsBackFrom(dataAnchor(truth));
 const sessionIn = (truth, month) => truth.find((s) => s.startedAt.slice(0, 7) === month && s.endedAt !== null);
 
 // ── abuse ─────────────────────────────────────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ export async function correctness({ api, report, cleanup, runId }) {
   const bench = await api.exerciseId('Barbell Bench Press');
   let truth = await api.truth();
   const earliest = truth[truth.length - 1].startedAt.slice(0, 7);
-  const old = sessionIn(truth, monthsBack(36)) ?? truth[Math.floor(truth.length * 0.6)];
+  const old = sessionIn(truth, monthsBackIn(truth)(36)) ?? truth[Math.floor(truth.length * 0.6)];
   cleanup.touch(old.id);
   const oldEx = old.entries[0].exerciseId;
   const [firstSet] = await api.setsOf(old.id, oldEx);
@@ -267,7 +269,7 @@ export async function storm({ api, report, cleanup, seconds = 60, devices = 4 })
   const S = 'api:storm';
   const bench = await api.exerciseId('Barbell Bench Press');
   const truth0 = await api.truth();
-  const targets = [8, 20, 30, 44].map((n) => sessionIn(truth0, monthsBack(n))).filter(Boolean);
+  const targets = [8, 20, 30, 44].map((n) => sessionIn(truth0, monthsBackIn(truth0)(n))).filter(Boolean);
   for (const t of targets) cleanup.touch(t.id);
   const stop = Date.now() + seconds * 1000;
   const added = [];

@@ -7,8 +7,8 @@ import { ENGINE_TIMEOUTS, blockOf, converge, dismiss, editButtons, goTab, header
   openProfile, persistedHistories, revealBlock, showHistory, pinOfflineAcrossReload, queuedWrites, readQueryCache, toExercise, traceSyncs,
   waitSynced, watchErrors, writeQueryCache } from '../lib/browser.mjs';
 import { log, sleep } from '../lib/config.mjs';
+import { dataAnchor, monthsBackFrom } from '../lib/months.mjs';
 
-const monthsBack = (n) => { const d = new Date(); d.setUTCDate(15); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 7); };
 const SYNC_URL = '**/history/sync';
 
 // Runs one scenario in a fresh profile: log in, wait for the first sync, run, record, close.
@@ -98,6 +98,8 @@ export async function browserMatrix(ctx) {
   const { api, cleanup, report } = ctx;
   const P = String(api.personId);
   const T = ENGINE_TIMEOUTS[ctx.engine];
+  // Months are counted from the account's newest workout, not today (lib/months.mjs).
+  const monthsBack = monthsBackFrom(dataAnchor(await api.truth()));
   const everyone = async () => [P, ...(await api.ok('GET', '/api/people')).map((p) => String(p.id)).filter((id) => id !== P)];
 
   // Two writes to workouts in DIFFERENT months reaching the server back to back (#356). With syncs

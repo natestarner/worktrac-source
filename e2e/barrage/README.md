@@ -171,7 +171,13 @@ A new browser scenario is one `await scenario(ctx, 'name', async ({ ctx: c, page
 block in `suites/browser.mjs`. Rules for writing one:
 
 - End with `converge(...)`.
-- Find workouts with `pickIn(page, personId, monthsBack(n))`.
+- Find workouts with `pickIn(page, personId, monthsBack(n))`. `monthsBack` counts from the month
+  after the account's newest finished workout, not today (`lib/months.mjs`): the seeded History never
+  moves forward by itself, and counted from today "last month" went empty in November 2026, which
+  failed every drain scenario before it started.
+- Log a set through `logSet` / `tapLogSet`, and wait for the button with `logSetButton`, never
+  `getByRole('button', { name: 'Log set' })`. A person's first set of a weighted exercise reads
+  "Enter a weight" until there is one (#602); the helper types `FIRST_SET_WEIGHT`, as a person would.
 - Record every workout you write to with `cleanup.touch(id)`.
 - Add it to `CORE_SCENARIOS` / `WEBKIT_STANDARD` in `barrage.mjs` if the quicker tiers should run it.
 

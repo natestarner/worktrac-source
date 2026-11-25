@@ -83,13 +83,36 @@ export async function toExercise(page, name) {
   }
   await picker.fill(name);
   await page.getByRole('button', { name, exact: true }).first().click();
-  await page.getByRole('button', { name: 'Log set' }).waitFor();
+  await logSetButton(page).waitFor();
 }
 
-// Logs the prefilled set and waits for its row.
+// The Log screen's primary button. It reads "Log set" (or "Log set for Sam" in a household of two
+// or more), except on a person's FIRST set of an exercise that expects a weight, where it is
+// disabled and reads "Enter a weight" until there is one (#602, 2026-11-24). A brand-new person on
+// Barbell Bench Press -- the multi-person scenario's new kid -- sees exactly that, and a wait for
+// "Log set" alone timed out there.
+export const logSetButton = (page) => page.getByRole('button', { name: /^(Log set|Enter a weight)/ }).first();
+
+// The weight a scenario types when the app asks for one. Any realistic loaded weight will do: the
+// point is to answer the question the way a person would, so barbell scenarios keep logging
+// barbell sets (records, volume, History comparisons) instead of being moved to a bodyweight lift.
+export const FIRST_SET_WEIGHT = '95';
+
+// Taps Log set for whatever is on screen. If the app is asking for a first weight, types one first.
+export async function tapLogSet(page) {
+  const button = logSetButton(page);
+  await button.waitFor();
+  if (/^Enter a weight/.test((await button.textContent()) ?? '')) {
+    await page.getByRole('textbox', { name: /^Weight/ }).fill(FIRST_SET_WEIGHT);
+    await page.getByRole('button', { name: /^Log set/ }).first().waitFor();
+  }
+  await page.getByRole('button', { name: /^Log set/ }).first().click();
+}
+
+// Logs the prefilled set (or a first weight -- see tapLogSet) and waits for its row.
 export async function logSet(page) {
   const before = await page.getByText(/^Set \d+$/).count();
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await sleep(400);
   await dismiss(page);
   await page.waitForFunction(
