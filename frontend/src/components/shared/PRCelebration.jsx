@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useUI } from '../../context/UIContext';
 import { installFocusTrap } from '../../lib/focusTrap';
 import PrBadge from './PrBadge';
+import HuddleMark from './HuddleMark';
 import Button from './Button';
 
 // The mark's own three warms -- orange, rust, amber -- not a generic confetti palette. The middle
@@ -52,9 +53,17 @@ const CONFETTI_SPECS = [
 // ## A first-ever set is a baseline, not a record
 //
 // The first set of any exercise beats nothing, so it technically takes every record at once.
-// Claiming three PRs for it is how the celebration gets cheap -- with kids trying new lifts it
-// would fire constantly. `firstTime` keeps the overlay and the haptic but drops the confetti and
-// says so plainly.
+// Claiming PRs for it is how the celebration gets cheap -- a new person's first workout used to pop
+// "New PR!" on almost every set. `firstTime` keeps this SAME card (same size, place, "Nice" and
+// four exits) but makes it quieter: the Huddle mark instead of the record triangle, the headline
+// "First <exercise>" ("Sam's first <exercise>" when the household has 2+ people), one row -- the
+// set itself, captioned "Your starting mark" -- a line saying what beating it means, no confetti,
+// and a lighter haptic (UIContext#showCelebration).
+//
+// The caller only sets `firstTime` when the server has CONFIRMED this person never logged the
+// exercise (prDetection.js#isCertainFirstEver); when it cannot be sure, the full "New PR!" shows
+// instead. Only the first set ever is quiet -- the next set that beats it is a full "New PR!",
+// even in the same workout. The "New PR!" headline above stays pinned for every other case.
 export default function PRCelebration() {
   const { celebration, dismissCelebration } = useUI();
   const panelRef = useRef(null);
@@ -94,6 +103,9 @@ export default function PRCelebration() {
 
   const prs = celebration.prs || [];
   const firstTime = !!celebration.firstTime;
+  const firstTimeHeadline = celebration.personFirstName
+    ? `${celebration.personFirstName}’s first ${celebration.exerciseName}`
+    : `First ${celebration.exerciseName}`;
 
   return (
     <div
@@ -172,15 +184,19 @@ export default function PRCelebration() {
             zIndex: 1,
           }}
         >
-          <div
-            style={{
-              width: 0,
-              height: 0,
-              borderLeft: '14px solid transparent',
-              borderRight: '14px solid transparent',
-              borderBottom: '24px solid var(--color-accent)',
-            }}
-          />
+          {firstTime ? (
+            <HuddleMark size={40} />
+          ) : (
+            <div
+              style={{
+                width: 0,
+                height: 0,
+                borderLeft: '14px solid transparent',
+                borderRight: '14px solid transparent',
+                borderBottom: '24px solid var(--color-accent)',
+              }}
+            />
+          )}
         </div>
         <div
           id="pr-celebration-title"
@@ -188,25 +204,28 @@ export default function PRCelebration() {
             fontSize: 24,
             fontWeight: 'var(--weight-bold)',
             letterSpacing: '-0.01em',
-            marginBottom: 4,
+            marginBottom: firstTime ? 18 : 4,
             position: 'relative',
             zIndex: 1,
           }}
         >
-          New PR!
+          {firstTime ? firstTimeHeadline : 'New PR!'}
         </div>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-            color: 'var(--color-muted)',
-            marginBottom: 18,
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          {celebration.exerciseName}
-        </div>
+        {/* The first-time headline already names the exercise; saying it twice reads as a stutter. */}
+        {!firstTime && (
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: 'var(--color-muted)',
+              marginBottom: 18,
+              position: 'relative',
+              zIndex: 1,
+            }}
+          >
+            {celebration.exerciseName}
+          </div>
+        )}
 
         {/* One row per record taken, in CELEBRATED_PR_TYPES precedence order (the caller sorts),
             so the same combination always reads the same way round. */}
@@ -226,7 +245,8 @@ export default function PRCelebration() {
                     marks, so context supplies the meaning; here two records are stacked as two
                     bare numbers ("185 lb" over "234.3 lb") and an icon alone does not say which
                     is which. Naming them is the difference between a celebration and a puzzle. */}
-                <PrBadge type={pr.type} size={14} showLabel label={pr.label} />
+                {/* No record badge on a starting mark: it is not a record yet. */}
+                {!firstTime && <PrBadge type={pr.type} size={14} showLabel label={pr.label} />}
                 <span
                   style={{
                     fontSize: prs.length > 1 ? 26 : 34,
@@ -238,12 +258,12 @@ export default function PRCelebration() {
                 </span>
               </div>
               <div
+                // Not uppercased: the caption carries units ("135 lb × 8"), and an uppercase
+                // transform printed "135 LB × 8" -- the one place in the app the unit was capitals.
                 style={{
                   fontSize: 13,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   color: 'var(--color-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
                 }}
               >
                 {/* One string, decided by the caller (ExerciseDetail). This used to be a boolean
@@ -267,7 +287,7 @@ export default function PRCelebration() {
               zIndex: 1,
             }}
           >
-            First time logging this one — now there’s something to beat.
+            Beat it and it’s a new PR.
           </div>
         )}
 

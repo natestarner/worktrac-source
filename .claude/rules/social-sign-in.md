@@ -8,11 +8,15 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/account/AccountDeletionService.java"
   - "backend/src/test/java/com/worktrac/backend/identity/**"
   - "frontend/src/components/auth/SocialSignIn.jsx"
+  - "frontend/src/components/auth/SigningInOverlay.jsx"
+  - "frontend/src/components/auth/useSigningIn.js"
+  - "frontend/src/routes/ConfirmEmailPage.jsx"
   - "frontend/src/components/auth/ProviderButtons.jsx"
   - "frontend/src/lib/native/socialSignIn.js"
   - "frontend/src/lib/lastSignInMethod.js"
   - "frontend/src/routes/LoginPage.jsx"
   - "frontend/src/routes/RegisterPage.jsx"
+  - "frontend/src/routes/JoinPage.jsx"
 ---
 
 # Sign in with Apple / Google: the invariants
@@ -136,32 +140,60 @@ days, no nonce). `consent-revoked` / `account-delete` disconnect the Apple ident
 household may hold other people's training). `email-disabled` / `email-enabled` are audit rows only.
 Idempotent; an unknown subject is ignored.
 
-## ⚠️ The "Signing you in" overlay must never trap anyone (`SocialSignIn.jsx`)
+## ⚠️ The "Signing you in" overlay must never trap anyone (`SigningInOverlay.jsx` + `useSigningIn.js`)
 
-A full-screen, opaque overlay covers the gap between the provider's sheet closing and the app
-appearing. A screen that covers everything is the shape that bricks the app if it can fail to
-close, so it has three independent exits and each one must stay:
+A full-screen, opaque overlay covers the gap between handing over a credential and the app
+appearing. **Three screens use the ONE component and the ONE hook**: Apple / Google
+(`SocialSignIn`, "Signing you in…" / "Creating your household…"), the password form (`LoginPage`,
+"Signing you in…") and Confirm on a password registration (`ConfirmEmailPage`, "Creating your
+household…", or "account" for a Pro arrival). Never a second overlay or a hand-rolled attempt
+counter: the exits below live in the hook, and a copy is where one gets dropped. Deliberately NOT
+on the household picker's step (the overlay has already come down before the picker, for both
+kinds of sign-in) or on accepting an invitation.
 
-- **It is `busy` and nothing else.** No second flag. `finish()`'s `finally` clears it on every
-  outcome, and the page navigating away on success unmounts it.
+A screen that covers everything is the shape that bricks the app if it can fail to close, so it
+has three independent exits and each one must stay:
+
+- **It is `busy` and nothing else.** No second flag. The attempt's `end()` in a `finally` clears it
+  on every outcome, and the page navigating away on success unmounts it.
+- **It stays up at least `SIGNING_IN_MIN_MS` (500ms)** so a fast answer reads as a step, not a
+  flash. The minimum is awaited (`settled()`) only while the attempt is current, before acting on
+  any outcome; **never** on "Start over", which must not wait on anything. The three screens' unit
+  tests pin it (each verified red with the minimum at 0).
 - **"Start over" after `SIGNING_IN_ESCAPE_MS` (60s), which depends on nothing finishing.** The
   requests are time-limited, but the response body, `/me` after it and `restoreOutbox`'s IndexedDB
   read are not, so the `finally` alone is not trusted. 60s = the 45s sign-in limit + `/me`'s 15s;
   earlier would abandon a cold start that was about to succeed.
-- **A superseded attempt touches nothing** (`attemptRef`). After "Start over", a late answer may
-  only do one thing: a late SUCCESS still calls `onSignedIn` (the session is live, so staying on the
-  login screen would be the lie). A late failure, picker or name step is dropped, and a late
-  `finally` must not clear a NEW attempt's overlay.
+- **A superseded attempt touches nothing** (`isCurrent()`). After "Start over", a late answer may
+  only do one thing: a late SUCCESS still goes into the app (the session is live, so staying on the
+  sign-in screen would be the lie; on Confirm the account now exists too). A late failure, picker or
+  name step is dropped, and a late `finally` must not clear a NEW attempt's overlay.
 - **`onToken` must not return the attempt to `ProviderButtons`.** Its button stays disabled until
   `onToken` settles, so a hung attempt would leave it disabled after "Start over". `ProviderButtons`
   itself is unchanged because Delete account relies on exactly that to block a second tap.
 - **Portalled to `<body>`**, so no ancestor transform or overflow can shrink it.
 
-Pinned by `SocialSignIn.test.jsx` ("an attempt that never finishes") and `social-sign-in.spec.ts`
-(a server that never answers; a sign-in stuck past every limit), each verified red by removing what
-it guards.
+Pinned by `SocialSignIn.test.jsx`, `LoginPage.signingIn.test.jsx` and `ConfirmEmailPage.test.jsx`
+("an attempt that never finishes", the minimum), `social-sign-in.spec.ts` (a server that never
+answers; a sign-in stuck past every limit) and `password-signing-in.spec.ts` (the password form and
+Confirm through the real screens), each verified red by removing what it guards.
 
-## The sign-in screens: agreement, failures, "Last used"
+## The provider buttons are one matched set (`ProviderButtons.jsx`)
+
+White, outlined pills for every provider, in Google's outline colour (`#dadce0`), the way Reddit,
+Spotify, Notion, Hevy and Trello draw theirs (compared 2026-11-24). Apple's is its "white with
+outline" style; it was solid black beside Google's white button, which read as two unrelated
+controls.
+
+- **On the web Apple takes the exact box of Google's own button** (44px pill, at most 400px wide,
+  `matchGoogle`), because Google's iframe cannot be resized and Apple's rule is "no smaller than
+  the other sign-in buttons". `renderGoogleButton` asks Google for `shape: 'pill'` to match.
+- **In the app both buttons are ours and stay `btn-lg`**, the size of "Log in", which is what App
+  Review checks (`SocialSignIn.test.jsx` pins the classes).
+- **With no Google button on the web, Apple keeps the full size.** Pinned in
+  `ProviderButtons.matchedPair.test.jsx`.
+
+## The sign-in screens: agreement, failures, the last-used caption
 
 - **⚠️ The Terms line sits under the name step's Create button** (`SocialSignIn`'s `SignUpDetails`).
   That step is where an Apple / Google account is created, and it is reachable from **Log in**,
@@ -177,13 +209,44 @@ it guards.
   keep their own. A cancel is still `cancelled: true` and says nothing.
 - **"Last used" is per device and names a method only** (`lib/lastSignInMethod.js`, localStorage,
   every access wrapped). Written when the server ACCEPTS a provider (signed in, or a household to
-  pick) and when a password sign-in or confirmation succeeds; never on a failure or an unfinished
-  name step. It survives logout on purpose: that is when it is read. It is the guard against a
+  pick), when a password sign-in or confirmation succeeds, and when an invitation is accepted WITH
+  a password (`JoinPage`; joining on an existing session signed nobody in, so it records nothing);
+  never on a failure or an unfinished name step. It survives logout on purpose: that is when it is read. It is the guard against a
   second, empty household from an Apple "Hide My Email" address meeting the other provider.
   - **It is `aria-describedby`, never part of the button's name.** "Continue with Apple" stays
     exactly that for screen readers, voice control and every selector in both test layers.
-  - The badge ignores the pointer and sits on the button's edge, so it moves nothing and cannot
-    eat a tap, including on Google's own iframe button.
+  - **It is a caption UNDER the button ("You last signed in with Apple"), never a badge on it.**
+    It was a pill on the button's top edge until 2026-11-23. Apple's guidelines constrain what may
+    be drawn on Sign in with Apple, and on the web Google's button is Google's own iframe, which
+    anything of ours could only cover.
+  - **The device also remembers EVERY method it has used** (`usedSignInMethods`, its own key). A
+    family iPad has several people's ways in, and a last-used alone points each at the other's.
+    `rememberSignInMethod` reads the list BEFORE moving the last-used key, because on a device that
+    predates the list the old last-used value is its only record (`lastSignInMethod.test.js`).
+  - **Two screens read that list.** Forgot password names the providers this device used when it
+    has NEVER used a password (an Apple "Hide My Email" relay address matches nothing typed there,
+    so only the device can point back), and only providers this build still offers. The name
+    step opens with "Already have a household?", naming the device's OTHER ways in, or "a different
+    way" when it knows none: that step is where the duplicate household is about to be made, and
+    nothing exists until its Create button. **On Sign up the general version is left out**
+    (`askWhenNothingKnown={false}`): the person chose to make one, and the question would only
+    plant doubt. The named version shows there too.
+  - **The Reset password (code) screen says "No code? If you signed up with Apple or Google…" to
+    everyone**, whatever email was typed, naming only the providers this build offers. It reads
+    nothing from the device, so it is the one hint that reaches a NEW device, and because it is
+    unconditional it says nothing about whether the typed email has an account. Never make it
+    depend on the email: that would turn the reset form into a way to learn which addresses use
+    Apple or Google (the same leak `verifyCredentials`' dummy BCrypt exists to prevent).
+  - **Kept "You last signed in with …", not "Last used on this device"** (decided 2026-11-23). On a
+    family iPad "You" can be a sibling's sign-in, but most devices have one owner and the warmer
+    wording reads better there.
+  - **No "trust this device" question, deliberately.** It stores method names only, never an email
+    or account, so it tells whoever holds the device nothing about who signed in. Storing anything
+    that identifies a person ("Continue as Nate", a pre-filled email) would change that answer.
+  - **Not a warning on the TAP of the other provider, deliberately** (considered 2026-11-23). On the
+    web Google's button is Google's iframe, so its tap cannot be intercepted; it would warn people
+    whose other provider is already linked; and it cannot fire on a new device. The name step's
+    line covers the same mistake with none of those gaps.
 
 ## Deleting a user deletes its identities
 

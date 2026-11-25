@@ -1,11 +1,11 @@
 import { MutationObserver, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import EndWorkoutConfirmModal from './EndWorkoutConfirmModal';
+import EndWorkoutSheet from './EndWorkoutSheet';
 import { LOG_SET_MUTATION_KEY, queryClient } from '../../lib/queryClient';
 import { isCreateInEndedWorkout, isSessionEnded } from '../../lib/endedSessions';
 import { queryKeys } from '../../api/queryKeys';
-import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
+import { noteWorkoutEnded } from '../../lib/reviewPrompt';
 
 vi.mock('../../api/sets', () => ({
   logLiveSet: vi.fn(() => new Promise(() => {})),
@@ -21,7 +21,11 @@ vi.mock('../../api/sessions', () => ({
 vi.mock('../../context/UIContext', () => ({ useUI: () => ({ clearRestTimer: vi.fn() }) }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: () => ({ setRestTimer: vi.fn() }) }));
 vi.mock('../../lib/haptics', () => ({ tryHaptic: vi.fn() }));
-vi.mock('../../lib/reviewPrompt', () => ({ askForReviewAfterWorkout: vi.fn() }));
+vi.mock('../../lib/reviewPrompt', () => ({ noteWorkoutEnded: vi.fn(() => false) }));
+// A two-person household, so the End closes the sheet at once (nothing to ask): these tests are
+// about what the End tap records. SessionBar.test.jsx covers the sheet's two states.
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ people: [{ id: 7 }, { id: 8 }], account: { id: 1 } }) }));
+vi.mock('../../hooks/useAccountAccess', () => ({ useAccountAccess: () => ({ isMember: false }) }));
 
 const PERSON = 7;
 
@@ -35,10 +39,10 @@ function logPendingSet(tempId, overrides = {}) {
     .catch(() => {});
 }
 
-function endWorkout() {
+function endWorkout(onEnded = () => {}, onClose = () => {}) {
   render(
     <QueryClientProvider client={queryClient}>
-      <EndWorkoutConfirmModal personId={PERSON} onClose={() => {}} onEnded={() => {}} />
+      <EndWorkoutSheet personId={PERSON} sessionId={null} onCancel={() => {}} onEnded={onEnded} onClose={onClose} />
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
@@ -47,7 +51,7 @@ function endWorkout() {
 // Ending a workout whose first set is still saving: the live session is the `{ id: null }`
 // placeholder, so the End records the pending creates instead of an id, and the session they
 // create is marked ended when it lands. docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
-describe('EndWorkoutConfirmModal', () => {
+describe('EndWorkoutSheet', () => {
   beforeEach(() => {
     localStorage.clear();
     queryClient.clear();
@@ -86,16 +90,36 @@ describe('EndWorkoutConfirmModal', () => {
   });
 
   // The rating schedule (lib/reviewPrompt.js) counts finished workouts by their sets, so the End
-  // tap hands it the same count the recap shows -- including sets still queued offline.
-  it('tells the rating schedule how many sets the ended workout had', () => {
-    askForReviewAfterWorkout.mockClear();
+  // tap hands it the same count the recap shows -- including sets still queued offline. Counted AT
+  // the tap, so a reload with the sheet open cannot lose it; the answer travels to SessionBar, which
+  // asks only once the sheet closes.
+  it('tells the rating schedule how many sets the ended workout had, and hands its answer on', () => {
+    noteWorkoutEnded.mockClear();
+    noteWorkoutEnded.mockReturnValueOnce(true);
     queryClient.setQueryData(queryKeys.liveSession(PERSON), { id: null, startedAt: '2026-09-23T09:00:00Z' });
     logPendingSet('optimistic-a');
     logPendingSet('optimistic-b');
+    const onEnded = vi.fn();
+    const onClose = vi.fn();
 
-    endWorkout();
+    endWorkout(onEnded, onClose);
 
-    expect(askForReviewAfterWorkout).toHaveBeenCalledTimes(1);
-    expect(askForReviewAfterWorkout).toHaveBeenCalledWith({ setCount: 2 });
+    expect(noteWorkoutEnded).toHaveBeenCalledTimes(1);
+    expect(noteWorkoutEnded).toHaveBeenCalledWith({ setCount: 2 });
+    expect(onEnded).toHaveBeenCalledWith({ hadSets: true });
+    // Nothing to ask in a two-person household, so the End is also the close.
+    expect(onClose).toHaveBeenCalledWith({ reviewDue: true });
+  });
+
+  // Nothing logged means nothing to summarise: SessionBar shows the plain toast instead of a card.
+  it('reports no sets for a workout with nothing in it', () => {
+    queryClient.setQueryData(queryKeys.liveSession(PERSON), { id: 55, startedAt: '2026-09-23T09:00:00Z' });
+    const onEnded = vi.fn();
+    const onClose = vi.fn();
+
+    endWorkout(onEnded, onClose);
+
+    expect(onEnded).toHaveBeenCalledWith({ hadSets: false });
+    expect(onClose).toHaveBeenCalledWith({ reviewDue: false });
   });
 });

@@ -205,6 +205,25 @@ gym basement was silently never celebrated.
   Losing a rep because the confetti broke is the worst possible trade.
 - **It cannot double-fire.** A replay has no observer, so `handleLogSet` is never reached twice for
   one set.
+- **The quiet "First <exercise>" card needs the SERVER to have confirmed it (2026-11-24).** A
+  first-ever set shows the same card with the Huddle mark, "First Bench Press" ("Sam's first …" with
+  2+ people), one "Your starting mark" row, no confetti and the lighter `'complete'` haptic. It is
+  decided by `prDetection.js#isCertainFirstEver(priorBests, summaryConfirmsNeverLogged(summaryQuery))`:
+  no prior on either measure **and** the summary query settled this visit (`status === 'success'`,
+  `fetchStatus === 'idle'`) with no best and no top weight. **Never relax that to "nothing found"**
+  (`isFirstEver` alone): a Free device holds 90 days of History, and a cached or paused summary may be
+  from another day or another device — either way a real PR would be shown as a "first", and Nate's
+  hard rule is that an actual PR is never missed. Unconfirmed → the full "New PR!", which is what
+  every first set showed before (register row in `resilience.md`).
+  - **Only the very first set is quiet (option (c)).** Set 2 has set 1 folded into `effectiveBest`
+    (`mergeBestWithLocalSets`), so beating it in the same workout is a full "New PR!" by the ordinary
+    rule -- and independently, once set 1 is logged the summary is re-asked under the new session
+    id (unconfirmed while pending) and answers with set 1 in it. Either alone keeps set 2 from
+    reading as "first", which is why `first-time-celebration.spec.ts`'s parity block only goes red
+    when both are broken. There is deliberately no "first workout" state; a "starting-mark day" rule (no pop-ups for
+    improvements on day one) was considered and deferred — add it on top if first workouts still pop
+    too often.
+  - The "New PR!" literal stays pinned for every other card (`PRCelebration.jsx` header).
 - **Prior bests come from `exerciseSummary`, checked against `history` — never replaced by it.**
   `getSummary` applies no Free-tier window (unlike `getPrList`), so a Free household is never
   congratulated for beating a 90-day best; deriving the priors from the window-clamped `history`
@@ -320,11 +339,22 @@ offline/lie-fi stretch, so the flag would be dead in precisely the modes this fe
 `utils/formulas.js#computePrefillDraft` resolves in one fixed order — the prior session's set at
 the same index, else **the last set logged today**, else `weight: null`. Three things must hold:
 
-- **`null` is a display state, not a validation gate.** `ExerciseDetail` renders it as an em dash
-  and `handleLogSet` sends `weightValue` (`weightDraft ?? 0`). Blank must never disable "Log set":
-  0 is exactly right for a first-ever pull-up or plank, and 0 already means "bodyweight"
-  everywhere downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`).
-  The old 45 lb default was right only for a barbell.
+- **What a blank weight means depends on the exercise's LOAD TYPE (decided 2026-11-24, reversing
+  "blank is never a gate").** `exercises.load_type` (V107, `utils/exerciseLoad.js`) is read from
+  the CATALOG row, which `LogTab` passes in as `loadType` like the muscles:
+  - **`bodyweight`** (pull-ups, planks; set by V108 for the library, chosen on Add exercise for
+    your own): a blank shows as **0** under **"Added"** (`Added (lb)`; "Added weight (lb)" wrapped to two lines on an iPhone), and Log set is one tap.
+  - **`external`** (the default, and what any unknown or missing value reads as): a blank stays an
+    em dash, the box is highlighted (`stepper-value--needed`), **Log set is disabled and reads
+    "Enter a weight"**, and **"No weight, just bodyweight"** sets 0. Before this, a blank logged 0
+    for every exercise, so a new person's first Barbell Bench Press was a bodyweight set ("BW x 8")
+    with a Most reps record.
+  - **Only blank is affected** (`needsWeight`): a prefill, a carried-forward set or a typed 0 logs
+    as it reads, so after the first set nothing changes. 0 still means "bodyweight" everywhere
+    downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`); records
+    never read the load type. Not a connectivity branch: the load type rides on the cached catalog.
+  - The "No weight" link sits between the steppers and Log set, **outside** Log set's
+    `ReadOnlyWrap` (which wraps exactly one child) and inside its own.
 - **The effect reads `displaySets`, never `sessionSets`** — and is declared below `displaySets`
   for that reason. Offline, `contextSessionId` stays null for the person's whole outage, so the
   `sessionSets` query never runs and its data stays `[]` however many sets they log. Reading it
@@ -563,7 +593,7 @@ something:
   reproduce it**, which is why it got through; the guards are `AppShell.test.jsx`'s resume block
   and `multi-person.spec.ts`'s reload spec, both verified against the old behaviour.
 - **Every path that ends a rest must clear BOTH copies in one synchronous step** — ending the
-  workout (`EndWorkoutConfirmModal`) and starting a hold (`ExerciseDetail`). Clearing only the
+  workout (`EndWorkoutSheet`) and starting a hold (`ExerciseDetail`). Clearing only the
   in-memory one leaves the persisted start for the next mount to resume, which is the same
   resurrection `endedSessions.js` exists to prevent for the live session.
 - **No `+30s`, no `−15s`, no Skip.** `+30s` negotiates with a deadline that has no authority, and
@@ -589,7 +619,7 @@ that is the same on every visit, so the alphabetical order `PersonExerciseServic
 returns is preserved exactly.
 
 - **Never rank the picker by recency or frequency.** It was considered and rejected: a list that
-  re-sorts itself between visits cannot be learned, and "Other Previously Logged" grows
+  re-sorts itself between visits cannot be learned, and "Previously Logged" grows
   monotonically forever, so it is the list most in need of a stable position. Bounding is the only
   lever, because it shortens a list without moving anything in it. (`PersonExerciseDto` carries no
   `lastLoggedAt`/`logCount` and deliberately should not gain them for this purpose — see
@@ -693,7 +723,7 @@ readout there with nothing but the pills to act on.
 - **No confirm dialog on `End routine`.** It clears client-side navigation state only — nothing
   logged is touched, and the routine restarts from the picker's quick-start list, which
   `ExercisePicker` shows precisely when no routine is active. A modal would tax every deliberate
-  use to guard an action with nothing to undo. (`EndWorkoutConfirmModal` is the opposite case: it
+  use to guard an action with nothing to undo. (`EndWorkoutSheet` is the opposite case: it
   ends a real session server-side, and calls `endRoutine()` on the way through.)
 
 None of this is a connectivity branch — routine position is pure client state — so it does not

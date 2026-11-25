@@ -245,6 +245,10 @@ Full narrative: `docs/architecture/testing.md`.
   conclusion carries no flake signal at all. Measured 2026-08-14 across the 51 runs then retained:
   **42 were green, and 38 of those 42 contained at least one flaky test.** Do not infer "the suite
   is fine" from a row of green checks.
+- **Group parity flakes by test TITLE, never by location.** Every parity test reports its location
+  as `support/parity.ts:124`, the line that creates it, so "parity.ts:124 flaked five nights" can be
+  several different tests. It was, on 2026-11-22: four nights of `parity-exercise-create` in WebKit
+  and one night of `parity-pr-celebration` in Chromium, with unrelated causes.
 - **Per-test outcomes come from the `e2e-results-json` artifacts** (`results.json`, written by the
   `json` reporter — see `playwright.config.ts`). **Which one depends on the tier**: a lower deploy's
   `e2e-results-json` holds only `@critical`; the whole suite's history is the nightly's
@@ -369,6 +373,20 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   every animation frame and asserts the bad value was never among them. Reach for frame sampling
   whenever the claim is about a transient rather than a settled state — it also needs no per-mode
   timing knowledge, which a short fixed timeout would.
+  - **Sample for a fixed TIME, and read only after it has passed.** Read the moment the screen it
+    watches appears, a sampler may hold one frame or none: WebKit drew a frame every ~60ms locally
+    and slower on a loaded runner, and in a degraded mode the screen is instant. That is how
+    `parity-exercise-create`'s "> 0 samples" guard failed in the nightly WebKit run most nights
+    from 2026-11-18, and how its "never painted" claim had covered a single frame. It now watches
+    `PICKER_WATCH_MS` after the dialog closes and the assert waits for the watch to finish. To
+    test a sampler against a slow runner, slow `requestAnimationFrame` with an init script (each
+    callback behind a 300ms `setTimeout`): the old read failed 12/16 that way, the fixed one 0/16.
+- **Inside `expect.poll`, bound every read and catch its errors.** A callback that THROWS ends the
+  poll at once (Playwright doesn't retry it); one that never returns uses up the whole window and
+  leaves nothing to report. `historyConvergence.ts` had both: lower answered one GET /history in
+  41s, the 20s check timed out with an empty reason, and its bare `catch` would have swallowed a
+  thrown error too. It now gives each read 6s, treats a failed read as one failed attempt, and
+  names what an attempt was still waiting on.
 - **Verify in every mode, not just the degraded ones.** A stale-paint bug can be invisible
   offline (where `derivedSummary` resolves synchronously from the warmed cache) and very visible
   online (where it lasts a round trip). Checking only the offline modes would have concluded there

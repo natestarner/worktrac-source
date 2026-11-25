@@ -123,7 +123,7 @@ describe('useLiveSession revalidates a provisional session restored from the per
   }
 
   // Nothing else in the app can correct this: liveSession is deliberately NOT on
-  // offlineCacheWarm's refreshAfterRestore list (EndWorkoutConfirmModal optimistically nulls it),
+  // offlineCacheWarm's refreshAfterRestore list (EndWorkoutSheet optimistically nulls it),
   // and after the outbox has drained there is no replaying write left whose onSettled would
   // invalidate it. The refetch has to come from the hook itself.
   it('refetches it on mount and reports the real session', async () => {
@@ -202,7 +202,7 @@ describe('useLiveSession revalidates a provisional session restored from the per
     await waitFor(() => expect(result.current.session).toEqual(REAL));
   });
 
-  // ⚠️ The regression the first version of that fix caused. EndWorkoutConfirmModal writes null
+  // ⚠️ The regression the first version of that fix caused. EndWorkoutSheet writes null
   // DURING the page; revalidating it right away fetched the session back while the end was still
   // on its way to the server, into the raw cache -- and the next workout inherited its sets. A null
   // written this page must keep the old 10s trust.

@@ -53,6 +53,31 @@ describe('HelpTab', () => {
     useUI.mockReturnValue({ startTour: vi.fn() });
   });
 
+  // JSX drops a line break between text and a tag on the next line, so "or\n<T>Cancel</T>" renders
+  // "orCancel". The handbook shipped three of those ("orCancel", "useForgot password",
+  // "neverClients"). Scans the page as a reader sees it: a lowercase letter running straight into
+  // a capital is a missing space, unless it is one of the real words below.
+  it('has no words run together where a line break swallowed the space', () => {
+    const { container } = renderHelp();
+    // Only INLINE neighbours can glue: a heading beside a paragraph is laid out on its own line.
+    const INLINE = new Set(['SPAN', 'STRONG', 'EM', 'B', 'I', 'A', 'CODE', 'KBD', 'SMALL', 'MARK']);
+    const glued = [];
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+    for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+      if (!INLINE.has(el.tagName)) continue;
+      const before = el.previousSibling;
+      const after = el.nextSibling;
+      const text = el.textContent;
+      if (before?.nodeType === Node.TEXT_NODE && /[A-Za-z]$/.test(before.textContent) && /^[A-Za-z]/.test(text)) {
+        glued.push(`${before.textContent.slice(-12)}|${text.slice(0, 12)}`);
+      }
+      if (after?.nodeType === Node.TEXT_NODE && /[A-Za-z]$/.test(text) && /^[A-Za-z]/.test(after.textContent)) {
+        glued.push(`${text.slice(-12)}|${after.textContent.slice(0, 12)}`);
+      }
+    }
+    expect(glued).toEqual([]);
+  });
+
   it('offers "Take the tour", which replays the onboarding tour', () => {
     const startTour = vi.fn();
     useUI.mockReturnValue({ startTour });

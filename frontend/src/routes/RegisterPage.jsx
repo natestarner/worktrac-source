@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
@@ -54,9 +54,13 @@ export default function RegisterPage() {
   // wantsPlan is only a hint from a marketing link, never a guarantee, so this reaches for the
   // generic "account" rather than presuming "practice" (AccountVocab's actual Pro noun).
   const isProIntent = wantsPlan === 'PRO';
-  const [personName, setPersonName] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [email, setEmail] = useState('');
+  // "Use a different email" on the confirm screen comes back here with what was typed, so fixing
+  // one letter of an address doesn't mean typing the whole form again. Never the password: it is
+  // not carried through router state, and retyping it is the price of starting over.
+  const startOver = useLocation().state?.startOver ?? null;
+  const [personName, setPersonName] = useState(startOver?.personName ?? '');
+  const [accountName, setAccountName] = useState(startOver?.accountName ?? '');
+  const [email, setEmail] = useState(startOver?.email ?? '');
   const [password, setPassword] = useState('');
   const [personNameError, setPersonNameError] = useState(false);
   const [emailError, setEmailError] = useState(false);
@@ -79,7 +83,7 @@ export default function RegisterPage() {
     : null;
   const accountNamePlaceholder = defaultAccountName
     ? `Defaults to “${defaultAccountName}”`
-    : `Defaults to your ${isProIntent ? 'account' : 'household'}`;
+    : 'We’ll name it after you';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -108,7 +112,9 @@ export default function RegisterPage() {
       // backend silently writes "…'s Household" the moment nobody typed anything.
       const submittedAccountName = accountName.trim() || (isProIntent ? defaultAccountName : accountName);
       await register({ accountName: submittedAccountName, email: trimmedEmail, password, personName: trimmedPersonName });
-      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPlan } });
+      navigate('/confirm-email', {
+        state: { email: trimmedEmail, wantsPlan, personName: trimmedPersonName, accountName: accountName.trim() },
+      });
     } catch (err) {
       setError(err.message || 'Could not register');
     } finally {
@@ -282,6 +288,10 @@ export default function RegisterPage() {
           onNeedsChoice={setChoice}
           onSignUpStep={setSigningUp}
           accountNoun={isProIntent ? 'Account' : 'Household'}
+          // Somebody here chose Sign up, so a blanket "Already have a household?" would only plant
+          // doubt at the moment they commit. It still asks when this device has signed in some
+          // OTHER way before, which is the mistake worth stopping.
+          askWhenNothingKnown={false}
         />
 
         {/* Below both ways in, so it covers an Apple / Google sign-up as much as a password one.

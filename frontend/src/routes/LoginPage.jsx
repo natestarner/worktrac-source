@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Spinner from '../components/shared/Spinner';
 import AccountPicker from '../components/auth/AccountPicker';
+import SigningInOverlay from '../components/auth/SigningInOverlay';
+import { useSigningIn } from '../components/auth/useSigningIn';
 import {
   authCardStyle,
   authPageStyle,
@@ -37,14 +38,29 @@ export default function LoginPage() {
   const [signingUp, setSigningUp] = useState(false);
   const successMessage = location.state?.message;
 
+  // The password sign-in's "Signing you in…" overlay -- the same one, with the same three exits and
+  // the same minimum time on screen, as Apple / Google beside it (SigningInOverlay.jsx). The
+  // household picker below deliberately keeps its own button spinner: the overlay has already come
+  // down by the time it shows, exactly as it has for an Apple / Google sign-in that reaches it.
+  const { busy: signingIn, begin, abandon: abandonAttempt } = useSigningIn();
+
   async function handleSubmit(e) {
     e.preventDefault();
+    const attempt = begin();
+    const { isCurrent } = attempt;
     setError('');
-    setSubmitting(true);
     try {
       const needsChoice = await login(email, password);
       // The password worked, so it -- not Apple or Google -- is what this device used last.
       rememberSignInMethod('password');
+      if (isCurrent()) await attempt.settled();
+      if (!isCurrent()) {
+        // Abandoned from the overlay, then it landed anyway. With no choice to make the session is
+        // live (AuthContext has switched), so the app is the only honest place to go. A picker
+        // nobody is waiting for is dropped; signing in again shows it.
+        if (!needsChoice) navigate('/app/log');
+        return;
+      }
       if (needsChoice) {
         // Nothing has been signed in and nothing torn down -- whatever session this device already
         // had is still intact, so abandoning the picker costs nothing.
@@ -53,10 +69,19 @@ export default function LoginPage() {
       }
       navigate('/app/log');
     } catch (err) {
+      if (isCurrent()) await attempt.settled();
+      if (!isCurrent()) return;
       setError(err.message || 'Could not log in');
     } finally {
-      setSubmitting(false);
+      attempt.end();
     }
+  }
+
+  // "Start over" on the overlay: stop waiting for an attempt that has run past anything legitimate.
+  // The request may still be in flight; a late answer is handled as handleSubmit says above.
+  function abandon() {
+    abandonAttempt();
+    setError("That's taking longer than it should. Please try again.");
   }
 
   async function handleChoose(accountId) {
@@ -89,6 +114,7 @@ export default function LoginPage() {
 
   return (
     <main style={authPageStyle}>
+      {signingIn && <SigningInOverlay label="Signing you in…" onAbandon={abandon} />}
       {/* The card is a wrapper, not the form: the Apple / Google block below is a sibling of the
           password form because its sign-up step is a form of its own (forms can't nest). */}
       <div style={authCardStyle}>
@@ -156,13 +182,9 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Log in</span>
-          {submitting && (
-            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color="currentColor" />
-            </span>
-          )}
+        {/* No spinner of its own any more: the overlay covers the screen while this is disabled. */}
+        <button type="submit" disabled={signingIn} className="btn btn-primary btn-lg btn-full pressable">
+          Log in
         </button>
 
         </form>

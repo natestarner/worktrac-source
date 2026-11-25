@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ForgotPasswordPage from './ForgotPasswordPage';
 import { useAuth } from '../context/AuthContext';
+import { availableSignInProviders } from '../lib/native';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -10,6 +11,10 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
+vi.mock('../lib/native', () => ({ availableSignInProviders: vi.fn(() => []) }));
+
+const LAST_USED_KEY = 'huddle-last-sign-in-method';
+const ALL_USED_KEY = 'huddle-sign-in-methods';
 
 function renderPage() {
   return render(
@@ -87,5 +92,52 @@ describe('ForgotPasswordPage', () => {
 
     expect(await screen.findByText('Too many requests from this address -- please try again later')).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Someone who joined with Apple's "Hide My Email" has an account under a relay address they have
+  // never seen, so the email they type here matches nothing. Only the device can point them back.
+  describe('pointing back at Apple or Google', () => {
+    beforeEach(() => {
+      localStorage.removeItem(LAST_USED_KEY);
+      localStorage.removeItem(ALL_USED_KEY);
+      availableSignInProviders.mockReturnValue(['apple', 'google']);
+    });
+
+    it('names the provider a device without a password has signed in with, and links to Log in', () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple']));
+      renderPage();
+      const hint = screen.getByTestId('forgot-password-provider-hint');
+      expect(hint).toHaveTextContent(
+        'Signed up with Apple? This device has signed in with Apple before. An account made that way has no password to reset: tap Continue with Apple on the Log in screen instead.',
+      );
+      // The link goes to Log in; it does not start Apple itself, so it doesn't claim to.
+      expect(screen.getByRole('link', { name: 'Log in screen' })).toHaveAttribute('href', '/login');
+      // The form is still there: it is a hint, not a gate.
+      expect(screen.getByRole('button', { name: 'Send reset code' })).toBeEnabled();
+    });
+
+    it('names both when the device has used both', () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['google', 'apple']));
+      renderPage();
+      expect(screen.getByTestId('forgot-password-provider-hint')).toHaveTextContent('Signed up with Google or Apple?');
+    });
+
+    it('says nothing on a device that has also used a password, or never signed in', () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple', 'password']));
+      const { unmount } = renderPage();
+      expect(screen.queryByTestId('forgot-password-provider-hint')).not.toBeInTheDocument();
+      unmount();
+
+      localStorage.removeItem(ALL_USED_KEY);
+      renderPage();
+      expect(screen.queryByTestId('forgot-password-provider-hint')).not.toBeInTheDocument();
+    });
+
+    it('never names a provider this build does not offer', () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple']));
+      availableSignInProviders.mockReturnValue(['google']);
+      renderPage();
+      expect(screen.queryByTestId('forgot-password-provider-hint')).not.toBeInTheDocument();
+    });
   });
 });

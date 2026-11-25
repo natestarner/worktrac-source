@@ -96,43 +96,53 @@ export default function ExerciseTrendChart({ points, metric, defaultUnit }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-        <XAxis
-          dataKey="date"
-          tickFormatter={formatDateLabel}
-          tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
-          axisLine={{ stroke: 'var(--color-border)' }}
-          tickLine={false}
-          interval="preserveStartEnd"
-        />
-        <YAxis
-          // Est. 1RM and top weight are read as "am I moving up", where a zero baseline flattens
-          // every real change into noise. Volume and rep counts are magnitudes, so they keep the
-          // honest zero baseline the weekly bar charts use.
-          domain={isWeight && metric !== 'sessionVolume' && metric !== 'bestSetVolume'
-            ? ['dataMin', 'dataMax']
-            : [0, 'dataMax']}
-          allowDecimals={isWeight}
-          tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
-          axisLine={false}
-          tickLine={false}
-          width={44}
-        />
-        <Tooltip
-          content={<ChartTooltip metric={metric} defaultUnit={defaultUnit} />}
-          cursor={{ stroke: 'var(--color-border)' }}
-        />
-        <Line
-          type="monotone"
-          dataKey="metricValue"
-          stroke="var(--color-accent)"
-          strokeWidth={2}
-          dot={<TrendDot />}
-          activeDot={<TrendDot />}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+          <XAxis
+            dataKey="date"
+            tickFormatter={formatDateLabel}
+            tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
+            axisLine={{ stroke: 'var(--color-border)' }}
+            tickLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            // Est. 1RM and top weight are read as "am I moving up", where a zero baseline flattens
+            // every real change into noise. Volume and rep counts are magnitudes, so they keep the
+            // honest zero baseline the weekly bar charts use.
+            domain={isWeight && metric !== 'sessionVolume' && metric !== 'bestSetVolume'
+              ? ['dataMin', 'dataMax']
+              : [0, 'dataMax']}
+            allowDecimals={isWeight}
+            tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
+            axisLine={false}
+            tickLine={false}
+            width={44}
+          />
+          <Tooltip
+            content={<ChartTooltip metric={metric} defaultUnit={defaultUnit} />}
+            cursor={{ stroke: 'var(--color-border)' }}
+          />
+          <Line
+            type="monotone"
+            dataKey="metricValue"
+            stroke="var(--color-accent)"
+            strokeWidth={2}
+            dot={<TrendDot />}
+            activeDot={<TrendDot />}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      {/* One dot is not a line: a single workout drew a mostly empty 200px box whose only labels
+          were "Today" and one number, which read as broken to someone on their first day. The dot
+          stays (it is real and hoverable); this says what will turn it into a trend. */}
+      {points.length === 1 && (
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>
+          One workout so far. Log it again and the line starts here.
+        </div>
+      )}
+    </>
   );
 }

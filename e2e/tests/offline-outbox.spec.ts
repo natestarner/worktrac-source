@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // PR 2 of offline mode: a set logged with no connection is never lost -- it queues in the durable
@@ -19,7 +19,7 @@ test.describe('Offline mode — durable set-logging outbox', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     // Optimistic row is on screen immediately, already editable/deletable (not lost, not
@@ -46,7 +46,7 @@ test.describe('Offline mode — durable set-logging outbox', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 

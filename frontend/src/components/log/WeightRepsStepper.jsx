@@ -74,6 +74,12 @@ export default function WeightRepsStepper({
   atMin = false,
   holdFloor = atMin,
   repeatOnHold = true,
+  // Draws the value as a gentle "fill me in" (a first set of an exercise that expects a weight).
+  highlight = false,
+  // Told whether the field holds typed-but-uncommitted text. A value commits on blur, so without
+  // this a button that waits for a number (Log set's "Enter a weight") would still be disabled at
+  // the instant a thumb taps it straight after typing, and the tap would be lost.
+  onTypingChange,
 }) {
   // Press-and-hold repeats, via the one hold mechanism (hooks/useHoldRepeat.js). It lives on the
   // primitive rather than at the two call sites so the log screen and EditSetModal cannot drift.
@@ -87,7 +93,7 @@ export default function WeightRepsStepper({
   const isLarge = size === 'lg';
   // Base class always present -- the landscape rules and the e2e helpers both key off it.
   const btnClass = `stepper-circle-btn${isLarge ? '' : ' stepper-circle-btn-sm'} pressable`;
-  const valueClass = `stepper-value${isLarge ? '' : ' stepper-value-sm'}${onPick ? ' stepper-value-pick' : ''}`;
+  const valueClass = `stepper-value${isLarge ? '' : ' stepper-value-sm'}${onPick ? ' stepper-value-pick' : ''}${highlight ? ' stepper-value--needed' : ''}`;
 
   // Uncontrolled while focused (`draft`), controlled by `value` otherwise. A plain
   // controlled input re-renders on every keystroke with the PARSED value, which strips a
@@ -98,6 +104,7 @@ export default function WeightRepsStepper({
 
   function commit(raw) {
     setDraft(null);
+    onTypingChange?.(false);
     onChange(parse ? parse(raw) : parseFloat(raw) || 0);
   }
 
@@ -111,10 +118,16 @@ export default function WeightRepsStepper({
         gap: 'var(--space-3)',
         marginBottom: isLarge ? 'var(--space-5)' : 'var(--space-4)',
         minWidth: 0,
+        flexWrap: 'wrap',
+        rowGap: 'var(--space-2)',
       }}
     >
-      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--color-muted)' }}>{label}</div>
-      <div className="stepper-controls" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
+      {/* The controls never shrink; where the label does not fit beside them (a 320px phone) it
+          wraps onto its own line above them, on every row alike. When the controls were free to
+          shrink, a label that wrapped narrowed its own row's controls and put its - and + out of
+          line with the row below. */}
+      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>{label}</div>
+      <div className="stepper-controls" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0, marginLeft: 'auto' }}>
         <button
           type="button"
           onPointerDown={dec.onPointerDown}
@@ -173,7 +186,10 @@ export default function WeightRepsStepper({
               setDraft(String(displayValue ?? value ?? ''));
               e.target.select();
             }}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              onTypingChange?.(e.target.value.trim() !== '');
+            }}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
               // Commits via the blur handler above; Enter shouldn't submit anything else

@@ -1,6 +1,6 @@
 import { Locator, Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise } from './support/exercises';
+import { addOwnExercise, logSetButton } from './support/exercises';
 import { goHardOffline, goOnline, waitForOutboxDrain } from './support/offline';
 
 // Changing your own exercise's muscles in "Customize this exercise", then closing the modal
@@ -27,7 +27,7 @@ async function serverMusclesOf(page: Page, name: string) {
 async function openCustomizeOnOwnExercise(page: Page, request: Parameters<typeof registerHousehold>[1], name: string) {
   await registerHousehold(page, request, 'Pim');
   await addOwnExercise(page, name);
-  await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
+  await expect(logSetButton(page)).toBeVisible();
   // The muscles write needs the exercise's real id, so let the create reach the server first.
   await waitForOutboxDrain(page);
   await page.getByRole('button', { name: 'Customize this exercise' }).click();

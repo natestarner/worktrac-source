@@ -304,7 +304,7 @@ export function isDeleteQueuedFor(client, setId) {
 
 // The tempIds of this person's live-set creates that have not landed yet -- the sets of the workout
 // in progress. Session-edit creates are excluded: they log into a PAST session, not the live one.
-// Read by the End tap (EndWorkoutConfirmModal, to mark exactly these as ended) and by
+// Read by the End tap (EndWorkoutSheet, to mark exactly these as ended) and by
 // lib/liveSession.js (to tell a "no live workout" answer that predates them from a real one).
 export function pendingLiveSetCreates(client, personId) {
   return client
@@ -573,6 +573,15 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         markSetConfirmed(vars.tempId);
       }
       const sessionId = data?.session?.id ?? vars.sessionId ?? null;
+      // The exercise id the screen READS, not the one this write was dispatched with. A set logged
+      // against a just-created exercise carries its TEMP id, but the create always lands first
+      // (shared serial scope, and mutationFn refuses an unresolved id), and LogTab moves the screen
+      // to the real id the moment it does -- so by the time a set succeeds, every key below must
+      // name the real id or it reaches a query nothing observes. Keying on the temp id left the
+      // screen's set list holding only the sets that landed before it was first fetched
+      // (docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md). A real id, and a
+      // temp id not mapped yet (a failed write), come back unchanged -- exactly today's keys.
+      const exerciseId = resolveExerciseId(vars.exerciseId);
       // Reconcile FROM THE RESPONSE, before invalidating -- rather than refetching to discover what
       // the response already told us. Without this the FIRST set of a workout vanished for two
       // sequential round trips: it left ExerciseDetail's pendingBeforeSession the instant the
@@ -629,7 +638,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // Unless the set was deleted while this create was still on its way: its DELETE_SET is
         // queued right behind (isDeleteQueuedFor), and seeding the row here would bring it back
         // on screen until that delete lands.
-        client.setQueryData(queryKeys.sessionSets(sessionId, vars.exerciseId), (old) => {
+        client.setQueryData(queryKeys.sessionSets(sessionId, exerciseId), (old) => {
           const rows = old ?? [];
           if (isDeleteQueuedFor(client, vars.tempId)) return rows;
           if (rows.some((r) => r.id === data.set.id)) return rows;
@@ -656,15 +665,15 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // Live path only, and only into a key holding nothing: for mode 'session' the id was known
         // all along, so no null-keyed value belongs under it.
         if (vars.mode !== 'session') {
-          const summaryKey = queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId);
+          const summaryKey = queryKeys.exerciseSummary(vars.personId, exerciseId, sessionId);
           if (client.getQueryData(summaryKey) === undefined) {
-            const carried = client.getQueryData(queryKeys.exerciseSummary(vars.personId, vars.exerciseId, null));
+            const carried = client.getQueryData(queryKeys.exerciseSummary(vars.personId, exerciseId, null));
             if (carried !== undefined) client.setQueryData(summaryKey, carried);
           }
         }
       }
-      client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
-      client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
+      client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, exerciseId) });
+      client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, exerciseId, sessionId) });
       if (vars.mode !== 'session') {
         client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
       }
@@ -707,6 +716,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // absent as none and drops codes it does not know, so neither can refuse the create.
         primaryMuscles: vars.primaryMuscles,
         secondaryMuscles: vars.secondaryMuscles,
+        // Absent on every create a build before 1.4 queued; the server reads absent as 'external',
+        // which is what those creates always meant.
+        loadType: vars.loadType,
       });
       if (vars.personId) await favoriteExercise(vars.personId, created.id);
       return created;
@@ -781,8 +793,11 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // wrong conclusions it produced first:
   // docs/incidents/2026-07-30-editing-queued-offline-set.md ("Follow-up (2026-08-18)").
   const reconcileSetChange = (vars, sessionId) => {
-    client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
-    client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
+    // Resolved for the same reason as LOG_SET's onSettled: an edit or delete dispatched while its
+    // exercise was still a temp id must refresh the list the screen reads under the real one.
+    const exerciseId = resolveExerciseId(vars.exerciseId);
+    client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, exerciseId) });
+    client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, exerciseId, sessionId) });
     refreshHistory(client, vars.personId, historyScopeFor(client, vars.personId, sessionId));
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     // The roster derives from sets as well -- editing or deleting one moves a person's "last
@@ -874,8 +889,10 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     onSettled: (data, _e, vars) => {
       // A live note may have just materialized the session -- use the returned session id.
       const sessionId = data?.sessionId ?? vars.sessionId ?? null;
-      client.invalidateQueries({ queryKey: queryKeys.sessionExerciseNote(sessionId, vars.exerciseId) });
-      client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
+      // Resolved, as in LOG_SET's onSettled: a note saved on a just-created exercise names its temp id.
+      const exerciseId = resolveExerciseId(vars.exerciseId);
+      client.invalidateQueries({ queryKey: queryKeys.sessionExerciseNote(sessionId, exerciseId) });
+      client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, exerciseId, sessionId) });
       refreshHistory(client, vars.personId, historyScopeFor(client, vars.personId, sessionId));
       if (vars.mode !== 'session') client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
     },
@@ -922,7 +939,7 @@ export function dispatchDurableWrite(client, mutationKey, variables) {
 
 // Fire a durable write against the app's singleton client WITHOUT a React observer -- for
 // fire-and-dismiss actions (end workout) whose component has no QueryClientProvider dependency at
-// all (see EndWorkoutConfirmModal.jsx, which imports the singleton directly and never calls
+// all (see EndWorkoutSheet.jsx, which imports the singleton directly and never calls
 // useQueryClient()). The write still queues + replays via the outbox exactly like a
 // useMutation-dispatched one. A component that already has `useQueryClient()` should call
 // dispatchDurableWrite with its own context client instead of this -- see there for why.

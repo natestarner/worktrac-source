@@ -9,6 +9,7 @@ import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 import PasswordInput from '../components/shared/PasswordInput';
+import { rememberSignInMethod } from '../lib/lastSignInMethod';
 
 /**
  * Where an invite link lands.
@@ -90,6 +91,10 @@ export default function JoinPage() {
     setSubmitting(true);
     try {
       const needsChoice = await acceptInvite({ inviteId, token, password: withPassword });
+      // Joining with a password (set or proved here) is a password sign-in, so it is what this
+      // device used last -- otherwise the sign-in screens keep marking whoever's provider was used
+      // before on a shared device. Joining on an existing session (no password) signed nobody in.
+      if (withPassword) rememberSignInMethod('password');
       if (needsChoice) {
         setChoice(needsChoice);
         return;

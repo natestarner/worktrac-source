@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SocialSignIn, { SIGNING_IN_ESCAPE_MS, SIGNING_IN_SLOW_MS } from './SocialSignIn';
+import SocialSignIn, { SIGNING_IN_ESCAPE_MS, SIGNING_IN_MIN_MS, SIGNING_IN_SLOW_MS } from './SocialSignIn';
 import { useAuth } from '../../context/AuthContext';
 import { availableSignInProviders, signInWithProvider } from '../../lib/native';
 
@@ -15,6 +15,7 @@ vi.mock('../../lib/native', () => ({
 }));
 
 const LAST_USED_KEY = 'huddle-last-sign-in-method';
+const ALL_USED_KEY = 'huddle-sign-in-methods';
 
 function apiError(status, message, code) {
   return Object.assign(new Error(message), { status, code });
@@ -31,6 +32,7 @@ describe('SocialSignIn', () => {
     signInWithIdToken = vi.fn();
     useAuth.mockReturnValue({ signInWithIdToken });
     localStorage.removeItem(LAST_USED_KEY);
+    localStorage.removeItem(ALL_USED_KEY);
   });
 
   // An Apple / Google sign-up happens on the name step, and it can be reached from the Log in page,
@@ -100,8 +102,10 @@ describe('SocialSignIn', () => {
       render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} />);
 
       const apple = screen.getByRole('button', { name: 'Continue with Apple' });
-      expect(apple).toHaveAccessibleDescription('Last used');
+      expect(apple).toHaveAccessibleDescription('You last signed in with Apple');
       expect(screen.getAllByTestId('provider-last-used')).toHaveLength(1);
+      // Under the button, never inside it: Apple's button carries nothing of ours.
+      expect(apple).not.toContainElement(screen.getByTestId('provider-last-used'));
       expect(screen.getByRole('button', { name: 'Continue with Google' })).not.toHaveAccessibleDescription();
     });
 
@@ -137,6 +141,61 @@ describe('SocialSignIn', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
       await screen.findByLabelText('Your name');
       expect(localStorage.getItem(LAST_USED_KEY)).toBeNull();
+      expect(localStorage.getItem(ALL_USED_KEY)).toBeNull();
+    });
+  });
+
+  // The server has just said it doesn't know this person, and nothing exists yet: the moment to ask
+  // whether they meant to make a second household (an Apple "Hide My Email" address meeting Google).
+  describe('"Already have a household?" on the name step', () => {
+    async function reachNameStep(buttonName, props = {}) {
+      signInWithIdToken.mockRejectedValueOnce(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED'));
+      render(<SocialSignIn onSignedIn={vi.fn()} onNeedsChoice={vi.fn()} {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: buttonName }));
+      await screen.findByLabelText('Your name');
+      return screen.queryByTestId('existing-household-hint');
+    }
+
+    // Sign up: the person chose to make one, so the general question would only plant doubt.
+    it('on Sign up, asks only when this device knows another way in', async () => {
+      expect(await reachNameStep('Continue with Apple', { askWhenNothingKnown: false })).toBeNull();
+    });
+
+    it('on Sign up, still names a way this device has used', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['google']));
+      const hint = await reachNameStep('Continue with Apple', { askWhenNothingKnown: false });
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up with Google.');
+    });
+
+    it('says "an account" for a Pro arrival', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['google']));
+      const hint = await reachNameStep('Continue with Apple', { accountNoun: 'Account' });
+      expect(hint).toHaveTextContent('Already have an account?');
+    });
+
+    it('names the other way this device has signed in', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['apple']));
+      const hint = await reachNameStep('Continue with Google');
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up with Apple. Tap Back and sign in that way instead.');
+    });
+
+    it('names every other way, never the one just tried', async () => {
+      localStorage.setItem(ALL_USED_KEY, JSON.stringify(['password', 'google', 'apple']));
+      const hint = await reachNameStep('Continue with Google');
+      expect(hint).toHaveTextContent('You may have signed up with your email and password or Apple.');
+    });
+
+    // A new phone or a reinstall remembers nothing; the question still matters most there.
+    it('still asks on a device that remembers nothing', async () => {
+      const hint = await reachNameStep('Continue with Apple');
+      expect(hint).toHaveTextContent('Already have a household? You may have signed up a different way.');
+    });
+
+    it('Back leaves the step without creating anything', async () => {
+      await reachNameStep('Continue with Apple');
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(screen.getByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
+      expect(signInWithIdToken).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -263,6 +322,11 @@ describe('SocialSignIn', () => {
       vi.useRealTimers();
     });
 
+    // The overlay stays up SIGNING_IN_MIN_MS whatever the answer, so a fast one doesn't flash it.
+    async function passMinimum() {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, SIGNING_IN_MIN_MS)); });
+    }
+
     it('covers the screen while the sign-in is in flight, and hands over when it lands', async () => {
       const request = deferred();
       signInWithIdToken.mockReturnValue(request.promise);
@@ -278,7 +342,36 @@ describe('SocialSignIn', () => {
       expect(onSignedIn).not.toHaveBeenCalled();
 
       await act(async () => request.resolve(null));
+      await passMinimum();
       expect(onSignedIn).toHaveBeenCalled();
+    });
+
+    it('stays up for its minimum time even when the answer is instant, for every outcome', async () => {
+      vi.useFakeTimers();
+      const onSignedIn = vi.fn();
+      signInWithIdToken.mockResolvedValueOnce(null).mockRejectedValueOnce(apiError(401, 'Bad token'));
+      render(<SocialSignIn onSignedIn={onSignedIn} onNeedsChoice={vi.fn()} />);
+
+      // Signed in: the hand-over waits for the minimum.
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await act(async () => {});
+      act(() => vi.advanceTimersByTime(SIGNING_IN_MIN_MS - 1));
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+      expect(onSignedIn).not.toHaveBeenCalled();
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(onSignedIn).toHaveBeenCalledTimes(1);
+
+      // A failure: the error waits for it too, then the overlay comes down.
+      fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
+      await act(async () => {});
+      act(() => vi.advanceTimersByTime(SIGNING_IN_MIN_MS - 1));
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Bad token');
     });
 
     it('goes away when the sign-in fails (a timeout, a refusal) and the buttons come back', async () => {
@@ -290,6 +383,7 @@ describe('SocialSignIn', () => {
       await screen.findByTestId('signing-in-overlay');
 
       await act(async () => request.reject(apiError(0, "Couldn't reach Huddle")));
+      await passMinimum();
 
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reach Huddle");
@@ -306,6 +400,7 @@ describe('SocialSignIn', () => {
       await screen.findByTestId('signing-in-overlay');
 
       await act(async () => request.resolve({ accounts: [], selectionToken: 'sel' }));
+      await passMinimum();
 
       expect(onNeedsChoice).toHaveBeenCalled();
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
@@ -320,12 +415,14 @@ describe('SocialSignIn', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }));
       await screen.findByTestId('signing-in-overlay');
       await act(async () => first.reject(apiError(409, 'Tell us your name', 'SIGN_UP_REQUIRED')));
+      await passMinimum();
 
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Create my household' }));
       expect(await screen.findByTestId('signing-in-overlay')).toHaveTextContent('Creating your household…');
 
       await act(async () => second.reject(apiError(500, 'Something went wrong')));
+      await passMinimum();
       expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
     });
@@ -405,6 +502,7 @@ describe('SocialSignIn', () => {
         expect(screen.queryByText('Old failure')).not.toBeInTheDocument();
 
         await act(async () => fresh.reject(apiError(0, 'New failure')));
+        await act(async () => { vi.advanceTimersByTime(SIGNING_IN_MIN_MS); });
         expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
         expect(screen.getByRole('alert')).toHaveTextContent('New failure');
       });

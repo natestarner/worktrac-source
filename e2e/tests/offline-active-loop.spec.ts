@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Mode 3 (elected/hard offline): the rest of the active-workout loop beyond plain set-logging --
@@ -14,10 +14,10 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     // Two synced sets to work with, logged online.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(2);
 
@@ -63,7 +63,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await goHardOffline(page);
 
     // Log a set while offline -- its create is queued, not yet synced.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await expect(outboxCountText(page, 1)).toBeVisible();
@@ -94,7 +94,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
   test('favoriting and saving a session note offline both queue and land on reconnect', async ({ page, request }) => {
     await registerHousehold(page, request, 'Cameron');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -120,7 +120,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
   test('ending a workout offline clears the live-session dot immediately and stays ended after reconnect', async ({ page, request }) => {
     await registerHousehold(page, request, 'Devon');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -128,8 +128,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await expect(page.getByText(/Session in progress/)).toBeVisible();
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
 
     // Optimistic clear happens immediately -- doesn't wait for the write to settle.
     await expect(page.getByText(/Session in progress/)).toBeHidden();
@@ -159,7 +158,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await goHardOffline(page);
 
     // Log a set offline, correct it, then delete it -- all before anything syncs.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -182,7 +181,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await waitForOutboxDrain(page);
 
     // The queue is genuinely usable again -- this is the assertion the bug actually broke.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await waitForOutboxDrain(page);
@@ -197,7 +196,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
@@ -213,7 +212,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
 
     // And the outbox still works: a set logged after the clear syncs normally on reconnect.
     await goOnline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await waitForOutboxDrain(page);
     await page.reload();

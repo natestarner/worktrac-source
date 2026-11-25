@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, setStepperPair } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -36,8 +36,8 @@ forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment i
     // rather than a first-ever set (which is deliberately presented as a baseline, not a PR).
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 135, 5);
-    await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    await tapLogSet(page);
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
     await expect(first).toBeHidden();
@@ -68,7 +68,7 @@ forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment i
   act: async (page) => {
     // Heavier AND more reps, so this takes both set-level records at once.
     await setStepperPair(page, 185, 8);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
   },
 
   assert: async (page) => {
@@ -121,15 +121,14 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     // A one-set baseline workout: 100 x 10 = 1000 lb of volume to beat.
     await pickExercise(page, 'Barbell Bench Press');
     await setStepperPair(page, 100, 10);
-    await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    await tapLogSet(page);
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await first.click({ force: true });
     await expect(first).toBeHidden();
     // End it, so the next workout is a new session and its volume starts from zero. The confirm
     // is scoped to the dialog -- the SessionBar's own button carries the same name.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The baseline set and the End on the server before re-entering. Without this, against lower's
     // ~800ms writes, the re-entry fetched a summary from before the set landed, nothing refetched
@@ -158,7 +157,7 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     let fired = 0;
     for (let i = 0; i < 3; i++) {
       await setStepperPair(page, 60, 10);
-      await page.getByRole('button', { name: 'Log set' }).click();
+      await tapLogSet(page);
       const celebration = page.getByText('New PR!');
       if (await celebration.isVisible()) {
         // Whatever fires here must be the VOLUME record. Every set is 60x10, below the 100x10
@@ -181,31 +180,29 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     // (the record chasing itself, which is what including the current session in the prior best
     // would cause) the overlay would still be up here.
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(3);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
   },
 });
 
 // Volume is measured in each exercise's own unit (utils/sessionVolume.js): total reps for an
 // unloaded exercise, which weight x reps used to flatten to a permanent 0 lb so the record could
 // never fire. And an exercise's FIRST workout is the volume baseline, never a volume record --
-// while its first set still takes the set-level record, which is what makes the overlay appear
-// in setup at all.
+// while its first set still gets a card, which is what makes the overlay appear in setup at all.
 forEachConnectivityMode<{ personName: string }>('a bodyweight volume record counts reps, and a first workout claims none', {
   setup: async (page, request) => {
     const personName = 'BwVol';
     await registerHousehold(page, request, personName);
-    // Baseline: one workout of 10 chin-ups. The first-ever set celebrates its rep count, and
-    // must NOT list a volume record alongside it.
+    // Baseline: one workout of 10 chin-ups. The first-ever set gets a card (the quiet first-time
+    // one, or "New PR!" if its summary had not landed yet), and it must NOT list a volume record.
     await pickExercise(page, 'Chin-up');
     await setStepperPair(page, 0, 10);
-    await page.getByRole('button', { name: 'Log set' }).click();
-    const first = page.getByText('New PR!');
+    await tapLogSet(page);
+    const first = prCelebration(page);
     await expect(first).toBeVisible();
     await expect(page.getByRole('dialog')).not.toContainText('Volume');
     await first.click({ force: true });
     await expect(first).toBeHidden();
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The baseline set AND the End on the server before anything below reads them back. THIS is
     // the load-bearing line. The End queues behind the set in the serial outbox, and against
@@ -238,12 +235,12 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     // Two sets of 6: neither beats the 10-rep best set, so the only record available is volume --
     // 6 total (short of 10), then 12 (past it). The SECOND set is the crossing.
     await setStepperPair(page, 0, 6);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
 
     await setStepperPair(page, 0, 6);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const celebration = page.getByText('New PR!');
     await expect(celebration).toBeVisible();
   },

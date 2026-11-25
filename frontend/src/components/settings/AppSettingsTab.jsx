@@ -473,8 +473,8 @@ export default function AppSettingsTab() {
       <SectionLabel>Rest Timer</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
-          Show a countdown after logging a set, per person. Rest time between sets is always recorded
-          for Trends either way.
+          After each set, show how long you have been resting, per person, counting up toward a
+          90-second target. Rest between sets is always recorded for Trends either way.
         </div>
         {/* ⚠️ The ONE place a person list is filtered client-side. Everywhere else the server's
             PersonService.list is the only filter, deliberately, so no screen can forget one.

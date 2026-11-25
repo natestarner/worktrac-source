@@ -121,6 +121,14 @@ bottom of the scroll.
   Siblings cannot know each other's height and no CSS token can supply it.
 - **`fixed`, not `sticky`.** Sticky-to-bottom only works for an element in flow at the end of a
   scroll container; this has to hold its place over every tab.
+- **On a phone (< 600px) the status is two lines, and its text is still ONE string.**
+  "Session in progress" over a muted "Started 10:27 PM", because at 390px one line ran out of room
+  the moment the rest timer appeared and cut the time to "started 1…". It is three spans with the
+  middot hidden by CSS, never removed, so the element's text stays "Session in progress · started
+  10:27 PM" for screen readers and for `parity-session-bar`'s selector. Two short lines fit the
+  fixed height; the bar does not grow.
+- **Past the target the rest readout says "0:22 over", in words.** It was "−0:22", which read as
+  time LEFT. Colour reinforces it; the word carries it.
 - **Its height must not change when the rest timer starts.** A bar that grew would move the same
   tap-jump from the top of the screen to the bottom, and desync the reserved padding.
 - **It must RESERVE space, not float over content.** `.app-shell`'s `padding-bottom` adds
@@ -140,6 +148,33 @@ bottom of the scroll.
   mid-page, so scrolling to the bottom moves it off the *top*. What the padding guarantees is that
   the **end of the document** clears the bar; a fixed bottom bar necessarily overlaps mid-document
   content at some scroll position, and asserting otherwise fails against correct code.
+- **"End workout" opens ONE sheet (`EndWorkoutSheet`): the question and the workout's card
+  together.** Titled "End this workout?" with Cancel / End workout; after the End it either closes,
+  or — only while "Who else trains with you?" is due — stays open, retitled "Workout done", with that
+  question. It replaced a confirm dialog followed by a separate summary sheet, which read as the
+  same popup twice; don't split it back into two. SessionBar owns what follows it. Four rules:
+  - **The card is live while asking and CAPTURED at the End tap, never recounted after.** The End
+    nulls the live session, so a recount reports an empty workout; the "Workout done" state renders
+    only the captured copy. A workout with no sets gets no card, and the plain toast after the End.
+  - **The App Store rating ask and `tryForceUpdate` run when the sheet CLOSES after the End, not at
+    the tap.** At the tap, the forced update reloads the page out from under the sheet and Apple's
+    sheet covers it. The rating COUNT stays at the tap (`noteWorkoutEnded`, synchronous) so a reload
+    with the sheet open cannot lose it. Every exit after the End (End itself when nothing is asked,
+    X, Escape, "Just me", the add-person dialog's close) is the one `onClose`; Cancel and every exit
+    BEFORE the End are `onCancel`, which runs none of it.
+  - **The sheet keeps one position in SessionBar's tree** (the fragment's second child, bar or no
+    bar), because ending the workout is what removes the bar; a moved sheet remounts and drops its
+    state. A sheet still ASKING when the workout ends elsewhere is closed by SessionBar. The card's
+    `--brand-card-*` colours are deliberately not themed (like the home-screen icon), and the
+    household question's "Just me" is stored per account by `lib/householdAsk.js`.
+  - **The card's headline (`utils/workoutHeadline.js`) is read from `useStatsFromHistory`'s fold
+    while the workout is live, and captured with the numbers at the End tap.** After the End a
+    finished workout's queued sets leave the live fold and History does not have them yet, so a
+    headline computed after it misses the workout in every degraded mode -- verified: computed in
+    the old post-End sheet, `parity-session-recap`'s "names a new best" failed lie-fi, hard-offline
+    and pinned-offline and passed online. It only CHOOSES among the fold's answers
+    (`exerciseTrend`, `trendsOverview`); never give it arithmetic of its own, or it can disagree
+    with the PRs board and Trends.
 
 ### Modals: `Modal` never closes on a backdrop tap
 
@@ -421,6 +456,19 @@ as such — it has no response body, and is unreachable for an unsynced set.
 Assert this against a **real cache**, never a spy on `invalidateQueries`: a spy passes just as
 happily on a key nothing observes, which is exactly the failure mode.
 
+**The EXERCISE id has the same trap: resolve it, never use the one captured at dispatch.** A set,
+edit or note written against a just-created exercise carries its `temp-exercise-…` id, and LogTab
+moves the screen to the real id the moment the create lands — always before the dependent write
+succeeds. So `LOG_SET`, `reconcileSetChange` and `SAVE_NOTE` key every seed and invalidation on
+`resolveExerciseId(vars.exerciseId)`, and `ExerciseDetail`'s readers of queued writes
+(`unsyncedLogSets`, `pendingLiveNote`) match on the resolved id (`isForThisExercise`), not the raw
+mutation key. Keyed on the temp id, the set list kept only the sets that landed before it was
+fetched ("Set 1" only, surviving a reload), and queued sets were drawn nowhere from the remap until
+each landed (`docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md`). For an id with
+no temp past, resolving is the identity — keep it that way, it is why library exercises are
+untouched. **Any new write that can target a just-created exercise, or new reader of queued writes,
+goes through `resolveExerciseId`.**
+
 ### History is cached a month at a time — read it through `flattenHistory`
 
 `queryKeys.history(personId)` holds `{ format: 2, months: { 'yyyy-mm': { fp, sessions } },
@@ -431,6 +479,11 @@ each held month's fingerprint and keeps every month the server does not resend
 - **Every reader gets the flat, newest-first array through `select: flattenHistory`** (`useHistory`,
   `AppSettingsTab`). A raw `getQueryData(queryKeys.history(...))` is the synced shape, not a list —
   only `getHistory` itself reads it that way.
+- **With nothing held, `useHistory` returns ONE frozen empty list (`NO_HISTORY`), never `?? []`.**
+  Offline with no History, the fetch is paused and `isLoading` is false, so readers memoize over
+  the empty list; a fresh one per render looped `ExerciseDetail`'s prefill effect and starved the
+  page (`docs/incidents/2026-11-24-empty-history-render-loop-delayed-outbox-persist.md`). The same
+  goes for any hook's default: a stable value, or every dependent effect runs every render.
 - **`flattenHistory` passes a plain array through untouched.** That is a cache persisted by a build
   from before the sync (axis D): it must still render, and `heldForSync` treats it as holding
   nothing, so the first sync replaces it. Many unit tests seed History as an array for the same

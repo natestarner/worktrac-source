@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
+import { addOwnExercise, dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { API_ONLY, delayNetwork, failNetwork, failWithStatus } from './support/faults';
 import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain, waitForQueryCachePersist } from './support/offline';
 
@@ -19,7 +19,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // A rejected fetch (not a fulfilled 5xx -- see faults.ts) is what reachabilityMonitor counts.
     // The log-set mutation's own retry loop supplies the 3 consecutive failures on its own.
     const faults = await failNetwork(page, '**/api/**');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     await expect(troubleBanner(page)).toBeVisible({ timeout: 10000 });
@@ -38,7 +38,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // A fulfilled 500 is a completed response -- api/client.js counts that as reachable, so this
     // never trips reachabilityMonitor. It DOES trip the durable outbox's retry-with-backoff.
     await failWithStatus(page, '**/api/people/*/live-sets', 500, 2);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1, { timeout: 20000 });
@@ -80,7 +80,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await pickExercise(page, 'Barbell Bench Press');
 
     const faults = await failNetwork(page, '**/api/**');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(troubleBanner(page)).toBeVisible({ timeout: 10000 });
 
@@ -130,7 +130,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
   test('History and the Log tab\'s session-exercises list still render from cache after a reload while lie-fi', async ({ page, request }) => {
     await registerHousehold(page, request, 'Reagan');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await page.getByRole('button', { name: /All exercises/ }).click();
@@ -172,7 +172,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // so a bare getByText for it is a strict-mode violation waiting to happen."
     //
     // It was a bare getByText and passed anyway, because the reload used to land inside the
-    // persister's 1s throttle and the picker's "Other previously logged" chip had no data to
+    // persister's 1s throttle and the picker's "Previously logged" chip had no data to
     // render -- leaving exactly one match. In other words this line was passing BECAUSE the cache
     // was incompletely restored, in the spec whose whole point is that it is restored. Now that
     // the gate above guarantees a complete snapshot, both render and the scope is required.
@@ -199,7 +199,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     // Cut the backend BEFORE logging, so this set never reaches the server at all.
     const faults = await failNetwork(page, API_ONLY);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     // The row is durable on the exercise screen (Edit/Delete, not an endless spinner) once the
@@ -228,7 +228,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await pickExercise(page, 'Barbell Bench Press');
 
     const faults = await failNetwork(page, API_ONLY);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
@@ -268,7 +268,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     // Logging a set against the just-created (still temp-id) exercise queues right behind the
     // create in the same serial outbox scope.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 2)).toBeVisible();
 
@@ -315,7 +315,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // Slow enough that the write is unambiguously still in flight at reload time, but well under
     // api/client.js's REQUEST_TIMEOUT_MS -- this is a slow backend, not a dead one.
     const slow = await delayNetwork(page, /\/api\/people\/\d+\/live-sets/, 4000);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('BW × 8', { exact: true })).toBeVisible();
 

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -30,7 +30,7 @@ test.describe('Multi-person switching', () => {
     // Alex picks an exercise -- this is the "in-progress" state that should be
     // preserved when switching away and back.
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Add Sam and switch to them.
     await page.getByRole('button', { name: '+ Add person' }).click();
@@ -42,7 +42,7 @@ test.describe('Multi-person switching', () => {
 
     // Switch back to Alex -- should return to Barbell Bench Press, not the picker.
     await personPill(page, 'Alex').click();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Switch to Sam again -- still no exercise selected for them.
     await personPill(page, 'Sam').click();
@@ -212,9 +212,9 @@ test.describe('Multi-person switching', () => {
     // Alex logs a set -- starts Alex's own rest timer.
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(restReadout(page)).toBeVisible();
     await expect(restRing(page, 'Alex')).toBeVisible();
 
@@ -249,9 +249,9 @@ test.describe('Multi-person switching', () => {
     // Alex rests.
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(restRing(page, 'Alex')).toBeVisible();
 
     // Hand the device to Sam, then reload -- the post-deploy forced reload does exactly this.
@@ -269,14 +269,13 @@ test.describe('Multi-person switching', () => {
     await registerHousehold(page, request, 'Alex');
     await pickExercise(page, 'Barbell Bench Press');
 
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await expect(restReadout(page)).toBeVisible();
     await expect(restRing(page, 'Alex')).toBeVisible();
 
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
 
     // Both surfaces clear, and so does the bar that hosted them.
     await expect(restReadout(page)).toHaveCount(0);

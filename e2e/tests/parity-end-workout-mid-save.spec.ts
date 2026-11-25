@@ -1,6 +1,6 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { holdNetwork } from './support/faults';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -32,7 +32,7 @@ forEachConnectivityMode<State>('ending a workout mid-save ends it, and the next 
   },
 
   act: async (page) => {
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
   },
 
@@ -70,19 +70,18 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
   // confirm); holding it pins the same order.
   const heldLiveRead = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live$/);
   const heldCreate = await holdNetwork(page, /\/api\/people\/\d+\/live-sets$/);
-  await page.getByRole('button', { name: 'Log set' }).click();
-  // A first-ever set always takes a record, and the overlay is decided on the device, so it is up
+  await tapLogSet(page);
+  // A first-ever set always gets a card, and the overlay is decided on the device, so it is up
   // while the create is still held. Waited for explicitly: dismissPrCelebration only checks, and
   // an overlay that arrives a beat later sits animating over the End confirm.
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   await expect(celebration).toBeVisible();
   await celebration.click({ force: true });
   await expect(celebration).toBeHidden();
   await expect.poll(() => heldCreate.held()).toBe(1);
 
   const heldEnd = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live\/end$/);
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+  await endWorkout(page);
   heldLiveRead.release();
 
   const createLanded = page.waitForResponse(
@@ -137,7 +136,7 @@ forEachConnectivityMode<State>('a workout ended mid-save still counts toward the
   // 6 reps against a 10-rep workout: no record of any kind, set or session.
   act: async (page) => {
     await setStepperPair(page, 0, 6);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
   },
 
   // The row first, THEN the overlay: the celebration is decided before the set is written, so once
@@ -145,7 +144,7 @@ forEachConnectivityMode<State>('a workout ended mid-save still counts toward the
   // the overlay had rendered at all.
   assert: async (page, { heldEnd }) => {
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
-    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(prCelebration(page)).toBeHidden();
     heldEnd.release();
   },
 });

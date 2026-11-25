@@ -430,6 +430,9 @@ function CelebrationHarness() {
     <div>
       <span data-testid="celebrating">{celebration ? 'yes' : 'no'}</span>
       <button onClick={() => showCelebration({ est1rmText: '185 lb' })}>celebrate</button>
+      <button onClick={() => showCelebration({ exerciseName: 'Plank', prs: [{ type: 'startingMark' }], firstTime: true })}>first</button>
+      <button onClick={() => showCelebration({ exerciseName: 'Plank', prs: [{ type: 'est1rm' }], firstTime: false })}>record</button>
+      <span data-testid="kind">{celebration ? (celebration.firstTime ? 'first' : 'record') : ''}</span>
     </div>
   );
 }
@@ -450,5 +453,40 @@ describe('UIContext PR celebration haptic', () => {
     expect(screen.getByTestId('celebrating').textContent).toBe('yes');
     expect(tryHaptic).toHaveBeenCalledTimes(1);
     expect(tryHaptic).toHaveBeenCalledWith('celebrate');
+  });
+});
+
+// The quiet first-time card is a welcome, not a fanfare: the single soft tap ending a workout uses.
+describe('UIContext first-time celebration', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('fires the lighter haptic for a first-time card', () => {
+    render(
+      <UIProvider>
+        <CelebrationHarness />
+      </UIProvider>,
+    );
+
+    act(() => screen.getByText('first').click());
+
+    expect(tryHaptic).toHaveBeenCalledTimes(1);
+    expect(tryHaptic).toHaveBeenCalledWith('complete');
+  });
+
+  // Not reachable through the UI today (the scrim blocks the next tap), but a record must never be
+  // swallowed into a "starting mark" card, whichever order the two arrive in.
+  it.each([
+    ['first then record', ['first', 'record']],
+    ['record then first', ['record', 'first']],
+  ])('a real record wins over a first-time card for the same exercise (%s)', (_, order) => {
+    render(
+      <UIProvider>
+        <CelebrationHarness />
+      </UIProvider>,
+    );
+
+    for (const label of order) act(() => screen.getByText(label).click());
+
+    expect(screen.getByTestId('kind').textContent).toBe('record');
   });
 });

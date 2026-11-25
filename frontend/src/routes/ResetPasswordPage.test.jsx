@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResetPasswordPage from './ResetPasswordPage';
 import { useAuth } from '../context/AuthContext';
+import { availableSignInProviders } from '../lib/native';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -10,6 +11,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
+vi.mock('../lib/native', () => ({ availableSignInProviders: vi.fn(() => []) }));
 
 function renderWithEmail(email = 'alex@example.com') {
   return render(
@@ -85,5 +87,24 @@ describe('ResetPasswordPage', () => {
     await waitFor(() => expect(resendResetCode).toHaveBeenCalledWith({ email: 'alex@example.com' }));
     expect(await screen.findByRole('button', { name: 'Resend code (60s)' })).toBeDisabled();
     expect(screen.getByText('New code sent.')).toBeInTheDocument();
+  });
+
+  // The one hint that works on a new device: an Apple "Hide My Email" account is under a relay
+  // address, so the email typed here matches nothing and no code will come.
+  describe('"No code?" for an Apple or Google account', () => {
+    it('names the providers this build offers and points at Log in', () => {
+      availableSignInProviders.mockReturnValue(['apple', 'google']);
+      renderWithEmail();
+      expect(screen.getByTestId('reset-no-code-provider-hint')).toHaveTextContent(
+        'No code? If you signed up with Apple or Google, your account has no password to reset: tap Continue with Apple or Google on the Log in screen instead.',
+      );
+      expect(screen.getByRole('link', { name: 'Log in screen' })).toHaveAttribute('href', '/login');
+    });
+
+    it('is not shown where no provider is offered', () => {
+      availableSignInProviders.mockReturnValue([]);
+      renderWithEmail();
+      expect(screen.queryByTestId('reset-no-code-provider-hint')).not.toBeInTheDocument();
+    });
   });
 });

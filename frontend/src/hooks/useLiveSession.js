@@ -47,7 +47,7 @@ export function useLiveSession(personId) {
     // dataUpdatedAt. At 10s that counted as fresh: no refetch, contextSessionId null, and the
     // workout just started showed up as "Last time" instead of "This session".
     //
-    // ⚠️ ONLY a restored null, never one written during this page. EndWorkoutConfirmModal writes
+    // ⚠️ ONLY a restored null, never one written during this page. EndWorkoutSheet writes
     // null too, and revalidating THAT immediately fetches the session back while the end is still
     // on its way to the server -- into the raw cache, where ExerciseDetail's `prev ?? provisional`
     // then keeps it, so the next workout inherited the ended one's sets. (isSessionEnded only

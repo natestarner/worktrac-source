@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAs, registerHousehold } from './support/auth';
-import { pickExercise, logSetAt } from './support/exercises';
+import { pickExercise, logSetAt, logSetButton } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
 import { LEGACY_MARKER_WORKOUT, plantDriftInPersistedHistory, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
 
@@ -30,7 +30,7 @@ test('a reload re-downloads no month that did not change, and a new set re-sends
 
   // A new set changes exactly one month -- the current one -- and only it comes back. The reload
   // reopened the exercise the person was on (that screen is persisted per person).
-  await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+  await expect(logSetButton(page)).toBeVisible();
   mark = await sync.mark();
   await logSetAt(page, 155, 3);
   await expect.poll(() => sync.settledSince(mark)).toBe(true);

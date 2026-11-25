@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, pickExercise, prCelebration, tapLogSet } from './support/exercises';
 
 // The load-bearing half of moving the session banner into fixed bottom chrome: the bar must never
 // cover the end of a tab.
@@ -34,7 +34,7 @@ import { addExerciseToRoutine, pickExercise } from './support/exercises';
 
 const sessionBar = (page: Page) => page.locator('.session-bar');
 const tabPanel = (page: Page) => page.locator('.tab-panel');
-const logSet = (page: Page) => page.getByRole('button', { name: 'Log set' });
+const logSet = (page: Page) => page.getByRole('button', { name: /^(Log set|Enter a weight)/ });
 
 // A newly-registered person's Log tab is a nearly-empty picker with nothing to scroll. Searching
 // the seeded catalog fills the page with real content in normal flow -- the same technique
@@ -76,9 +76,9 @@ async function expectTabContentClearsBar(page: Page) {
 async function startASession(page: Page, request: Parameters<typeof registerHousehold>[1], name: string) {
   await registerHousehold(page, request, name);
   await pickExercise(page, 'Barbell Bench Press');
-  await logSet(page).click();
-  await expect(page.getByText('New PR!')).toBeVisible();
-  await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+  await tapLogSet(page);
+  await expect(prCelebration(page)).toBeVisible();
+  await prCelebration(page).click({ force: true }); // dismiss (scrim click)
   await expect(sessionBar(page)).toBeVisible();
 }
 
@@ -136,9 +136,9 @@ test.describe('Session bar stacking', () => {
     await page.getByRole('button', { name: 'Save routine' }).click();
     await page.getByRole('button', { name: 'Start routine' }).click();
 
-    await logSet(page).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
     await expect(sessionBar(page)).toBeVisible();
 
     await page.getByRole('button', { name: 'End routine' }).click();
