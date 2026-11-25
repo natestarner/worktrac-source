@@ -55,6 +55,7 @@ need the "why" or the debugging story.
 | 2026-11-21 | [A tap on History slid off its button in WebKit, so the menu never opened](2026-11-21-history-tap-slid-away-in-webkit.md) — Playwright's scroll reached the page only with the click, blocks drawn by it shrank 60px mid-press, and the click went to the card; #440, a nightly flake for a month | e2e / WebKit |
 | 2026-11-24 | [Sets logged on a just-created exercise vanished from its screen after reconnecting](2026-11-24-new-exercise-sets-vanish-on-reconnect.md) — the set-saved handlers refreshed the list under the exercise's temp id after the screen had moved to the real one ("Set 1" only, even after a reload), and the queued-set readers stopped drawing them at the remap | Offline / log screen |
 | 2026-11-24 | [A fresh empty History list per render looped the Log screen](2026-11-24-empty-history-render-loop-delayed-outbox-persist.md) — offline with no History held, `useHistory`'s `?? []` re-ran the prefill effect every render; the storm delayed saving an offline set past a reload | Frontend state / offline |
+| 2026-11-25 | [The session bar blinked out when the next workout started while the last one was still ending](2026-11-25-ended-session-answer-blinks-session-bar.md) — a live-session read from before the End landed named the ended workout, replaced the new one's placeholder, and closed an open "End this workout?" sheet; a nightly "flake" in both engines | Offline / log screen |
 
 ## Adding a new incident
 

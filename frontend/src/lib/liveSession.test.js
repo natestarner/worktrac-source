@@ -1,7 +1,7 @@
 import { MutationObserver, QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchLiveSession } from './liveSession';
-import { markCreatesEnded } from './endedSessions';
+import { markCreatesEnded, markSessionEnded } from './endedSessions';
 import { LOG_SET_MUTATION_KEY } from './queryClient';
 import { queryKeys } from '../api/queryKeys';
 import { getLiveSession } from '../api/sessions';
@@ -110,6 +110,30 @@ describe('fetchLiveSession', () => {
     getLiveSession.mockResolvedValue(null);
 
     expect(await fetchLiveSession(client, PERSON)).toBeNull();
+  });
+
+  // The bug (2026-11-25, lower's nightly "Just me" flake): the next workout's first set is logged
+  // while the previous workout's End is still on its way. A live-session read that left before the
+  // End reached the server comes back naming the workout just ended. Taken as "a real session", it
+  // replaced the new workout's placeholder; useLiveSession suppresses an ended id, so the session
+  // bar vanished for a round trip and an open "End this workout?" sheet closed itself.
+  it('keeps the placeholder when the server names a workout this device already ended', async () => {
+    client.setQueryData(queryKeys.liveSession(PERSON), PLACEHOLDER);
+    queueSet('optimistic-a');
+    markSessionEnded(PERSON, REAL.id);
+    getLiveSession.mockResolvedValue(REAL);
+
+    expect(await fetchLiveSession(client, PERSON)).toBe(PLACEHOLDER);
+  });
+
+  // With nothing queued there is no new workout to protect: the answer stands, exactly as before,
+  // and useLiveSession suppresses the ended id on read.
+  it('takes an ended session as it was answered when nothing is queued', async () => {
+    client.setQueryData(queryKeys.liveSession(PERSON), PLACEHOLDER);
+    markSessionEnded(PERSON, REAL.id);
+    getLiveSession.mockResolvedValue(REAL);
+
+    expect(await fetchLiveSession(client, PERSON)).toEqual(REAL);
   });
 
   it('lets a failed fetch fail, as before', async () => {
