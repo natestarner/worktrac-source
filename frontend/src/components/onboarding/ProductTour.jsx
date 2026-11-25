@@ -7,7 +7,7 @@ import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { installFocusTrap } from '../../lib/focusTrap';
 import { lockBodyScroll } from '../../lib/bodyScrollLock';
-import { TOUR_STEPS } from './tourSteps';
+import { TOUR_SAMPLE_DRAFT, TOUR_STEPS } from './tourSteps';
 import { pickTourExercise } from './tourExercise';
 import { useTourAnchor } from './useTourAnchor';
 import { computeTourFrame, VIEWPORT_MARGIN } from './tourPosition';
@@ -104,6 +104,18 @@ export default function ProductTour() {
       backToPicker();
     } else if (step.screen.exercise === 'open' && tourExerciseId != null) {
       selectExercise(tourExerciseId);
+      // In the same batch as the select, for the reason finishOrSkip gives: a 'user' draft is in
+      // context on ExerciseDetail's first render, so its prefill effect leaves it alone.
+      if (step.screen.sampleDraft) {
+        setDraft({
+          exerciseId: tourExerciseId,
+          weight: TOUR_SAMPLE_DRAFT.weight,
+          reps: TOUR_SAMPLE_DRAFT.reps,
+          durationSeconds: null,
+          setCount: 0,
+          source: 'user',
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, tourExerciseId]);

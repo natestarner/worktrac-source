@@ -38,6 +38,13 @@ reasoning — read those before changing the mechanism, not just this list.
   `exerciseSearch` as a side effect, so the search restore has to happen *after*.
   `ProductTour.test.jsx`'s restore tests pin all six draft fields, the exercise, and the pathname
   together for this reason.
+- **Steps 5-6 put a sample weight in (`screen.sampleDraft`, `TOUR_SAMPLE_DRAFT`)**, written by
+  the arrange effect in the same batch as the exercise select, as a `'user'` draft so the prefill
+  leaves it alone. Without it a brand-new person's tour exercise has a blank weight and the
+  spotlit button is a disabled "Enter a weight" (TestFlight 1.4). It needs no restore of its own:
+  `finishOrSkip` already puts back all six draft fields from the snapshot, and it must stay the
+  LAST draft write. Nothing is logged; the overlay blocks the button, which
+  `onboarding-tour.spec.ts`'s click-through test now proves against an enabled one.
 - **The welcome flag (`lib/onboardingPending.js`) is armed only in `AuthContext.confirmEmail`,
   never `login`.** `confirmEmail` is the only path where the account is provably created in the
   same request; `login` runs on every ordinary sign-in an account will ever do.
