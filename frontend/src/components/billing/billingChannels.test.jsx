@@ -281,7 +281,9 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     expect(syncStorePurchases).toHaveBeenCalledWith('app-store', [PURCHASED]);
   });
 
-  it('a household paying through the App Store manages it in the store, and is offered no Pro checkout', async () => {
+  // No Pro CHECKOUT (prepare refuses an entitled household), but told where Pro is: the same
+  // subscription, switched in Apple's sheet. TestFlight 1.4: the app said nothing about Pro here.
+  it('a household paying through the App Store manages it in the store, and is told Pro is switched there', async () => {
     renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'APP_STORE' });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage subscription' }));
@@ -289,8 +291,19 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
     await waitFor(() => expect(manageSubscriptions).toHaveBeenCalled());
     expect(screen.getByText('Billed through the App Store.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Training clients/)).not.toBeInTheDocument();
+    expect(screen.getByText('Training clients?')).toBeInTheDocument();
+    expect(screen.getByText(/To switch, tap Manage subscription above and choose a Pro plan/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Upgrade to Pro|Pro/ })).not.toBeInTheDocument();
     expect(createPortalSession).not.toHaveBeenCalled();
+  });
+
+  // A household billed on the web is never pointed anywhere from the app: that is the link-out
+  // App Review rejected (3.1.1). So no Pro line at all for it.
+  it('a household billed on the web is told nothing about Pro in the app', async () => {
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', billingSource: 'STRIPE' });
+
+    expect(await screen.findByText(/billed on huddle.fitness/)).toBeInTheDocument();
+    expect(screen.queryByText(/Training clients/)).not.toBeInTheDocument();
   });
 
   // Apple: on an iPad app running on a Mac, don't show the manage sheet; say where instead.

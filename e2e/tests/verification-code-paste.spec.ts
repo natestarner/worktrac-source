@@ -37,4 +37,19 @@ test.describe('pasting the emailed code', () => {
     await page.keyboard.insertText('Your code is 482 913');
     await expect(field).toHaveValue('482913');
   });
+
+  // "Paste code" reads the clipboard itself, so pasting never depends on iOS's edit menu, which the
+  // App Store app's confirm screen did not show (TestFlight 1.4). Chromium only: it is the engine
+  // Playwright can grant clipboard access to.
+  test('"Paste code" fills the box from the clipboard', async ({ page, context, browserName }) => {
+    test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only in Playwright');
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/forgot-password');
+    await page.getByPlaceholder('you@example.com').fill(`huddle+e2e-nobody-${Date.now()}@starner.co`);
+    await page.getByRole('button', { name: 'Send reset code' }).click();
+    await page.evaluate(() => navigator.clipboard.writeText('Your code is 482 913'));
+
+    await page.getByRole('button', { name: 'Paste code' }).click();
+    await expect(page.getByPlaceholder('123456')).toHaveValue('482913');
+  });
 });

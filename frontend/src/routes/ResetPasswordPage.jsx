@@ -8,6 +8,7 @@ import Spinner from '../components/shared/Spinner';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 import PasswordInput from '../components/shared/PasswordInput';
 import { codeFromInput } from '../utils/verificationCode';
+import PasteCodeButton from '../components/auth/PasteCodeButton';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -144,6 +145,13 @@ export default function ResetPasswordPage() {
           }}
         />
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
+        <PasteCodeButton
+          disabled={submitting}
+          onCode={(pasted) => {
+            setCode(pasted);
+            setCodeError(false);
+          }}
+        />
 
         <label htmlFor="new-password" style={labelStyle}>New password</label>
         <PasswordInput

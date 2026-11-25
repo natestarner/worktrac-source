@@ -20,8 +20,10 @@ appId: fitness.huddle.app
 - tapOn:
     text: 'Barbell Bench Press'
     below: '(?i)search results'
+# The exercise screen, by its weight box: on a first set Log set reads "Enter a weight" until a
+# weight is in (#602), so waiting for "Log set" here never ends (the nightly's red, 2026-11-25).
 - extendedWaitUntil:
-    visible: 'Log set'
+    visible: 'Weight.*'
     timeout: 30000
 # A weight first: on a weighted exercise with no history the weight is blank and Log set reads
 # "Enter a weight" until there is one (#602). This step is what took the nightly flows red on

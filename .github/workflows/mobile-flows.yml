@@ -83,7 +83,7 @@ jobs:
           - shard: link-and-browser
             flows: 03-checkout-return-link 04-in-app-browser-sheet
           - shard: share-and-refresh
-            flows: 05-export-share-sheet 06-history-pull-to-refresh
+            flows: 05-export-share-sheet 06-history-pull-to-refresh 08-paste-the-emailed-code
     runs-on: xcode-27
     timeout-minutes: 75
     environment: mobile-e2e

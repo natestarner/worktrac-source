@@ -8,6 +8,7 @@ import { rememberSignInMethod } from '../lib/lastSignInMethod';
 import SigningInOverlay from '../components/auth/SigningInOverlay';
 import { useSigningIn } from '../components/auth/useSigningIn';
 import { codeFromInput } from '../utils/verificationCode';
+import PasteCodeButton from '../components/auth/PasteCodeButton';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -208,6 +209,13 @@ export default function ConfirmEmailPage() {
           }}
         />
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
+        <PasteCodeButton
+          disabled={submitting}
+          onCode={(pasted) => {
+            setCode(pasted);
+            setCodeError(false);
+          }}
+        />
 
         {/* No spinner of its own: the overlay covers the screen while this is disabled. */}
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={primaryButtonStyle}>

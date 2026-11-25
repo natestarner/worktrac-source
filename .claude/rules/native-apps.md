@@ -318,6 +318,7 @@ contains it.
 | `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen. If the sheet never draws its close control in a minute, the app is relaunched and Terms opened ONCE more: the runner's SafariViewService has hung on its cold start, leaving a blank sheet with nothing to tap (2026-10-31). A sheet that never opens fails both attempts |
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
+| `08-paste-the-emailed-code` | Signs UP (no seeded household); screenshots what two taps on the code box show (`08-after-two-taps.png`, evidence only), then "Paste code" must put a copied `123 456` in as `123456` |
 | `07-rest-notification-permission` | The first rest timer makes iOS ask to send notifications. The only flow launched with notifications **unset** (`NOTIFICATIONS: unset` into `subflows/sign-in.yaml`) |
 
 - **Maestro GRANTS every permission at launch unless a flow says otherwise.** So no flow ever saw
@@ -336,7 +337,7 @@ contains it.
   (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
   a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
   Seeding through the API also means the welcome modal is never armed.
-- **Three shards, and one retry that classifies.** The seven flows run two or three per runner, in parallel
+- **Three shards, and one retry that classifies.** The eight flows run two or three per runner, in parallel
   (`mobile-flows.yml`'s matrix; a check fails the job if a flow file isn't in exactly one shard). A
   flow that ran and failed gets ONE more attempt: **passed**, **flaky** (failed, then passed: a
   `::warning::`, not a red run) or **failed** (both). Each shard's step summary and `results.tsv` say

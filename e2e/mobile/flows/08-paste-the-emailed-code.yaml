@@ -1,0 +1,82 @@
+# Pasting the emailed code on "Check your email" (TestFlight 1.4, 2026-11-25): tapping the box did
+# not bring up iOS's Paste menu. Focusing it sets things moving at once -- the app's window shrinks
+# above the keyboard, the page re-centres its card, iOS's one-time-code AutoFill bar appears -- and
+# iOS drops its edit menu when the field moves under it. "Paste code" reads the clipboard itself.
+#
+# Signs UP rather than in, so it needs no seeded household. The address matches the e2e no-op
+# pattern (huddle+e2e-...), so no email is really sent, and lower's test-data cleanup removes it.
+#
+# Two halves:
+#   1. Evidence, not a gate: tap the box, tap it again (where iOS shows its menu), and screenshot
+#      what is there -- 08-after-two-taps.png in the artifact.
+#   2. The gate: "Paste code" puts a copied "123 456" in the box as 123456.
+appId: fitness.huddle.app
+name: Paste the emailed code
+---
+- retry:
+    maxRetries: 1
+    commands:
+      - launchApp:
+          clearState: true
+          arguments:
+            huddleConsoleToFile: true
+- runFlow:
+    when:
+      visible: 'Open in .*Huddle.*'
+    commands:
+      - tapOn: 'Cancel'
+- extendedWaitUntil:
+    visible: 'Forgot password\?'
+    timeout: 60000
+- tapOn: 'Sign up'
+- extendedWaitUntil:
+    visible: 'Your name'
+    timeout: 20000
+- tapOn:
+    text: 'Your name'
+    index: 0
+- inputText: 'Maestro'
+- tapOn:
+    text: 'Email'
+    index: 0
+- inputText: ${'huddle+e2e-maestro-' + Date.now() + '@starner.co'}
+- tapOn:
+    text: 'Password'
+    index: 0
+- inputText: 'password123'
+- scrollUntilVisible:
+    element: 'Create household'
+    direction: DOWN
+    timeout: 10000
+- tapOn: 'Create household'
+- extendedWaitUntil:
+    visible: 'Check your email'
+    timeout: 60000
+
+# 1. Evidence: two taps on the box, then what iOS shows.
+- setClipboard: '123 456'
+# iOS reports the box by its <label> ("Verification code"), as sign-in's Email field.
+- tapOn:
+    text: 'Verification code'
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    text: 'Verification code'
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: mobile-flows-out/08-after-two-taps
+
+# 2. The gate. The box may hold whatever an edit menu pasted above, so clear it first.
+- eraseText: 10
+- tapOn: 'Paste code'
+# iOS asks with its own small "Paste" bubble beside the button: that is the permission prompt.
+- runFlow:
+    when:
+      visible: '^Paste$'
+    commands:
+      - tapOn: '^Paste$'
+- extendedWaitUntil:
+    visible: '.*123456.*'
+    timeout: 10000

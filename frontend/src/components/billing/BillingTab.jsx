@@ -549,6 +549,13 @@ function paidControls(channel, billingSource, { handleManageBilling, handleManag
         onUpgrade: null,
         billedElsewhere: null,
         billedInStore: billingSourceName(source),
+        // Pro is sold in the same subscription group, so a household this store bills switches to
+        // it in the store's own sheet -- prepare refuses an entitled household (billing.md), which
+        // is why there is no Pro card here. Without this line the app said nothing about Pro at
+        // all to a Plus household, while the web shows "Training clients?" (TestFlight 1.4).
+        // Only for the store's own households: pointing a Stripe one to the web is the link-out
+        // App Review rejected (3.1.1).
+        proInStore: true,
       };
     }
     return {
@@ -604,6 +611,7 @@ function PaidSummary({
   manageLabel = 'Manage billing',
   billedElsewhere = null,
   billedInStore = null,
+  proInStore = false,
   onRequestRefund = null,
   pausableLogins = [],
   proInterval,
@@ -708,6 +716,20 @@ function PaidSummary({
             Request a refund
           </Button>
         </OfflineDisabledWrap>
+      )}
+
+      {/* Plus -> Pro for a household the app's store bills: no card (the store's sheet does the
+          switch), just where to find it. See paidControls' proInStore. */}
+      {plan === 'PLUS' && !comped && proInStore && onManage && (
+        <>
+          <SectionLabel>Training clients?</SectionLabel>
+          <div style={cardStyle}>
+            <p style={{ ...mutedLineStyle, margin: 0 }}>
+              Huddle Pro gives each client a private login, with assistants, programs and a roster.
+              To switch, tap {manageLabel} above and choose a Pro plan.
+            </p>
+          </div>
+        </>
       )}
 
       {/* Plus -> Pro, the one upgrade path this screen offers a PAYING household. Reuses
