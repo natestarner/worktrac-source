@@ -198,7 +198,7 @@ describe('warmOfflineCache afterRestore', () => {
   // these keys: insertOptimisticExercise (AddEditExerciseModal) for a queued custom exercise, and
   // handleToggleFavorite (ExerciseDetail) for a star tapped offline -- which also carries that
   // exercise's tags and persistent note, since all three live on PersonExerciseDto. liveSession is
-  // excluded for the same reason (EndWorkoutConfirmModal nulls it optimistically on end-workout).
+  // excluded for the same reason (EndWorkoutSheet nulls it optimistically on end-workout).
   // Refetching any of them at boot would silently discard work the outbox still owes the server.
   it('does NOT refetch the keys that can hold unsynced local state', async () => {
     seedRestoredCache();

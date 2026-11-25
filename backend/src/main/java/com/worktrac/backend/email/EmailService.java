@@ -13,6 +13,7 @@ import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
+import com.worktrac.backend.account.AccountDeletedEvent;
 import com.worktrac.backend.user.SecurityNoticeEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -356,6 +357,78 @@ public class EmailService {
 
         String plain = unescapeHtml(body.replace("<br><br>", "\n\n").replace("<b>", "").replace("</b>", "")
                 .replace("&rarr;", "→")) + "\n\n" + appUrl;
+        return send(event.email(), unescapeHtml(heading), plain, html);
+    }
+
+    // Where somebody whose account is gone can still reach a person: the address the marketing
+    // site's Support page, Terms and Privacy Policy publish. In-app Contact Us needs a login.
+    static final String SUPPORT_EMAIL = "support@huddle.fitness";
+
+    /**
+     * To every login that had a way into a household that was just deleted
+     * ({@link AccountDeletedEvent}): what went, when, that it cannot be undone, and who to tell if
+     * it wasn't them.
+     *
+     * <p>Plain like {@link #sendSecurityNotice}, with one difference: no "Open Huddle" button for a
+     * login that no longer exists, since it would open a sign-in that can only fail. The only
+     * address offered is support's, never a link that signs in.
+     */
+    public String sendAccountDeleted(AccountDeletedEvent event) {
+        String when = NOTICE_TIME.format(Instant.ofEpochMilli(event.occurredAtMillis()));
+        String name = event.accountName() == null || event.accountName().isBlank()
+                ? "Your Huddle account" : escapeHtml(event.accountName());
+        String support = "<a href=\"mailto:" + SUPPORT_EMAIL + "\">" + SUPPORT_EMAIL + "</a>";
+
+        String heading;
+        StringBuilder body = new StringBuilder();
+        if (event.youDeletedIt()) {
+            heading = "Your Huddle account was deleted";
+            body.append(name).append(" was permanently deleted on ").append(when)
+                    .append(", with every person, workout and routine in it. This can't be undone.");
+            switch (event.billing()) {
+                case WEB_CANCELLED -> body.append("<br><br>Your paid plan was cancelled with it, and you won't be"
+                        + " charged again.");
+                case STORE_STILL_BILLING -> body.append("<br><br><b>Your App Store subscription is still active.</b>"
+                        + " Apple bills it, so deleting the account can't stop it: cancel it on your iPhone or"
+                        + " iPad in <b>Settings &rarr; your name &rarr; Subscriptions</b>.");
+                case NONE -> { }
+                default -> throw new IllegalArgumentException("Unknown billing " + event.billing());
+            }
+            body.append("<br><br>")
+                    .append(event.loginRemains()
+                            ? "Your login still signs you in to your other households on Huddle."
+                            : "Your login was deleted with it.")
+                    .append("<br><br>If you didn't do this, somebody else could sign in as you. Email ")
+                    .append(support).append(" right away.");
+        } else {
+            heading = name.equals("Your Huddle account")
+                    ? "A Huddle account you belonged to was deleted"
+                    : name + " was deleted from Huddle";
+            body.append(name.equals("Your Huddle account") ? "A Huddle account you belonged to" : name)
+                    .append(" was permanently deleted by its owner on ").append(when)
+                    .append(", with every person, workout and routine in it, including yours there.")
+                    .append(" This can't be undone.<br><br>")
+                    .append(event.loginRemains()
+                            ? "Your login still signs you in to your other households on Huddle."
+                            : "Your login was deleted with it, since it wasn't part of any other household.")
+                    .append("<br><br>If this is unexpected, email ").append(support).append(".");
+        }
+
+        // A login that was deleted gets no "Open Huddle": it would open a sign-in that can only fail.
+        String template = event.loginRemains()
+                ? simpleNoticeTemplate
+                : simpleNoticeTemplate.replaceAll("(?s)<!--CTA-->.*?<!--/CTA-->", "");
+        String html = template
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle")
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", heading)
+                .replace("{{BODY}}", body.toString());
+
+        String plain = unescapeHtml(body.toString().replace("<br><br>", "\n\n").replace("<b>", "")
+                .replace("</b>", "").replace("&rarr;", "→")
+                .replaceAll("<a href=\"mailto:[^\"]*\">([^<]*)</a>", "$1"))
+                + (event.loginRemains() ? "\n\n" + appUrl : "");
         return send(event.email(), unescapeHtml(heading), plain, html);
     }
 

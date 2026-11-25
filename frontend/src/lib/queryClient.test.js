@@ -6,6 +6,7 @@ import {
   DELETE_SET_MUTATION_KEY,
   EDIT_SET_MUTATION_KEY,
   LOG_SET_MUTATION_KEY,
+  SAVE_NOTE_MUTATION_KEY,
   clearOutboxMutations,
   flushOutbox,
   persistOptions,
@@ -27,6 +28,7 @@ import { isSessionEnded, markCreatesEnded, markSessionEnded } from './endedSessi
 import { deleteSet, editSet, logLiveSet, logSetIntoSession } from '../api/sets';
 import { getHistory } from '../api/sessions';
 import { addExercise, favoriteExercise } from '../api/exercises';
+import { saveLiveExerciseNote } from '../api/notes';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
 import { HISTORY_FORMAT, fingerprintsOf, flattenHistory, heldForSync } from './historySync';
@@ -38,6 +40,11 @@ vi.mock('../api/sets', () => ({
   editSet: vi.fn(),
   deleteSet: vi.fn(),
   listSessionSets: vi.fn(),
+}));
+
+vi.mock('../api/notes', () => ({
+  saveLiveExerciseNote: vi.fn(),
+  saveSessionExerciseNote: vi.fn(),
 }));
 
 vi.mock('../api/exercises', () => ({
@@ -865,6 +872,123 @@ describe('isUnsyncedWrite', () => {
 //
 // The degraded-conditions block below is the load-bearing half of this suite: it proves the new
 // writes are UNREACHABLE unless the server actually answered with a body.
+// A set (or edit, or note) written against a just-created exercise carries its TEMP id, but the
+// screen reads the REAL id's keys from the moment the create lands -- which is always before the
+// dependent write succeeds. Every key these handlers seed or invalidate must therefore be the real
+// one. docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md. Asserted against a real
+// cache, never a spy on invalidateQueries (frontend-core.md, "Invalidate the key the screen READS").
+describe('writes against a just-created exercise reconcile the REAL exercise id\'s keys', () => {
+  let client;
+  const PERSON = 7;
+  const REAL = 214;
+  const SESSION = { id: 55, startedAt: '2026-11-24T10:00:00Z', endedAt: null, manual: false };
+  const SET1 = { id: 1, sessionId: 55, exerciseId: REAL, weight: 50, reps: 10, durationSeconds: null, unit: 'lb', createdAt: 't1', restSeconds: null };
+  const SET2 = { id: 2, sessionId: 55, exerciseId: REAL, weight: 60, reps: 10, durationSeconds: null, unit: 'lb', createdAt: 't2', restSeconds: 0 };
+  let tempId;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearSetIdMap();
+    await clearExerciseIdMap();
+    localStorage.clear();
+    tempId = newTempExerciseId();
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearSetIdMap();
+    await clearExerciseIdMap();
+    localStorage.clear();
+  });
+
+  function run(key, variables) {
+    const observer = new MutationObserver(client, { ...client.getMutationDefaults(key), mutationKey: key });
+    return observer.mutate(variables);
+  }
+  const logSet = (overrides = {}) =>
+    run(LOG_SET_MUTATION_KEY, {
+      mode: 'live', personId: PERSON, exerciseId: tempId, weight: 60, reps: 10,
+      tempId: 'optimistic-2', idempotencyKey: 'k2', clientLoggedAt: 't2', sessionId: null,
+      ...overrides,
+    });
+  const isStale = (key) => client.getQueryState(key)?.isInvalidated;
+
+  // The reported bug, exactly: the screen's list (real key) was fetched after set 1 landed and holds
+  // only set 1; set 2 -- queued offline under the temp id -- then lands. Also the upgrade path: a set
+  // queued by an older build has this same shape (the temp id in its variables) and replays through
+  // this handler, with the mapping restored from IndexedDB.
+  it('a set queued under the temp id lands in the list the screen reads, and refreshes it', async () => {
+    setExerciseIdMapping(tempId, REAL);
+    const realKey = queryKeys.sessionSets(55, REAL);
+    client.setQueryData(realKey, [SET1]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET2 });
+
+    await logSet();
+
+    expect(client.getQueryData(realKey)).toEqual([SET1, { ...SET2, tempId: 'optimistic-2' }]);
+    expect(isStale(realKey)).toBe(true);
+    expect(isStale(queryKeys.exerciseSummary(PERSON, REAL, 55))).not.toBe(false);
+    // And nothing is built under the temp id, which nothing will ever read again.
+    expect(client.getQueryState(queryKeys.sessionSets(55, tempId))).toBeUndefined();
+  });
+
+  it('carries the summary across under the real id too', async () => {
+    setExerciseIdMapping(tempId, REAL);
+    const carried = { lastSession: null, best: null };
+    client.setQueryData(queryKeys.exerciseSummary(PERSON, REAL, null), carried);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET2 });
+
+    await logSet();
+
+    expect(client.getQueryData(queryKeys.exerciseSummary(PERSON, REAL, 55))).toEqual(carried);
+  });
+
+  // Still temp: no mapping, so mutationFn refuses to send and onSettled runs with no
+  // data. No key is touched under the real id -- there is no real id -- and nothing throws.
+  it('while the exercise is still temp, a failed set touches no real key', async () => {
+    // (No create in this client's cache, so the unresolved-id error is the terminal one. A create
+    // still queued would hold this set behind it in the serial scope and it would not run at all.)
+    await expect(logSet()).rejects.toThrow(/Exercise temp-exercise-/);
+    expect(logLiveSet).not.toHaveBeenCalled();
+    expect(client.getQueryState(queryKeys.sessionSets(55, REAL))).toBeUndefined();
+  });
+
+  // A library exercise (or any id with no temp past) resolves to itself: the keys are exactly the
+  // ones this handler always used.
+  it('a set on an exercise with no temp past keys exactly as before', async () => {
+    const libraryKey = queryKeys.sessionSets(55, 3);
+    client.setQueryData(libraryKey, [{ ...SET1, exerciseId: 3 }]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: { ...SET2, exerciseId: 3 } });
+
+    await logSet({ exerciseId: 3 });
+
+    expect(client.getQueryData(libraryKey)).toHaveLength(2);
+    expect(isStale(libraryKey)).toBe(true);
+  });
+
+  it('an edit dispatched while the exercise was temp refreshes the real list', async () => {
+    setExerciseIdMapping(tempId, REAL);
+    editSet.mockResolvedValue({ ...SET1, weight: 55 });
+    const realKey = queryKeys.sessionSets(55, REAL);
+    client.setQueryData(realKey, [SET1]);
+
+    await run(EDIT_SET_MUTATION_KEY, { setId: 1, weight: 55, reps: 10, personId: PERSON, sessionId: null, exerciseId: tempId, exerciseName: 'Zercher Squat' });
+
+    expect(isStale(realKey)).toBe(true);
+  });
+
+  it('a note saved while the exercise was temp refreshes the real note', async () => {
+    setExerciseIdMapping(tempId, REAL);
+    saveLiveExerciseNote.mockResolvedValue({ sessionId: 55, exerciseId: REAL, note: 'belt on' });
+    const realNote = queryKeys.sessionExerciseNote(55, REAL);
+    client.setQueryData(realNote, null);
+
+    await run(SAVE_NOTE_MUTATION_KEY, { mode: 'live', personId: PERSON, sessionId: null, exerciseId: tempId, exerciseName: 'Zercher Squat', note: 'belt on' });
+
+    expect(isStale(realNote)).toBe(true);
+  });
+});
+
 describe('logSet onSettled reconciles from the response (first-set flash)', () => {
   let client;
   const PERSON = 7;

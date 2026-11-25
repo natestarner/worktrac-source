@@ -22,10 +22,13 @@ import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 
 // Permanently erases an account and everything under it. Order matters: people must go
@@ -56,6 +59,8 @@ public class AccountDeletionService {
     private final AccountAccessService accountAccessService;
     private final ReconfirmationService reconfirmationService;
     private final UserIdentityRepository identityRepository;
+    private final ApplicationEventPublisher events;
+    private final Clock clock;
 
     public AccountDeletionService(AccountMembershipRepository membershipRepository,
                                    MembershipInviteRepository inviteRepository,
@@ -69,7 +74,8 @@ public class AccountDeletionService {
                                    AccountRepository accountRepository, PasswordEncoder passwordEncoder,
                                   AccountAccessService accountAccessService,
                                   ReconfirmationService reconfirmationService,
-                                  UserIdentityRepository identityRepository) {
+                                  UserIdentityRepository identityRepository,
+                                  ApplicationEventPublisher events, Clock clock) {
         this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
@@ -86,6 +92,8 @@ public class AccountDeletionService {
         this.accountAccessService = accountAccessService;
         this.reconfirmationService = reconfirmationService;
         this.identityRepository = identityRepository;
+        this.events = events;
+        this.clock = clock;
     }
 
     @Transactional
@@ -180,6 +188,12 @@ public class AccountDeletionService {
                 .map(membership -> membership.getUser().getId())
                 .distinct()
                 .toList();
+        // Read now for the deletion emails at the end: both rows are gone by then.
+        String accountName = accountRepository.findById(accountId).map(Account::getName).orElse(null);
+        List<String> memberEmails = new ArrayList<>();
+        for (Long memberUserId : memberUserIds) {
+            userRepository.findById(memberUserId).ifPresent(member -> memberEmails.add(member.getEmail()));
+        }
         // ⚠️ BEFORE the memberships, people and users below. membership_invites has NO ACTION FKs
         // to accounts, people AND users (V71), so these rows have to be gone first or the deletes
         // that follow fail the constraint -- a 503 from an irreversible action, which is exactly
@@ -244,6 +258,12 @@ public class AccountDeletionService {
         accountRepository.deleteById(accountId);
         log.info("Deleted account {}", accountId);
 
+        // Every login that had a way in is told, from inside THIS transaction (the outbox), so a
+        // deletion that rolls back -- a refusal, a failed Apple revocation, a constraint -- emails
+        // nobody. After the reap above, so each email can say truthfully whether the login still
+        // signs in elsewhere. AccountDeletedEvent says why this is a security control.
+        publishDeletedEmails(user, accountName, memberEmails, stripeSubscriptionId, storeStillBilling);
+
         // Every replica may still hold this household's memberships in its access cache, and a
         // deleted household must stop answering at once -- not when each entry happens to expire.
         // Per ACCOUNT, not per user: a member who also belongs to another household stays signed in
@@ -255,5 +275,30 @@ public class AccountDeletionService {
         // StripeSubscriptionCanceller for why both halves of that ordering are load-bearing.
         stripeSubscriptionCanceller.scheduleCancellation(accountId, stripeSubscriptionId);
         stripeSubscriptionCanceller.recordStoreLeftRunning(accountId, storeStillBilling);
+    }
+
+    private void publishDeletedEmails(User deletedBy, String accountName, List<String> memberEmails,
+                                      String stripeSubscriptionId, String storeStillBilling) {
+        long now = clock.instant().toEpochMilli();
+        AccountDeletedEvent.Billing billing = storeStillBilling != null
+                ? AccountDeletedEvent.Billing.STORE_STILL_BILLING
+                : stripeSubscriptionId != null && !stripeSubscriptionId.isBlank()
+                        ? AccountDeletedEvent.Billing.WEB_CANCELLED
+                        : AccountDeletedEvent.Billing.NONE;
+        // The login that deleted it first, and always.
+        List<String> recipients = new ArrayList<>();
+        recipients.add(deletedBy.getEmail());
+        for (String email : memberEmails) {
+            if (email != null && recipients.stream().noneMatch(email::equalsIgnoreCase)) {
+                recipients.add(email);
+            }
+        }
+        for (String email : recipients) {
+            boolean deleter = email.equalsIgnoreCase(deletedBy.getEmail());
+            // Asked after the reap: a login kept because it belongs to another household is still here.
+            boolean loginRemains = userRepository.existsByEmail(email);
+            events.publishEvent(new AccountDeletedEvent(email, accountName, now, deleter, loginRemains,
+                    deleter ? billing : AccountDeletedEvent.Billing.NONE));
+        }
     }
 }

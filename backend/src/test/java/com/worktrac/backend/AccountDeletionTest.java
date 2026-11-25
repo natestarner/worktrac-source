@@ -3,6 +3,7 @@ package com.worktrac.backend;
 import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.worktrac.backend.account.AccountDeletedEvent;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.billing.BillingPlan;
@@ -36,6 +37,11 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -490,5 +496,108 @@ class AccountDeletionTest extends AbstractIntegrationTest {
         assertTrue(personRepository.findById(personId).isPresent());
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    // ---- The account-deleted email (AccountDeletedEvent) ----
+
+    private static boolean isDeleted(AccountDeletedEvent event, String email, String accountName,
+                                     boolean youDeletedIt, boolean loginRemains) {
+        return event != null && event.email().equalsIgnoreCase(email)
+                && accountName.equals(event.accountName())
+                && event.youDeletedIt() == youDeletedIt && event.loginRemains() == loginRemains
+                // The real clock runs here, so "now", give or take the test's own duration.
+                && Math.abs(event.occurredAtMillis() - System.currentTimeMillis()) < 60_000;
+    }
+
+    @Test
+    void deletingEmailsTheLoginThatDidIt() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "deletemail-" + suffix + "@example.com";
+        JsonNode registration = register(email, "Robin");
+        String token = registration.get("token").asText();
+        String accountName = registration.get("account").get("name").asText();
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        verify(emailService, timeout(2000)).sendAccountDeleted(argThat(e ->
+                isDeleted(e, email, accountName, true, false) && e.billing() == AccountDeletedEvent.Billing.NONE));
+    }
+
+    // Everybody else with a way in is told too, and each is told truthfully whether their login
+    // survived: here the member also owns another household, so theirs does.
+    @Test
+    void deletingEmailsEveryOtherMemberAndSaysTheirLoginRemains() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String ownerEmail = "delowner-" + suffix + "@example.com";
+        JsonNode regA = register(ownerEmail, "Pat");
+        String tokenA = regA.get("token").asText();
+        long accountIdA = regA.get("account").get("id").asLong();
+        String accountName = regA.get("account").get("name").asText();
+
+        String memberEmail = "delmember-" + suffix + "@example.com";
+        register(memberEmail, "Jo");
+        long memberUserId = userRepository.findByEmail(memberEmail).orElseThrow().getId();
+        jdbc.update("INSERT INTO account_memberships (account_id, user_id, person_id, account_role, created_at) "
+                + "VALUES (?, ?, NULL, 'MEMBER', GETDATE())", accountIdA, memberUserId);
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        verify(emailService, timeout(2000)).sendAccountDeleted(argThat(e ->
+                isDeleted(e, ownerEmail, accountName, true, false)));
+        verify(emailService, timeout(2000)).sendAccountDeleted(argThat(e ->
+                isDeleted(e, memberEmail, accountName, false, true)
+                        && e.billing() == AccountDeletedEvent.Billing.NONE));
+    }
+
+    // A paid web plan is cancelled with the household, and the email says so.
+    @Test
+    void deletingAWebPaidHouseholdSaysThePlanWasCancelled() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "delpaid-" + suffix + "@example.com";
+        JsonNode registration = register(email, "Lee");
+        String token = registration.get("token").asText();
+        long accountId = registration.get("account").get("id").asLong();
+
+        org.mockito.Mockito.when(stripeService.isConfigured()).thenReturn(true);
+        Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
+        subscription.setStripeSubscriptionId("sub_mail_" + suffix);
+        subscriptionRepository.saveAndFlush(subscription);
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        verify(emailService, timeout(2000)).sendAccountDeleted(argThat(e -> e != null
+                && e.email().equalsIgnoreCase(email) && e.billing() == AccountDeletedEvent.Billing.WEB_CANCELLED));
+    }
+
+    // A refused deletion rolls back, and the email (an outbox row in the same transaction) with it.
+    // What this catches is the email leaving the transaction: red when the listener sent directly
+    // instead of enqueueing, with the publish moved above the password check. Where the publish sits
+    // is not what it pins -- inside the transaction, anywhere is safe.
+    @Test
+    void aRefusedDeletionEmailsNobody() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        JsonNode registration = register("delrefused-" + suffix + "@example.com", "Sky");
+        String token = registration.get("token").asText();
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE", "not-the-right-password")))
+                .andExpect(status().isForbidden());
+
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+        verify(emailService, never()).sendAccountDeleted(any());
     }
 }

@@ -218,7 +218,7 @@ export function UIProvider({ children }) {
   // dismiss it this way, and frontend-core.md names it as why this is NOT a Modal), and a reload
   // -- this state is in memory only and is never persisted, so boot always clears it.
   //
-  // `data` is { exerciseName, prs: [{ type, valueText, caption }], firstTime }.
+  // `data` is { exerciseName, prs: [{ type, valueText, caption }], firstTime, personFirstName }.
   const showCelebration = useCallback((data) => {
     // MERGE rather than replace when one is already on screen. Not reachable today -- the scrim
     // blocks the input that would raise a second one -- but replacing would silently drop the
@@ -226,6 +226,9 @@ export function UIProvider({ children }) {
     // able to raise. Cheaper to make it unrepresentable than to rely on the scrim holding.
     setCelebration((current) => {
       if (!current || current.exerciseName !== data?.exerciseName) return data;
+      // A quiet first-time card and a real record never share a card: the record wins, whichever
+      // arrived first, so a PR can never be shown as a "starting mark".
+      if (!!current.firstTime !== !!data?.firstTime) return data?.firstTime ? current : data;
       const seen = new Set((current.prs || []).map((p) => p.type));
       const added = (data?.prs || []).filter((p) => !seen.has(p.type));
       if (added.length === 0) return current;
@@ -235,7 +238,10 @@ export function UIProvider({ children }) {
     // null until there is something to show, so an effect inside it would fire on mount-with-data
     // -- which also happens on a re-render, and would buzz twice for one PR. This runs exactly
     // once per celebration.
-    tryHaptic('celebrate');
+    //
+    // A first-ever set gets the lighter single tap ('complete', the same one ending a workout
+    // uses) -- a welcome, not a fanfare. See PRCelebration's "first-ever set" header.
+    tryHaptic(data?.firstTime ? 'complete' : 'celebrate');
   }, []);
   const dismissCelebration = useCallback(() => {
     setCelebration(null);

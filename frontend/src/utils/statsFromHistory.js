@@ -294,6 +294,19 @@ function combineExercise(digests, exerciseId) {
   return ex;
 }
 
+// The exercises one workout holds, as `{ exerciseId, name }`, in no particular order. `workoutId` is
+// the session's id, or LIVE_WORKOUT_ID (null) for the live copy of a workout with no id yet -- the
+// same id its trend points carry. Empty when the digests do not hold that workout at all.
+export function workoutExercises(digests, workoutId) {
+  const found = new Map();
+  for (const digest of digests) {
+    for (const [exerciseId, part] of digest.exercises) {
+      if (part.sessions.some((point) => point.session.id === workoutId)) found.set(exerciseId, part.name);
+    }
+  }
+  return [...found].map(([exerciseId, name]) => ({ exerciseId, name }));
+}
+
 // A workout's total in the exercise's own unit (sessionVolume.js), scaled by volumeScale(kind).
 const pointVolume = (point, kind) => (kind === 'seconds' ? point.hold : kind === 'reps' ? point.reps : point.load);
 

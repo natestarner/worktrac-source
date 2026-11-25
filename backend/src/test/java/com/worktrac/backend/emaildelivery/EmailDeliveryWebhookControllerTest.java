@@ -73,6 +73,21 @@ class EmailDeliveryWebhookControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void keyThatOnlyStartsWithTheRealOneIsRejected() throws Exception {
+        // The byte comparison must still demand equal length, not just a matching prefix.
+        mockMvc.perform(post("/api/webhooks/email-delivery")
+                        .param("key", "test-webhook-key-123x")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/webhooks/email-delivery")
+                        .param("key", "test-webhook-key-12")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void wrongKeyIsRejected() throws Exception {
         mockMvc.perform(post("/api/webhooks/email-delivery")
                         .param("key", "not-the-right-key")

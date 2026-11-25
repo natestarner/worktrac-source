@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // The FIRST set of a workout -- the one that implicitly creates the session -- used to appear,
@@ -73,7 +73,7 @@ forEachConnectivityMode<void>('the first set of a workout never blinks out', {
       sample();
     }, ROW_LABEL);
 
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     // Hold the sampler open past the point where the write settles and the reconciliation lands.

@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise } from './support/exercises';
+import { logSetAt, pickExercise, logSetButton } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 import { turnOnMuscleHighlighter } from './support/muscleMap';
@@ -60,7 +60,7 @@ forEachConnectivityMode<void>('sets logged in any mode are on the Trends muscle 
     const picker = page.getByPlaceholder('Search all exercises');
     await expect(picker.or(page.getByRole('button', { name: 'Log set' })).first()).toBeVisible();
     if (await picker.isVisible()) await pickExercise(page, EXERCISE);
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
   },
 
   // Heavier each time: logSetAt expects (and dismisses) a record on every set. The weight is

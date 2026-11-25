@@ -83,7 +83,7 @@ export default function ExercisePicker({
   const groups = [];
   if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', noun: 'favorites', items: favorites });
   if (otherLogged.length > 0) {
-    groups.push({ id: 'other', name: 'Other Previously Logged', noun: 'exercises', items: otherLogged });
+    groups.push({ id: 'other', name: 'Previously Logged', noun: 'exercises', items: otherLogged });
   }
 
   // Search view: ranked, token-based matching across the whole catalog.
@@ -189,7 +189,7 @@ export default function ExercisePicker({
           </div>
         )}
 
-        {/* Default view: Favorites + Other Previously Logged */}
+        {/* Default view: Favorites + Previously Logged */}
         {!loading && !searching && (
           !hasList ? (
             // The first screen a brand-new person ever sees, and it was the barest empty state in the

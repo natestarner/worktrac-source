@@ -1,4 +1,5 @@
 import { comparableValue, weightLb } from './formulas';
+import { formatSetSpaced } from './formatSet';
 import { CELEBRATED_PR_TYPES, SET_PR_TYPES } from '../components/trends/exerciseMetrics';
 
 // Which records a set just set. ONE derivation, three consumers: the celebration overlay
@@ -75,6 +76,45 @@ export function setPrTypes(set, priorBests) {
 // the overlay says "first time" and skips the confetti instead of claiming three PRs.
 export function isFirstEver(priorBests) {
   return priorBests?.comparable == null;
+}
+
+// ## The quiet "First <exercise>" card needs CERTAINTY, not an absence
+//
+// isFirstEver() answers "has THIS DEVICE seen a best", and that is not the same question as "has
+// this person ever logged it". A Free household's device holds 90 days of History, and offline the
+// server summary is unavailable or a cached answer from an earlier day -- so "nothing found" can be
+// a deadlift from five months ago. Showing the quiet card then would swallow a real PR, which is
+// the one thing a celebration change may never do. So the quiet card needs the SERVER to have said
+// "never logged" on this visit: the summary is computed over full history even on Free
+// (billing.md, "PR detection uses full history even on Free"). Anything short of that -- offline,
+// lie-fi, cold start, a revalidation still in flight -- falls back to the full "New PR!", which is
+// exactly what every first set showed before this card existed. That fallback is on the register
+// in .claude/rules/resilience.md; it is keyed on the READ's state, never on connectivity.
+//
+// Only the first set ever is quiet (option (c), agreed 2026-11-24). From set 2 on -- including set
+// 2 of that same first workout -- set 1 is folded into the prior bests (mergeBestWithLocalSets), so
+// anything that beats it is a full "New PR!" by the ordinary rule. There is no "first workout"
+// state to keep.
+
+// `query` is the TanStack summary query's { status, fetchStatus, data }.
+export function summaryConfirmsNeverLogged(query) {
+  if (!query || query.status !== 'success' || query.fetchStatus !== 'idle') return false;
+  const data = query.data;
+  return data != null && data.best == null && data.heaviestWeightLb == null;
+}
+
+export function isCertainFirstEver(priorBests, serverConfirmsNeverLogged) {
+  return isFirstEver(priorBests) && priorBests?.heaviestLb == null && serverConfirmsNeverLogged === true;
+}
+
+// The one row on the quiet card: the set itself, as a person would say it. Bodyweight reads
+// "10 reps" rather than formatSetSpaced's compact "BW × 10" -- this is a sentence on a card, not a
+// pill in a list.
+export function startingMarkText(set) {
+  if (set?.durationSeconds == null && !(Number(set?.weight) > 0)) {
+    return `${set.reps} ${set.reps === 1 ? 'rep' : 'reps'}`;
+  }
+  return formatSetSpaced(set);
 }
 
 export { CELEBRATED_PR_TYPES };

@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, logSetButton } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY specs: one assertion body, run across online / lie-fi / hard-offline / pinned-offline.
@@ -69,7 +69,7 @@ forEachConnectivityMode<void>('logging a set produces the same row', {
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
   },
   assert: async (page) => {
@@ -103,7 +103,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
   act: async (page) => {
     // Set 1 logs at the blank default (0). Step it up before set 2 so the carried value is
     // distinguishable from the default it would otherwise fall back to.
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toHaveCount(1);
 
@@ -119,7 +119,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
       }, { timeout: 45000, intervals: [50, 100, 250] })
       .toBe(25);
 
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2', { exact: true })).toHaveCount(1);
   },
@@ -145,7 +145,7 @@ forEachConnectivityMode<void>('a set is still listed under This session after a 
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRow(page, 0)).toBeVisible();
     // Load-bearing, and deliberately the OPPOSITE of offline-durability's "reload IMMEDIATELY".
@@ -180,7 +180,7 @@ forEachConnectivityMode<void>('correcting a just-logged set applies immediately'
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(editButtons(page)).toHaveCount(1);
 
@@ -214,7 +214,7 @@ forEachConnectivityMode<void>('favoriting and adding a session note both show im
     await pickExercise(page, EXERCISE);
   },
   act: async (page) => {
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(editButtons(page)).toHaveCount(1);
 
@@ -296,8 +296,10 @@ forEachConnectivityMode<void>('switching exercises never shows the previous one\
   },
   assert: async (page) => {
     // Pull-up has no history in any mode, so the em dash is the one correct answer everywhere.
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
+    await expect(logSetButton(page)).toBeVisible();
+    // Pull-up is a bodyweight exercise: once its (empty) history is known it reads 0 ("Added
+    // (lb)"). The frame sampler below is what proves no other number was ever painted.
+    await expect(page.getByRole('textbox', { name: 'Added (lb)' })).toHaveValue('0');
 
     // ...and it must have been the answer for every frame, not just the one this assertion
     // happened to land on. '25' here is the bench press's draft wearing the pull-up's name.

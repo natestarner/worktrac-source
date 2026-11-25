@@ -399,7 +399,7 @@ test.describe('Trends analytics', () => {
       expect(help.x + help.width, `the "?" sits outside the card at ${width}px`).toBeLessThanOrEqual(card.right + 1);
 
       // Nothing inside THIS card may reach past the viewport. Deliberately scoped to the weekly
-      // card rather than the whole page: the 26-week consistency grid above is a fixed ~407px and
+      // card rather than the whole page: the 26-week consistency grid above is ~407px at its phone-size squares and
       // already overhangs a 320px screen on its own, so a page-wide assertion here would fail on
       // somebody else's pre-existing layout and read as though the switcher had caused it.
       const cardOverflow = await weeklyMetric.evaluate((el, vw) => {

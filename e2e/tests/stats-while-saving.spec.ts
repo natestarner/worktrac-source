@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, logSetAt, pickExercise, setStepperPair } from './support/exercises';
+import { dismissPrCelebration, logSetAt, pickExercise, setStepperPair, tapLogSet } from './support/exercises';
 import { holdNetwork } from './support/faults';
 
 // The PRs board and Trends are built on the device from History, with the workout in progress
@@ -88,7 +88,7 @@ test('a set is in Trends while it saves, and never drops off as History catches 
   await pickExercise(page, 'Chin-up');
   const heldSave = await holdNetwork(page, LIVE_SET);
   await setStepperPair(page, 0, 12);
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
   await dismissPrCelebration(page);
   await expect.poll(() => heldSave.held()).toBe(1);

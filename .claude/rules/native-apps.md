@@ -60,7 +60,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
 | `availableSignInProviders()` / `signInWithProvider(p)` / `renderGoogleButton(el, …)` / `googleUsesRenderedButton()` (`socialSignIn.js`) | Google Identity Services' own rendered button; Apple's JS in popup mode; both scripts lazy. Nothing offered without a `socialSignIn` block in config.json | `@capgo/capacitor-social-login`: Apple's and Google's native sheets (Google refuses web sign-in inside a WebView). `useProperTokenExchange` returns Apple's one-time code UNEXCHANGED, which the backend needs to revoke on account deletion | `SocialSignIn.jsx` (Login, Register), `ProviderButtons.jsx` (Profile's Sign in with, Set a password, Delete account), `HelpTab` (copy only) |
 | `purchases.js`: `storeSource()`, `getProducts`, `purchase`, `restore`, `unfinishedTransactions`, `finish`, `manageSubscriptions`, `onTransaction` | `storeSource()` is null, so the channel is `embedded` and nothing here runs; each call answers safely anyway | `PurchasesPlugin.swift` (StoreKit 2). The signed JWS goes to the backend unopened; `finish` only after a 2xx | `BillingTab`, `lib/storeSync.js`, `hooks/useStoreTransactions`, `hooks/useStoreCatalog` |
-| `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutConfirmModal`'s End tap |
+| `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutSheet`'s End tap |
 | `appReviewUrl(storeUrl)` | `null` (so the web menu is unchanged) | The listing (`/me`'s `client.appStoreUrl`) with `?action=write-review`, or `null` while that is unset | `UserMenu`'s "Rate Huddle", opened with `openInBrowser` (the App Store app, not the sheet) |
 
 **Web Apple's popup must open inside the tap** (`socialSignIn.js#webApple`): iPhone Safari blocks a
@@ -415,6 +415,14 @@ secrets sign and upload as Huddle.
 - **The Fastfile is plumbing.** What gets built is decided in the workflow and npm scripts, so
   another build service (Capawesome Cloud is the fallback; Appflow is end-of-life) can replace
   fastlane without moving any decision.
+- **One Xcode major everywhere, chosen loudly.** Every macOS job (`mobile-ci`, `mobile-flows`,
+  the release's `ios`) runs on the runner label for that major (`xcode-27`) and calls
+  `scripts/select-xcode.sh 27`, which picks the newest non-beta install and **fails** if there is
+  none or it lacks the iOS 27 SDK. The old step fell back silently to the image default, so builds
+  31 and earlier went up on the iOS 26.2 SDK, and Apple warned that from April 2027 uploads need
+  the iOS 27 SDK or later (ITMS-90725). Each new Xcode major means bumping the label and the
+  argument together, in all three places. The deployment target (iOS 15.0) is still inside
+  Xcode 27's upload range (iOS 15–27).
 - **`Gemfile.lock` is committed** (from the first release run, 2026-10-24), so every release
   installs the same gems. There is no Ruby here: after bumping fastlane in the `Gemfile`, commit the
   lock the next run uploads as its `gemfile-lock` artifact.

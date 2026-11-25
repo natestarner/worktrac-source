@@ -56,21 +56,20 @@ describe('when to ask for a rating', () => {
   });
 });
 
+// The count is taken at the End tap (noteWorkoutEnded, above); this is only the ask, made as the
+// end-workout sheet closes, with what that tap answered.
 describe('askForReviewAfterWorkout', () => {
-  it("asks Apple's sheet a moment after the 3rd workout ends, not during the End tap", () => {
+  it("asks Apple's sheet a moment after it is told the ask is due, never at once", () => {
     vi.useFakeTimers();
-    askForReviewAfterWorkout({ setCount: 5 });
-    askForReviewAfterWorkout({ setCount: 5 });
-    askForReviewAfterWorkout({ setCount: 5 });
+    askForReviewAfterWorkout({ due: true });
     expect(native.requestAppReview).not.toHaveBeenCalled();
     vi.advanceTimersByTime(ASK_DELAY_MS);
     expect(native.requestAppReview).toHaveBeenCalledTimes(1);
   });
 
-  it('never asks on the 1st or 2nd workout', () => {
+  it('never asks when the End tap said it was not due', () => {
     vi.useFakeTimers();
-    askForReviewAfterWorkout({ setCount: 5 });
-    askForReviewAfterWorkout({ setCount: 5 });
+    askForReviewAfterWorkout({ due: false });
     vi.advanceTimersByTime(ASK_DELAY_MS * 10);
     expect(native.requestAppReview).not.toHaveBeenCalled();
   });

@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, logSetAt, pickExercise, setStepperPair } from './support/exercises';
+import { backToPicker, endWorkout, logSetAt, pickExercise, prCelebration, setStepperPair, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // ⚠️ THIS IS THE SPEC THAT KEEPS THE LOG SCREEN AND HISTORY TELLING THE SAME STORY.
@@ -47,11 +47,11 @@ async function logSetTakingNoRecord(page: Page, weight: number, reps: number) {
   const setRows = page.getByText(/^Set \d+$/);
   const rowsBefore = await setRows.count();
   await setStepperPair(page, weight, reps);
-  await page.getByRole('button', { name: 'Log set' }).click();
+  await tapLogSet(page);
   await expect(setRows).toHaveCount(rowsBefore + 1);
   // If this ever DID raise a celebration the set was not the no-record set this helper promises,
   // and every count below would be measuring something else.
-  await expect(page.getByText('New PR!')).toBeHidden();
+  await expect(prCelebration(page)).toBeHidden();
 }
 
 forEachConnectivityMode<{ personName: string }>('records are badged on the sets that took them, in the session in progress', {
@@ -127,8 +127,7 @@ forEachConnectivityMode<{ personName: string }>('the session-exercises list badg
     await logSetAt(page, 100, 10);
     // A separate, EARLIER workout: an exercise's first workout is a volume baseline, never a
     // volume record (utils/sessionVolume.js), so the workout under test needs one to beat.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
     // The badge compares against the earlier workout through the CACHED `history`, and the modes
     // below read that cache without refetching it -- so wait until it actually holds the baseline.

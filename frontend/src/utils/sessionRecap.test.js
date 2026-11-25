@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { formatSessionRecap, formatWorkoutDuration, sessionElapsedMs } from './sessionRecap';
+import { formatWorkoutDuration, sessionElapsedMs, sessionRecapTiles } from './sessionRecap';
+
+// The end-workout card's tiles, including the singular and the dropped-duration cases.
+describe('sessionRecapTiles', () => {
+  it('gives exercises, sets and minutes as tiles', () => {
+    const summary = { exerciseCount: 3, setCount: 12, elapsedMs: 47 * 60 * 1000 };
+    expect(sessionRecapTiles(summary)).toEqual([
+      { value: '3', label: 'exercises' },
+      { value: '12', label: 'sets' },
+      { value: '47', label: 'minutes' },
+    ]);
+  });
+
+  it('gives the time from an hour on as h:mm over "hours"', () => {
+    const summary = { exerciseCount: 5, setCount: 20, elapsedMs: 72 * 60 * 1000 };
+    expect(sessionRecapTiles(summary)[2]).toEqual({ value: '1:12', label: 'hours' });
+    expect(sessionRecapTiles({ ...summary, elapsedMs: 60 * 60 * 1000 })[2]).toEqual({ value: '1:00', label: 'hours' });
+  });
+
+  it('uses the singular for one, and drops the time under a minute', () => {
+    expect(sessionRecapTiles({ exerciseCount: 1, setCount: 1, elapsedMs: 20 * 1000 })).toEqual([
+      { value: '1', label: 'exercise' },
+      { value: '1', label: 'set' },
+    ]);
+  });
+
+  it('returns null when nothing was logged, so there is no card', () => {
+    expect(sessionRecapTiles({ exerciseCount: 0, setCount: 0 })).toBeNull();
+  });
+});
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -19,35 +48,6 @@ describe('formatWorkoutDuration', () => {
   // Seconds are noise on a workout, and the recap drops the whole clause rather than saying "0 min".
   it.each([[0], [59 * 1000], [-1], [NaN], [Infinity], [null]])('returns null for %s', (ms) => {
     expect(formatWorkoutDuration(ms)).toBeNull();
-  });
-});
-
-describe('formatSessionRecap', () => {
-  it('names the work without praising it', () => {
-    expect(formatSessionRecap({ exerciseCount: 3, setCount: 12, elapsedMs: 47 * MIN })).toBe(
-      '3 exercises · 12 sets · 47 min',
-    );
-  });
-
-  it('singularises both counts', () => {
-    expect(formatSessionRecap({ exerciseCount: 1, setCount: 1, elapsedMs: 1 * MIN })).toBe(
-      '1 exercise · 1 set · 1 min',
-    );
-  });
-
-  it('drops the duration clause rather than reporting a sub-minute workout', () => {
-    expect(formatSessionRecap({ exerciseCount: 1, setCount: 2, elapsedMs: 20 * 1000 })).toBe('1 exercise · 2 sets');
-    expect(formatSessionRecap({ exerciseCount: 1, setCount: 2, elapsedMs: null })).toBe('1 exercise · 2 sets');
-  });
-
-  // Ending a workout with nothing logged is real -- a mis-tap that was deleted, or a session
-  // started by someone else's set on a shared device. Congratulating it is worse than staying quiet,
-  // so the caller falls back to the plain sentence.
-  it.each([
-    ['no sets', { exerciseCount: 0, setCount: 0, elapsedMs: 5 * MIN }],
-    ['no arguments at all', undefined],
-  ])('returns null for %s', (_label, input) => {
-    expect(formatSessionRecap(input)).toBeNull();
   });
 });
 

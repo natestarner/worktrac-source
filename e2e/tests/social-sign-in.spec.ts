@@ -273,29 +273,72 @@ test.describe('sign in with Apple or Google', () => {
   // An Apple "Hide My Email" relay address matches nothing else, so tapping the OTHER provider next
   // time makes a second, empty household. "Last used" points back at the right button, and a
   // password sign-in takes the mark away.
-  test('"Last used" marks the provider this device signed in with, until a password sign-in', async ({ page, request }) => {
-    const badge = page.getByTestId('provider-last-used');
+  test('the provider this device signed in with last is named under its button, until a password sign-in', async ({ page, request }) => {
+    const caption = page.getByTestId('provider-last-used');
+    const lastUsed = 'You last signed in with Test provider';
 
     await page.goto('/login');
     await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
-    await expect(badge).toHaveCount(0);
+    await expect(caption).toHaveCount(0);
 
     await page.getByRole('button', { name: PROVIDER_BUTTON }).click();
+    // The name step asks first whether this person already has a household (nothing is created
+    // until they submit). This device remembers no other way in, so it says "a different way".
+    await expect(page.getByTestId('existing-household-hint')).toContainText(
+      'Already have a household? You may have signed up a different way.',
+    );
     await page.getByLabel('Your name').fill('Avery');
     await page.getByRole('button', { name: 'Create my household' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await page.getByRole('button', { name: 'Not now' }).click();
     await logout(page);
 
-    // The mark is on the button the person used, and the button keeps its name.
-    await expect(badge).toHaveText('Last used');
-    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toHaveAccessibleDescription('Last used');
+    // The caption is under the button the person used, and the button keeps its name.
+    await expect(caption).toHaveText(lastUsed);
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toHaveAccessibleDescription(lastUsed);
+    const button = await page.getByRole('button', { name: PROVIDER_BUTTON }).boundingBox();
+    const under = await caption.boundingBox();
+    expect(under!.y).toBeGreaterThanOrEqual(button!.y + button!.height);
+
+    // Forgot password: this device has used the provider and never a password, so it points back.
+    await page.getByRole('link', { name: 'Forgot password?' }).click();
+    await expect(page.getByTestId('forgot-password-provider-hint')).toContainText(
+      'Signed up with Test provider? This device has signed in with Test provider before.',
+    );
+    await page.getByRole('link', { name: 'Log in screen' }).click();
+    await expect(page).toHaveURL(/\/login/);
 
     // A password sign-in on this device (a password registration here) replaces it.
     await registerHousehold(page, request, 'Blake');
     await logout(page);
     await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
-    await expect(badge).toHaveCount(0);
+    await expect(caption).toHaveCount(0);
+
+    // ...and now this device has used a password too, Forgot password points nowhere.
+    await page.getByRole('link', { name: 'Forgot password?' }).click();
+    await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+    await expect(page.getByTestId('forgot-password-provider-hint')).toHaveCount(0);
+  });
+
+  // A new device knows nothing, and an Apple "Hide My Email" account is under a relay address, so
+  // the email typed into Forgot password matches nothing and no code comes. The code screen says
+  // why, to everyone, whatever email was typed.
+  test('a device that knows nothing still learns why no reset code may come', async ({ page }) => {
+    await page.goto('/forgot-password');
+    await expect(page.getByTestId('forgot-password-provider-hint')).toHaveCount(0);
+    await page.getByPlaceholder('you@example.com').fill(`nobody-${Date.now()}@example.com`);
+    await page.getByRole('button', { name: 'Send reset code' }).click();
+
+    await expect(page).toHaveURL(/\/reset-password/);
+    // Names every provider this environment offers: only the test provider locally, Apple, Google
+    // AND the test provider on lower. So assert the sentence around the list, and that the list
+    // includes the provider this spec can drive -- never the exact list.
+    const hint = page.getByTestId('reset-no-code-provider-hint');
+    await expect(hint).toContainText('No code? If you signed up with');
+    await expect(hint).toContainText('Test provider');
+    await expect(hint).toContainText('your account has no password to reset');
+    await page.getByRole('link', { name: 'Log in screen' }).click();
+    await expect(page.getByRole('button', { name: PROVIDER_BUTTON })).toBeVisible();
   });
 });
 

@@ -65,7 +65,9 @@ export const TOUR_STEPS = [
     id: 'set-entry',
     anchor: TOUR_ANCHORS.SET_ENTRY,
     title: 'Weight and reps',
-    body: 'These prefill from your last session, so a repeat set is one tap.',
+    // The tour opens Barbell Back Squat, which expects a weight: on a first visit the box is empty
+    // and highlighted and the button reads "Enter a weight", so this says why.
+    body: 'These fill in from your last session, so a repeat set is one tap. The first time, enter the weight you lifted.',
     screen: { route: '/app/log', exercise: 'open' },
   },
   {

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 function personPill(page, name: string) {
@@ -13,7 +13,7 @@ test.describe('Connectivity transitions', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -40,7 +40,7 @@ test.describe('Connectivity transitions', () => {
     await personPill(page, 'Sage').click();
     await pickExercise(page, 'Barbell Bench Press');
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
@@ -50,7 +50,7 @@ test.describe('Connectivity transitions', () => {
     await personPill(page, 'Wren').click();
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await expect(outboxCountText(page, 2)).toBeVisible();
@@ -70,7 +70,7 @@ test.describe('Connectivity transitions', () => {
     await registerHousehold(page, request, 'Tatum');
     await pickExercise(page, 'Barbell Bench Press');
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 

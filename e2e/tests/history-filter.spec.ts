@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
-import { pickExercise, logSetAt } from './support/exercises';
+import { logSetAt, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
 
 // Tags an exercise via its Customize modal, one tag at a time. Submits via the "New tag"
 // input's own Enter handler rather than its "Add" button -- ConfigureExerciseModal has a SECOND
@@ -15,9 +15,9 @@ async function tagExercise(page, tagName: string) {
 }
 
 async function logSetAndDismissCelebration(page) {
-  await page.getByRole('button', { name: 'Log set' }).click();
-  await expect(page.getByText('New PR!')).toBeVisible();
-  await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+  await tapLogSet(page);
+  await expect(prCelebration(page)).toBeVisible();
+  await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 }
 
 // Covers requirements 2-5 from the History/PRs search-and-tag redesign: tags show and filter both
@@ -178,7 +178,7 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     // The "Back to" link returns to the exact exercise screen it came from.
     await page.getByText(/Back to Barbell Bench Press/).click();
     await expect(page).toHaveURL(/\/app\/log/);
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // Re-follow the deep link, then reload -- the seed is scrubbed from router state the moment
     // History mounts, so even a hard reload on this exact URL must NOT resurrect the filter.
@@ -204,7 +204,7 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await registerHousehold(page, request, 'Nate');
 
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
     await tagExercise(page, 'Push');
 
     await expect(page.getByText('Push')).toBeVisible();

@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setHoldSeconds } from './support/exercises';
+import { dismissPrCelebration, pickExercise, setHoldSeconds, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: logging a hold, run across online / lie-fi / hard-offline / pinned-offline from one
@@ -45,7 +45,7 @@ forEachConnectivityMode<void>('a hold logs and reads back as time', {
   },
   act: async (page) => {
     await setHoldSeconds(page, HOLD_SECONDS);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
   },
   assert: async (page) => {

@@ -1,4 +1,5 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
+import { prCelebration } from './exercises';
 import { waitForOutboxDrain, waitForQueryCachePersist } from './offline';
 
 // The History sync's promise, checked at the end of every parity spec: once connectivity is back and
@@ -13,7 +14,7 @@ import { waitForOutboxDrain, waitForQueryCachePersist } from './offline';
 // Not a connectivity branch and not sync chrome: it asserts the result, in every mode alike.
 export async function expectHistoryMatchesServer(page: Page, request: APIRequestContext) {
   // A PR celebration left up by the spec would sit over the tab bar.
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   if (await celebration.isVisible()) {
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();
@@ -44,31 +45,70 @@ export async function expectHistoryMatchesServer(page: Page, request: APIRequest
   const token = await page.evaluate(() => localStorage.getItem('workout-tracker-token'));
   const headers = { Authorization: `Bearer ${token}` };
 
+  // Each attempt's reads are BOUNDED, and a read that fails or runs over is one failed attempt, not
+  // the end of the check. Unbounded, one stalled read used up the whole window: on lower on
+  // 2026-11-21, GET /history for the person took 41s (the only /history over 15s in ten days of
+  // logs) while the app's History was already right. The old message then named no cause, because
+  // an attempt that never returns never sets one; `pending` names what an attempt was waiting on.
+  // An error is caught for the same reason: thrown out of expect.poll's callback it ends the poll
+  // at once, and the bare catch below used to swallow it.
   let detail = '';
+  let pending = '';
   try {
     await expect.poll(
       async () => {
-        const held = await persistedHistories(page);
-        const people = Object.keys(held);
-        if (people.length === 0) {
-          detail = 'no History in the persisted cache yet';
-          return false;
-        }
-        for (const personId of people) {
-          const truth = await (await request.get(`${apiUrl}/api/people/${personId}/history`, { headers })).json();
-          if (JSON.stringify(truth) !== JSON.stringify(held[personId])) {
-            detail = `person ${personId}\n  app:    ${JSON.stringify(held[personId])}\n  server: ${JSON.stringify(truth)}`;
+        try {
+          pending = "reading the app's persisted History (IndexedDB)";
+          const held = await withTimeout(persistedHistories(page), READ_TIMEOUT_MS, pending);
+          const people = Object.keys(held);
+          if (people.length === 0) {
+            detail = 'no History in the persisted cache yet';
             return false;
           }
+          for (const personId of people) {
+            pending = `GET /api/people/${personId}/history from the server`;
+            const response = await request.get(`${apiUrl}/api/people/${personId}/history`, {
+              headers,
+              timeout: READ_TIMEOUT_MS,
+            });
+            if (!response.ok()) {
+              detail = `${pending} answered ${response.status()}`;
+              return false;
+            }
+            const truth = await response.json();
+            if (JSON.stringify(truth) !== JSON.stringify(held[personId])) {
+              detail = `person ${personId}\n  app:    ${JSON.stringify(held[personId])}\n  server: ${JSON.stringify(truth)}`;
+              return false;
+            }
+          }
+          return true;
+        } catch (e) {
+          detail = `${pending} failed: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`;
+          return false;
+        } finally {
+          pending = '';
         }
-        return true;
       },
       { timeout: 20000 },
     ).toBe(true);
   } catch {
-    throw new Error(`The app's History never matched the server's after reconnecting (20s): ${detail}\n`
-      + `syncs the app made after reconnecting:\n  ${syncLog.join('\n  ') || '(none -- the app never asked)'}`);
+    const why = detail || (pending ? `the last attempt was still ${pending}` : 'no attempt finished');
+    throw new Error(`The app's History never matched the server's after reconnecting (20s): ${why}\n`
+      + `syncs the app made after History was opened:\n  ${syncLog.join('\n  ')
+        || '(none -- expected if History was already current; with a wrong History it means the app never asked)'}`);
   }
+}
+
+// Long enough for an ordinary read on a loaded lower (a few seconds at worst), short enough that a
+// stalled one leaves room in the 20s window to try again.
+const READ_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took over ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // Replaces every person's persisted History with the flat array a build from before the sync

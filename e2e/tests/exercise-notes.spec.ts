@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Exercise notes are two independent, coexisting features (see CLAUDE.md's Data Model
@@ -13,7 +13,7 @@ test.describe('Exercise notes', () => {
   test('standing note + session note round-trip through Last time, History, and delete', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
     await pickExercise(page, 'Barbell Bench Press');
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     // --- Standing (persistent) note, set via the Customize modal ---
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
@@ -40,11 +40,10 @@ test.describe('Exercise notes', () => {
     await expect(page.getByRole('button', { name: 'Edit note for this session' })).toBeVisible();
 
     // Log a set into this (now-materialized) session, then end the workout.
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
+    await endWorkout(page);
 
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
