@@ -105,7 +105,7 @@ describe('ExercisePicker search field', () => {
   // because React 19 passes `ref` as an ordinary prop into `...rest`. If that ever stops being
   // true, `searchInputRef.current` is null and the focus handler's `?.scrollIntoView` guard
   // swallows it: the keyboard covers the results on a phone and nothing anywhere reports why.
-  it('forwards the ref to the real input, so the focus-scroll can still fire', () => {
+  it('forwards the ref to the real input, so the focus-scroll can still fire', async () => {
     renderPicker();
     const input = screen.getByPlaceholderText('Search all exercises');
 
@@ -113,7 +113,8 @@ describe('ExercisePicker search field', () => {
     input.scrollIntoView = scrollIntoView;
     fireEvent.focus(input);
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    // A frame later, once the space below the field is laid out (see the component).
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' }));
   });
 
   // 16px is the threshold below which iOS Safari zooms the viewport on focus. It used to be a
@@ -187,13 +188,25 @@ describe('ExercisePicker keeps everything above the search field while searching
 
   // The space below the field is held at a screen's height while searching, so a short result
   // list cannot shorten the page under the field (index.css, .picker-search-body).
-  it('holds the space below the field only while a search is running', () => {
+  it('holds the space below the field while a search is running, and not before the field is used', () => {
     const { container, unmount } = renderSearching('zzz');
     expect(container.querySelector('.picker-search-body')).not.toBeNull();
     expect(container.querySelector('.picker-search-body')).toHaveTextContent('+ Add your own exercise');
     unmount();
     const idle = renderSearching('');
     expect(idle.container.querySelector('.picker-search-body')).toBeNull();
+  });
+
+  // ...and from the first tap, before anything is typed: the focus scroll brings the field to the
+  // top only if there is page below it to scroll into (TestFlight 2026-11-25). Kept after blur,
+  // because taking it away would shorten the page under the person.
+  it('holds the space below the field from the first tap, and keeps it after blur', () => {
+    const { container } = renderSearching('');
+    const input = screen.getByPlaceholderText('Search all exercises');
+    fireEvent.focus(input);
+    expect(container.querySelector('.picker-search-body')).not.toBeNull();
+    fireEvent.blur(input);
+    expect(container.querySelector('.picker-search-body')).not.toBeNull();
   });
 });
 
