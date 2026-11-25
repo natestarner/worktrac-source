@@ -326,7 +326,7 @@ contains it.
 | `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen. If the sheet never draws its close control in a minute, the app is relaunched and Terms opened ONCE more: the runner's SafariViewService has hung on its cold start, leaving a blank sheet with nothing to tap (2026-10-31). A sheet that never opens fails both attempts |
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
-| `08-paste-the-emailed-code` | Signs UP (no seeded household); screenshots what two taps on the code box show (`08-after-two-taps.png`, evidence only), then "Paste code" must put a copied `123 456` in as `123456` |
+| `08-paste-the-emailed-code` | Goes through Forgot password (no seeded household; sign-up's lower fields sit under the keyboard, where Maestro's taps hit keys); screenshots what two taps on the code box show (`08-after-two-taps.png`, evidence only), then "Paste code" must put a copied `123 456` in as `123456` |
 | `07-rest-notification-permission` | The first rest timer asks iOS for permission: afterwards Huddle is listed in **Settings > Notifications** (the TestFlight symptom). The only flow launched with notifications **unset** (`NOTIFICATIONS: unset` into `subflows/sign-in.yaml`). Maestro accepts the system alert itself, so the alert is not the check |
 
 - **Maestro GRANTS every permission at launch unless a flow says otherwise, and ACCEPTS a system
@@ -397,6 +397,10 @@ contains it.
 - **Maestro matches the WHOLE accessibility label, as a regex.** iOS often reports a compound control
   as one label: the account menu is `"Alex ▾"`, a History card is its name plus its set pills. Use
   `.*name.*` or the full label. Section labels use `(?i)` (`text-transform: uppercase`).
+- **A field under the keyboard can't be tapped: Maestro taps its frame, which is a keyboard key.**
+  Pick flows whose next field stays above the keyboard, or set values without it (the weight's
+  `\+` in `log-a-set.yaml`). Typing a weight and then tapping Reps with the number pad up was
+  unreliable on the runner for the same reason.
 - **Two traps that cost a round each:** `LoginPage` has a visually hidden `<h1>Log in</h1>` that iOS
   reports over the email field, so target the button `below: 'Forgot password\?'`; and on iOS
   Maestro's `hideKeyboard` presses the keyboard's Go key (submitting the login form) and cannot

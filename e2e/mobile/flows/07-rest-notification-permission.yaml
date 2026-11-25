@@ -31,10 +31,10 @@ name: The first rest timer asks to send notifications
 - extendedWaitUntil:
     visible: 'Weight.*'
     timeout: 30000
+# The weight's + (see log-a-set.yaml for why not typing).
 - tapOn:
-    text: 'Weight.*'
+    text: '\+'
     index: 0
-- inputText: '95'
 - scrollUntilVisible:
     element: 'Log set'
     direction: DOWN
@@ -54,6 +54,11 @@ name: The first rest timer asks to send notifications
 - assertVisible: 'End workout'
 - launchApp:
     appId: com.apple.Preferences
+# Not on Settings' first screen in iOS 27: scroll to it.
+- scrollUntilVisible:
+    element: 'Notifications'
+    direction: DOWN
+    timeout: 20000
 - tapOn: 'Notifications'
 - scrollUntilVisible:
     element: '.*Huddle.*'

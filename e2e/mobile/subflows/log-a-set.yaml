@@ -26,12 +26,12 @@ appId: fitness.huddle.app
     visible: 'Weight.*'
     timeout: 30000
 # A weight first: on a weighted exercise with no history the weight is blank and Log set reads
-# "Enter a weight" until there is one (#602). This step is what took the nightly flows red on
-# 2026-11-25 ("Log set" is visible: false).
+# "Enter a weight" until there is one (#602). Set with the weight's + (blank + one step), not by
+# typing: typing it and then tapping Reps with the number pad still up left the digits in the weight
+# box on the runner ("5265", 2026-11-25).
 - tapOn:
-    text: 'Weight.*'
+    text: '\+'
     index: 0
-- inputText: '95'
 # The reps field selects its text on focus (WeightRepsStepper.jsx), so typing replaces the prefill.
 # 6, not the usual prefill, so the row below can only show it if the typed value was used.
 - tapOn:
