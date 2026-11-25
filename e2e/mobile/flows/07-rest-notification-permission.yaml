@@ -43,8 +43,8 @@ name: The first rest timer asks to send notifications
 # Logging the set started the rest timer, which is when the app asks iOS. Maestro accepts system
 # permission alerts by itself (the first run's console showed "permission answered: granted" with
 # no alert left for this flow to see), so the alert is not the check. The check is the symptom
-# from TestFlight: is Huddle listed under Settings > Notifications at all? An app that never
-# called requestAuthorization is not.
+# from TestFlight: does Settings offer Notifications for Huddle at all? An app that never called
+# requestAuthorization has no such row.
 - tapOn:
     text: 'Allow'
     optional: true
@@ -54,14 +54,24 @@ name: The first rest timer asks to send notifications
 - assertVisible: 'End workout'
 - launchApp:
     appId: com.apple.Preferences
-# Not on Settings' first screen in iOS 27: scroll to it.
+# iOS 27's Settings has no top-level Notifications row (run 4, 2026-11-25): per-app settings live
+# under Apps, and an app's page lists "Notifications" only once the app has asked for permission.
 - scrollUntilVisible:
-    element: 'Notifications'
+    element: '^Apps$'
     direction: DOWN
     timeout: 20000
-- tapOn: 'Notifications'
+- tapOn: '^Apps$'
+# Below the page title, so this never matches the "◀ Huddle" return-to-app link in the status bar.
 - scrollUntilVisible:
-    element: '.*Huddle.*'
+    element:
+      text: '^Huddle$'
+      below: '^Apps$'
     direction: DOWN
     timeout: 20000
-- takeScreenshot: mobile-flows-out/07-settings-notifications
+- tapOn:
+    text: '^Huddle$'
+    below: '^Apps$'
+- extendedWaitUntil:
+    visible: '^Notifications$'
+    timeout: 10000
+- takeScreenshot: mobile-flows-out/07-settings-huddle
