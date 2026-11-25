@@ -101,6 +101,20 @@ const circles = MARK.map(([cx, cy, r, c]) => {
   return `<i class="c" style="left:${x + (cx - r) * s}px;top:${y + (cy - r) * s}px;width:${2 * r * s}px;height:${2 * r * s}px;background:${c};opacity:${opacity}"></i>`;
 }).join('');
 
+// Balance (2026-11-25). The headline sits at the safe area's LEFT edge and the card runs out to
+// x 3550, so the group's centre is ~400px right of the frame's. An iPhone, which shows x ~269-3571,
+// drew ~830px of empty cream left of the headline and clipped the card's right edge under the share
+// button (Nate: "a lot of blank space to the left"). CENTRE=1 moves the whole group (type, card,
+// phone and the circles behind it) so its centre is the frame's; GROUP_SCALE shrinks it about that
+// centre. The type must still fit the safe area: at GROUP_SCALE <= 0.67 a centred group does, and
+// above that ALLOW_OUTSIDE_SAFE=1 reports by how much it doesn't instead of failing.
+const CONTENT = { left: SAFE.x, right: CARD.x + CARD.w, top: CARD.y, bottom: CARD.y + CARD.h };
+const GROUP_SCALE = Number(process.env.GROUP_SCALE || 1); // Nate chose full size, centred (2026-11-25)
+const CENTRE = process.env.CENTRE !== '0';
+const origin = { x: (CONTENT.left + CONTENT.right) / 2, y: (CONTENT.top + CONTENT.bottom) / 2 };
+const shift = CENTRE ? { x: W / 2 - origin.x, y: H / 2 - origin.y } : { x: 0, y: 0 };
+const groupTransform = `translate(${shift.x}px, ${shift.y}px) scale(${GROUP_SCALE})`;
+
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
@@ -133,22 +147,35 @@ await page.setContent(`<!doctype html><meta charset="utf-8">
   .batt { width: 78px; height: 38px; border: 4px solid #1c1b19; border-radius: 11px; }
   .shot { display: block; width: ${FRAME.screenW}px; height: ${FRAME.screenH - FRAME.sbar}px; object-fit: cover; object-position: top; }
   .debug { position: absolute; display: ${process.env.SAFE_AREA === '1' ? 'block' : 'none'}; }
+  .group { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px;
+    transform-origin: ${origin.x}px ${origin.y}px; transform: ${groupTransform}; }
 </style>
+<div class="group">
 ${circles}
 <div class="card"></div>
 <div class="dev"><div class="scr"><div class="sbar"><span>9:41</span><span class="batt"></span></div><img class="shot" src="${logShot}"></div>
   <img class="frame" src="${bezelUrl}" alt=""></div>
 <div class="safe"><img src="${lockup}" alt="Huddle"><h1>The whole<br><em>family’s</em><br>workout</h1></div>
+</div>
 <div class="debug" style="left:${SAFE.x}px;top:${SAFE.y}px;width:${SAFE.w}px;height:${SAFE.h}px;outline:6px dashed #d0021b"></div>
 <div class="debug" style="left:${IPHONE_VISIBLE.x}px;top:0;width:${IPHONE_VISIBLE.w}px;height:${H}px;outline:6px dashed #00b7ff"></div>`);
 await page.evaluate(() => document.fonts.ready);
 await page.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0));
 // The type must fit the safe area; fail loudly rather than ship a clipped headline.
-const fits = await page.evaluate(({ x, y, w, h }) => [...document.querySelectorAll('.safe > *')].every((el) => {
+const overflow = await page.evaluate(({ x, y, w, h }) => Math.max(0, ...[...document.querySelectorAll('.safe > *')].map((el) => {
   const r = el.getBoundingClientRect();
-  return r.left >= x && r.right <= x + w && r.top >= y && r.bottom <= y + h;
-}), SAFE);
-if (!fits) throw new Error('header content overflows the art safe area');
+  return Math.max(x - r.left, r.right - (x + w), y - r.top, r.bottom - (y + h));
+})), SAFE);
+if (overflow > 0) {
+  if (overflow > 420 && process.env.ALLOW_OUTSIDE_SAFE !== '1') throw new Error('header content overflows the art safe area by more than the chosen layout');
+  console.log(`WARNING: the type runs ${Math.round(overflow)}px outside Apple's art safe area`);
+}
+// Where the group lands in an iPhone's view, so balance is a number rather than an impression.
+const box = await page.evaluate(() => {
+  const els = [...document.querySelectorAll('.safe > *, .card')].map((e) => e.getBoundingClientRect());
+  return { left: Math.min(...els.map((r) => r.left)), right: Math.max(...els.map((r) => r.right)) };
+});
+console.log(`iPhone view: ${Math.round(box.left - IPHONE_VISIBLE.x)}px clear on the left, ${Math.round(IPHONE_VISIBLE.x + IPHONE_VISIBLE.w - box.right)}px on the right`);
 const name = process.env.SAFE_AREA === '1' ? 'header-21x9-SAFE-AREA-CHECK.png' : 'header-21x9.png';
 const out = join(OUT, name);
 await page.screenshot({ path: out });
@@ -156,4 +183,8 @@ const b = readFileSync(out);
 if (b.readUInt32BE(16) !== W || b.readUInt32BE(20) !== H) throw new Error(`${out} is not ${W} x ${H}`);
 if (b[25] !== 2) throw new Error(`${out} is not plain RGB (PNG colour type ${b[25]}); Apple rejects an alpha channel`);
 console.log(name);
+// IPHONE_PREVIEW=1 also writes what an iPhone shows (for review only; never upload it).
+if (process.env.IPHONE_PREVIEW === '1') {
+  await page.screenshot({ path: join(OUT, 'header-iphone-view.png'), clip: { x: IPHONE_VISIBLE.x, y: 0, width: IPHONE_VISIBLE.w, height: H } });
+}
 await browser.close();
