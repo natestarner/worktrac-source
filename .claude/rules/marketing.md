@@ -185,14 +185,15 @@ a public page, which is what this replaced on 2026-10-27.
 
 ## The hero device covers the dad's face, placed in the PHOTO's coordinates
 
-`index.html`'s hero is a stock photo in a rounded card with the real app laid over the dad's face,
-at every width: an iPad in the desktop layout, an iPhone at 900px and below (one `<picture>`, one
-frame). The photo sits in `.hero__stage` (its own 3:2 shape, cropped by hand in CSS) inside the
-clipping `.hero__card`; the device sits in `.hero__stage--over`, an unclipped twin with identical
-geometry, so it is placed in the photo's percentages yet breaks out past the card's edge (a device
-clipped inside the photo looked pasted into the scene). **Never move the photo to
-`background-size: cover` / `object-fit: cover`, or the device out of the twin stage**: the crop and
-the device then follow different boxes and his face shows beside it at some widths. `landing.spec.ts` hit-tests his face (covered), the boy's face and the headline
+`index.html`'s hero is a stock photo with the real app over the dad's face, at every width: an iPad
+in the desktop layout, an iPhone at 900px and below (one `<picture>`, one frame). The photo is
+`.hero__stage` (its own 3:2 shape, cropped by hand in CSS) inside the clipping `.hero__clip`; the
+device sits in `.hero__stage--over`, an unclipped twin with identical geometry, so it is placed in
+the photo's percentages yet is a layer ON the photo (on phones it hangs below the photo's bottom
+edge, and the words start under its overhang). **Never move the photo to `background-size: cover` /
+`object-fit: cover`, or the device out of the twin stage**: the crop and the device then follow
+different boxes and his face shows beside it at some widths. Nate wants the device big: the iPad
+runs from just past the boy's face to the photo's right edge. `landing.spec.ts` hit-tests his face (covered), the boy's face and the headline
 (both clear) at 18 viewport sizes; replacing `hero-row.jpg` means re-measuring both face boxes and
 the device's `left`/`top` together. No entrance animation on the device: any frame where it is
 elsewhere or transparent shows his face. The bezel is the site's CSS one, never Apple's: Apple's
