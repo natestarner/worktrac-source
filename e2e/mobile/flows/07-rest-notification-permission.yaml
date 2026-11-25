@@ -1,0 +1,48 @@
+# The first rest timer asks iOS for permission to say "Rest's up" (lib/native/notifications.js). It
+# never did on a real phone: Huddle was not even listed under Settings > Notifications, in the App
+# Store build (1.3.0) and in TestFlight 1.4.0 (2026-11-25). The other flows could not notice, because
+# Maestro grants every permission at launch; this one leaves notifications unset and waits for the ask.
+#
+# app-evidence: the app checked = \[rest-notifications\] permission:
+# app-evidence: the app asked iOS = \[rest-notifications\] permission answered
+# app-evidence: the adapter FAILED = \[rest-notifications\] failed
+appId: fitness.huddle.app
+name: The first rest timer asks to send notifications
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_7}
+      NOTIFICATIONS: unset
+# Log one set (log-a-set.yaml's steps up to the tap; its later steps would run under the alert).
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: 'Search all exercises'
+      - eraseText: 40
+      - inputText: 'Barbell Bench Press'
+      - extendedWaitUntil:
+          visible: '(?i)search results'
+          timeout: 10000
+- tapOn:
+    text: 'Barbell Bench Press'
+    below: '(?i)search results'
+- extendedWaitUntil:
+    visible: 'Weight.*'
+    timeout: 30000
+- tapOn:
+    text: 'Weight.*'
+    index: 0
+- inputText: '95'
+- scrollUntilVisible:
+    element: 'Log set'
+    direction: DOWN
+    timeout: 10000
+- tapOn: 'Log set'
+# Logging the set started the rest timer, which is when the app asks. iOS's alert reads
+# '"Huddle Lower" Would Like to Send You Notifications' (the name depends on the build).
+- extendedWaitUntil:
+    visible: '.*Would Like to Send You Notifications.*'
+    timeout: 20000
+- tapOn: 'Allow'
+- assertVisible: 'End workout'

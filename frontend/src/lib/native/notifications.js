@@ -16,6 +16,15 @@ const REST_KIND = 'rest';
 
 let permissionAsked = false;
 
+// Every step and every failure is logged, under one prefix. These catches used to be silent, and the
+// ask never reaching iOS (Huddle absent from Settings > Notifications on every build through 1.4.0,
+// 2026-11-25) left nothing behind to say which step stopped. The console is what the simulator flows
+// capture (07-rest-notification-permission.yaml) and what Safari's Web Inspector shows on a phone.
+function note(message, error) {
+  if (error) console.warn(`[rest-notifications] ${message}`, error?.message ?? error);
+  else console.info(`[rest-notifications] ${message}`);
+}
+
 async function plugin() {
   const { LocalNotifications } = await import('@capacitor/local-notifications');
   return LocalNotifications;
@@ -29,11 +38,16 @@ export async function ensureRestNotificationPermission() {
   try {
     const notifications = await plugin();
     const { display } = await notifications.checkPermissions();
+    note(`permission: ${display}`);
     if (display === 'prompt' || display === 'prompt-with-rationale') {
-      await notifications.requestPermissions();
+      const answer = await notifications.requestPermissions();
+      note(`permission answered: ${answer?.display}`);
     }
-  } catch {
-    // No permission means no nudge; the timer on screen is unaffected.
+  } catch (error) {
+    // No permission means no nudge; the timer on screen is unaffected. Ask again at the next rest
+    // rather than never again this session: a failure here is not an answer from the person.
+    permissionAsked = false;
+    note('failed asking for permission:', error);
   }
 }
 
@@ -53,8 +67,10 @@ export async function scheduleRestNotifications(items) {
         extra: { kind: REST_KIND, personId: item.personId },
       })),
     });
-  } catch {
+    note(`scheduled ${items.length}`);
+  } catch (error) {
     // Same as above: the nudge is lost, nothing else is.
+    note('failed scheduling:', error);
   }
 }
 
@@ -64,8 +80,9 @@ export async function cancelRestNotifications() {
   if (!isNativeApp()) return;
   try {
     await cancelPending(await plugin());
-  } catch {
+  } catch (error) {
     // A notification that still fires is about a rest the timer on screen also shows as done.
+    note('failed cancelling:', error);
   }
 }
 

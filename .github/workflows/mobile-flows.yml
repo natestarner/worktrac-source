@@ -79,7 +79,7 @@ jobs:
       matrix:
         include:
           - shard: sign-in-and-relaunch
-            flows: 01-sign-in-and-log-a-set 02-background-and-relaunch
+            flows: 01-sign-in-and-log-a-set 02-background-and-relaunch 07-rest-notification-permission
           - shard: link-and-browser
             flows: 03-checkout-return-link 04-in-app-browser-sheet
           - shard: share-and-refresh
@@ -129,7 +129,7 @@ jobs:
           API_URL: ${{ env.NATIVE_API_URL }}
           E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
           # One per file in e2e/mobile/flows/ -- each signs in as MAESTRO_EMAIL_<its number>.
-          SEED_COUNT: '6'
+          SEED_COUNT: '7'
         run: node seed-household.mjs
 
       - name: Signed-in flows

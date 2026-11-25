@@ -64,6 +64,7 @@ import {
   allowScreenSleep,
   scheduleRestNotifications,
   cancelRestNotifications,
+  ensureRestNotificationPermission,
 } from './index';
 
 beforeEach(() => {
@@ -310,6 +311,26 @@ describe('rest notifications', () => {
       schedule: { at },
       extra: { kind: 'rest', personId: 1 },
     });
+  });
+
+  // Never silently: a failure is logged, and the next rest asks again. The ask never reaching iOS on
+  // any build through 1.4.0 left nothing behind to say why (TestFlight, 2026-11-25).
+  it('asks for permission once it works, and again after a failure', async () => {
+    native.on = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    plugins.checkPermissions.mockRejectedValueOnce(new Error('plugin not implemented'));
+    await ensureRestNotificationPermission();
+    expect(warn).toHaveBeenCalledWith('[rest-notifications] failed asking for permission:', 'plugin not implemented');
+
+    plugins.checkPermissions.mockResolvedValue({ display: 'prompt' });
+    plugins.requestPermissions.mockResolvedValue({ display: 'granted' });
+    await ensureRestNotificationPermission();
+    expect(plugins.requestPermissions).toHaveBeenCalledTimes(1);
+
+    // Answered: not asked again this session.
+    await ensureRestNotificationPermission();
+    expect(plugins.checkPermissions).toHaveBeenCalledTimes(2);
   });
 
   it('cancel only rest nudges when the app comes back', async () => {
