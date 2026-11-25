@@ -144,8 +144,10 @@ export default function HelpTab() {
             household. If you already have a Huddle login with that email, sign in with your password
             first and connect {signInNames} from <T>Profile</T>. Huddle never joins two logins just
             because their emails match. Use the same way in each time: a different one is a
-            different login, with its own household. The button this device used last is marked{' '}
-            <T>Last used</T>.
+            different login, with its own household. Under the button this device used last,
+            Huddle says <T>You last signed in with …</T>, and before a sign-in creates a new
+            household it asks <T>Already have a household?</T> so you can go back and use the other
+            way.
           </p>
         )}
         <p>
@@ -200,12 +202,13 @@ export default function HelpTab() {
           profile&rsquo;s data is completely separate from everyone else&rsquo;s.
         </p>
         <p>
-          <strong>To add someone:</strong> account menu &rarr; <T>Profile</T> &rarr; <T>People</T>{' '}
-          &rarr; <T>Add a person</T>. <ChipWait />
+          <strong>To add someone:</strong> tap <T>+ Add person</T> in the bar across the top, or go
+          to account menu &rarr; <T>Profile</T> &rarr; <T>People</T> &rarr; <T>Add a person</T>.{' '}
+          <ChipWait />
         </p>
         <p>
-          <strong>To switch:</strong> tap their name in the bar across the top. That bar only appears
-          once there is more than one person on the account.
+          <strong>To switch:</strong> tap their name in that bar. Once there are two or more of you,
+          it stays pinned to the top of the screen while you scroll.
         </p>
 
         <h3 className="help-h3">What the dots and rings mean</h3>
@@ -242,7 +245,7 @@ export default function HelpTab() {
         <p>The <T>Log</T> tab opens on your own short list, not the full library:</p>
         <ul>
           <li><strong>Favorites:</strong> the ones you starred.</li>
-          <li><strong>Other Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
+          <li><strong>Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
         </ul>
         <p>
           Type in the search box to reach the full library. Search is forgiving about word order, so
@@ -268,7 +271,7 @@ export default function HelpTab() {
         <p>
           Open an exercise and you get two steppers, weight and reps, and one big{' '}
           <T>Log set for&hellip;</T> button with the active person&rsquo;s name on it. The steppers
-          prefill from what you did last time, so a repeat set really is one tap. Press and hold{' '}
+          fill in from what you did last time, so a repeat set really is one tap. Press and hold{' '}
           <T>&minus;</T> or <T>+</T> to run through numbers quickly instead of tapping one at a
           time; how big each tap or hold-step is can be set per person in{' '}
           <T>App Settings</T> &rarr; <T>Steppers</T>.
@@ -282,6 +285,24 @@ export default function HelpTab() {
           <T>This session</T> lists what you&rsquo;ve logged so far, newest at the top, with edit and
           delete on every row.
         </p>
+
+        <h3 className="help-h3">The first time you do an exercise</h3>
+        <p>
+          With nothing to fill in from yet, the weight box depends on the kind of exercise:
+        </p>
+        <ul>
+          <li>
+            <strong>Weight &amp; reps</strong> (a barbell, dumbbells, a machine): the box starts empty
+            and highlighted, and the button reads <T>Enter a weight</T> until you put a number in.
+            If you did it with nothing in your hands, tap <T>No weight, just bodyweight</T> under it.
+          </li>
+          <li>
+            <strong>Bodyweight</strong> (pull-ups, push-ups, dips) and anything measured in{' '}
+            <strong>time</strong>: the box is called <T>Added</T> and starts at 0, so the first
+            set is one tap. Wearing a vest or a belt? Put its weight there.
+          </li>
+        </ul>
+        <p>After that first set, the numbers fill in from last time as usual.</p>
 
         <Note title="A weight of 0 means bodyweight">
           <p>
@@ -298,8 +319,10 @@ export default function HelpTab() {
           time you began.
         </p>
         <p>
-          When you&rsquo;re done, tap <T>End workout</T> in that bar. Logging another set any time
-          afterwards simply starts a new one.
+          When you&rsquo;re done, tap <T>End workout</T> in that bar. Huddle shows what the
+          workout came to and asks whether to end it; tap <T>End workout</T> again to finish, or{' '}
+          <T>Cancel</T> to keep going. Logging another set any time afterwards simply starts a new
+          one.
         </p>
 
         <Note title="If you forget to end it">
@@ -327,7 +350,7 @@ export default function HelpTab() {
           The bar at the bottom fills toward a <strong>{DEFAULT_REST_TARGET_SECONDS}-second target</strong>.
           When it&rsquo;s full, you&rsquo;re ready. Counting up rather than down is deliberate: a full
           bar is a stable &ldquo;go now&rdquo; that holds, and if you sit for four minutes the timer
-          says so instead of vanishing at zero. Anything past the target shows as an overrun.
+          says so instead of vanishing at zero. Anything past the target is shown in red beside it, as in <T>1:52 · 0:22 over</T>.
         </p>
         <ul>
           <li>Every person has their own timer, running independently in the background.</li>
@@ -411,8 +434,11 @@ export default function HelpTab() {
             you&rsquo;d already typed a name into the search box, it arrives prefilled.
           </li>
           <li>
-            Choose whether it&rsquo;s measured in <strong>Reps</strong> or <strong>Time</strong>. This
-            decides what the second stepper means every time you use it.
+            Choose what it&rsquo;s measured in: <strong>Weight &amp; reps</strong> (the usual, for
+            anything you load), <strong>Bodyweight</strong> (reps with nothing in your hands, weight
+            added only if you wear some) or <strong>Time</strong> (a hold). Time decides what the
+            second stepper means for good; you can switch between the other two later in{' '}
+            <T>Customize</T>.
           </li>
           <li>Save. You land straight on the new exercise&rsquo;s screen, ready to log.</li>
         </ol>
@@ -672,9 +698,17 @@ export default function HelpTab() {
           in History so you can tell at a glance which kind of record each one was.
         </p>
         <p>
-          The <strong>first set of a brand-new exercise</strong> is treated as a starting point
-          rather than a record. It still appears in History as your best &mdash; it is &mdash; but
-          there&rsquo;s nothing to beat yet, so it gets a quieter welcome.
+          The <strong>very first set you log of an exercise</strong> is your starting mark, not a
+          record &mdash; there&rsquo;s nothing to beat yet. Instead of &ldquo;New PR!&rdquo; it gets a
+          quieter card (&ldquo;First Bench Press&rdquo;) with no confetti. It still shows in History
+          as your best, because it is. Any set after it that beats it is a new PR, even later in the
+          same workout.
+        </p>
+        <p>
+          The quieter card only shows when Huddle can check with the server that you really
+          haven&rsquo;t logged that exercise before. With no signal it can&rsquo;t check, so a first
+          set gets the full &ldquo;New PR!&rdquo; instead &mdash; it would rather celebrate twice than
+          miss a real record.
         </p>
         <p>
           <strong>This all works with no signal.</strong> Records are worked out on your device from
@@ -824,7 +858,13 @@ export default function HelpTab() {
         </p>
         <p>
           The star and note icons sit in the row just under the exercise&rsquo;s name; the rest live
-          behind the <T>&hellip;</T> button beside them.
+          behind the <T>Customize</T> button beside them (the one drawn as three sliders).
+        </p>
+        <p>
+          For an exercise your household added, <T>Customize</T> also lets whoever added it, or the
+          account owner, switch it between <strong>Weight &amp; reps</strong> and{' '}
+          <strong>Bodyweight</strong>. That only changes how the first set asks for a weight; nothing
+          you logged changes. <ChipWait />
         </p>
         <p>
           The little figure in a circle at the start of that row is about the muscles the exercise
@@ -855,7 +895,7 @@ export default function HelpTab() {
           When you add your own exercise you can pick its muscles too. They are grouped by body area;
           open one and tap a muscle once to make it primary (dark red), again for secondary (lighter
           red), and a third time to clear it. Huddle suggests a starting point from the closest exercise in
-          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
+          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>Customize</T>, needs a
           connection, and only whoever added the exercise or the account owner can. Closing that
           window saves a change you made there.
         </p>
@@ -933,6 +973,8 @@ export default function HelpTab() {
               )}
             </>
           )}
+          {/* backend AccountDeletedEvent: every login with a way in is emailed. */}
+          {' '}Afterward, everyone with a login to it gets an email saying it was deleted.
         </p>
         {signInNames && (
           <p>
@@ -1009,7 +1051,7 @@ export default function HelpTab() {
         <Note title="You can never see or set their password">
           <p>
             Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
-            lets one person set another&rsquo;s password. If they forget it they use
+            lets one person set another&rsquo;s password. If they forget it they use{' '}
             <T>Forgot password</T>, exactly as you would. What you can do is send the invite again,
             unlock them if too many wrong tries locked them out, or remove their login.
           </p>
@@ -1132,7 +1174,7 @@ export default function HelpTab() {
 
         <p>
           <T>Clients</T> and <T>Check-ins</T> are both in your account menu, under your name. A
-          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never
+          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never{' '}
           <T>Clients</T>.
         </p>
 

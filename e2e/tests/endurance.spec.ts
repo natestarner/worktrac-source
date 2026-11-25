@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, setHoldSeconds } from './support/exercises';
+import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, prCelebration, setHoldSeconds, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, waitForOutboxDrain } from './support/offline';
 
 // The "This session" list. Scoping to it matters: the Best card above renders the SAME string
@@ -47,11 +47,12 @@ test.describe('endurance exercises', () => {
     await pickExercise(page, 'Wall Sit');
 
     await setHoldSeconds(page, 30);
-    const weight = page.locator('.stepper-row').filter({ hasText: 'Weight' }).locator('.stepper-value');
+    // Wall Sit is a bodyweight exercise, so its weight row reads "Added (lb)".
+    const weight = page.locator('.stepper-row').filter({ hasText: 'Added (lb)' }).locator('.stepper-value');
     await weight.fill('25');
     await weight.press('Enter');
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRows(page).getByText('25 lb × 0:30', { exact: true })).toBeVisible();
   });
@@ -66,9 +67,9 @@ test.describe('endurance exercises', () => {
 
     // Shorter, so no celebration however much load is added.
     await setHoldSeconds(page, 20);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(page.getByText('Set 3')).toBeVisible();
-    await expect(page.getByText('New PR!')).toHaveCount(0);
+    await expect(prCelebration(page)).toHaveCount(0);
   });
 
   test('the Best card names the record a hold actually has', async ({ page, request }) => {
@@ -142,7 +143,7 @@ test.describe('endurance exercises', () => {
     await expect(page.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value'))
       .toHaveValue('0:20');
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:20', { exact: true })).toBeVisible();
   });
@@ -153,7 +154,7 @@ test.describe('endurance exercises', () => {
 
     await goHardOffline(page);
     await setHoldSeconds(page, 50);
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     // ⚠️ The row must show the real time while queued, not a blank or a skeleton -- the value is
@@ -254,7 +255,7 @@ test.describe('endurance exercises', () => {
     await expect(time).toHaveValue('');
 
     // Blank is a display state, never a validation gate: Log set still works and logs the default.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
   });
@@ -279,7 +280,7 @@ test.describe('endurance exercises', () => {
     await expect(time).toHaveValue('');
 
     // And blank is still not a validation gate.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
   });
@@ -383,7 +384,7 @@ test.describe('endurance exercises', () => {
     await sheet.getByRole('button', { name: 'Done' }).click();
 
     await expect(time).toHaveValue('0:20');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:20', { exact: true })).toBeVisible();
   });

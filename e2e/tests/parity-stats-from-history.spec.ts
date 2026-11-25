@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise } from './support/exercises';
+import { logSetAt, pickExercise, logSetButton } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -36,7 +36,7 @@ forEachConnectivityMode<void>('a record logged in any mode is on the PRs board a
     const picker = page.getByPlaceholder('Search all exercises');
     await expect(picker.or(page.getByRole('button', { name: 'Log set' })).first()).toBeVisible();
     if (await picker.isVisible()) await pickExercise(page, EXERCISE);
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
   },
 
   async act(page) {

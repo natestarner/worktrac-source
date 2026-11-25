@@ -18,6 +18,38 @@ export async function addExerciseToRoutine(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
 }
 
+// The exercise screen's one big button, whatever it reads: "Log set" (or "Log set for Sam"), or
+// "Enter a weight" on the first set of an exercise that expects one. For "is the exercise screen
+// open?" checks; tap it with tapLogSet.
+export function logSetButton(page: Page) {
+  return page.getByRole('button', { name: /^(Log set|Enter a weight)/ });
+}
+
+// Taps Log set for whatever is on screen, the way every spec did before load types (2026-11-24).
+//
+// A person's FIRST set of an exercise that expects a weight (load_type 'external', e.g. Barbell
+// Back Squat) now asks for one: Log set is disabled and reads "Enter a weight". A blank used to log
+// 0, a bodyweight set, so a spec that tapped Log set there meant exactly that -- and
+// "No weight, just bodyweight" is the button that still logs it. Anywhere else this is just the tap.
+//
+// ⚠️ It waits for the summary cards first ("Last time"), because that is when the screen KNOWS
+// whether there is history: before then nothing is asked (ExerciseDetail's `prefill != null`), so
+// an earlier check would see an enabled button that then flips.
+export async function tapLogSet(page: Page) {
+  await expect(page.getByText(/^Last time/).first()).toBeVisible();
+  const noWeight = page.getByRole('button', { name: 'No weight, just bodyweight' });
+  const logSet = page.getByRole('button', { name: /^Log set/ });
+  // Polled, not checked once: on a just-created exercise under lie-fi the cards can draw a beat
+  // before the device's History answers, and only then does the screen know to ask.
+  await expect
+    .poll(async () => {
+      if (await noWeight.isVisible()) await noWeight.click();
+      return (await logSet.count()) > 0 && (await logSet.first().isEnabled());
+    })
+    .toBe(true);
+  await logSet.first().click();
+}
+
 // Back to the Log picker from an exercise's detail screen. NOT the "Log" tab link: routing to
 // /app/log is a no-op when you are already there, and the picker only renders while
 // `selectedExerciseId` is null -- so the tab link leaves you on the exercise you were already on.
@@ -47,9 +79,14 @@ export type StepperLabel = 'Weight' | 'Reps' | 'Time';
 // expect.poll because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the
 // summary / session-sets queries settle, which can land after this and stomp the value -- the
 // same race offline-reads.spec.ts's setWeight documents.
+// The weight row is "Weight (lb)" on a Weight & reps exercise and "Added (lb)" on a bodyweight one
+// (utils/exerciseLoad.js#weightLabel); both are the Weight stepper.
+function stepperRow(page: Page, label: StepperLabel) {
+  return page.locator('.stepper-row').filter({ hasText: label === 'Weight' ? /^(Weight|Added) \(/ : label });
+}
+
 export async function setStepper(page: Page, label: StepperLabel, target: number) {
-  const row = page.locator('.stepper-row').filter({ hasText: label });
-  const value = row.locator('.stepper-value');
+  const value = stepperRow(page, label).locator('.stepper-value');
 
   await expect
     .poll(
@@ -65,7 +102,7 @@ export async function setStepper(page: Page, label: StepperLabel, target: number
 }
 
 function stepperValue(page: Page, label: StepperLabel) {
-  return page.locator('.stepper-row').filter({ hasText: label }).locator('.stepper-value');
+  return stepperRow(page, label).locator('.stepper-value');
 }
 
 // Sets BOTH steppers, then re-checks them together.
@@ -97,6 +134,17 @@ export async function setStepperPair(page: Page, weight: number, reps: number) {
     .toBe(`${weight}x${reps}`);
 }
 
+// The celebration card, whichever headline it carries: "New PR!" for a record, or the quiet
+// "First Barbell Bench Press" a first-ever set gets when the server has confirmed it really is the
+// first (prDetection.js#isCertainFirstEver). Which one a brand-new exercise's first set shows
+// depends on whether its summary had landed before the tap -- a spec that taps straight after
+// pickExercise can get either, and both are correct. Use this wherever a spec only needs "the card
+// is up / dismiss it"; assert getByText('New PR!') only where the set is a genuine record (it beats
+// an earlier set), and getByRole('dialog', { name: 'First …' }) only after waiting for the summary.
+export function prCelebration(page: Page) {
+  return page.locator('[role="dialog"][aria-labelledby="pr-celebration-title"]');
+}
+
 // Dismisses the PR celebration if one is on screen, and does nothing if not.
 //
 // NEEDED AFTER EVERY BARE "Log set" CLICK. The overlay is a full-viewport fixed scrim, so while
@@ -109,16 +157,40 @@ export async function setStepperPair(page: Page, weight: number, reps: number) {
 // PR detection is client-side and runs at dispatch, so if a record fell the overlay is already
 // rendered by the time click() resolves. Back when it waited on the log-set response, this exact
 // helper would have been flaky.
+//
+// Either card: the full "New PR!" or the quiet "First <exercise>" a confirmed first-ever set gets
+// (prCelebration below).
 export async function dismissPrCelebration(page: Page) {
-  const celebration = page.getByText('New PR!');
+  const celebration = prCelebration(page);
   if (await celebration.isVisible()) {
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();
   }
 }
 
-// Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so the
-// PR celebration fires each time and must be dismissed before the next set can be logged.
+// Ends the active person's workout through the bar and its "End this workout?" sheet, then closes
+// the sheet if it stays open to ask "Who else trains with you?".
+//
+// USE THIS RATHER THAN CLICKING "End workout" TWICE. The sheet is a Modal, so until it closes every
+// click on the page behind it is intercepted -- the same trap as the PR celebration above. After
+// the End it either closes, or (a one-person household that hasn't answered "Just me") stays open
+// retitled "Workout done". The End tap renders either outcome in the same commit, so once the
+// "End this workout?" title is gone, whether the "Workout done" one is there is already settled.
+export async function endWorkout(page: Page) {
+  await page.getByRole('button', { name: 'End workout' }).first().click();
+  const asking = page.getByRole('dialog', { name: 'End this workout?' });
+  await asking.getByRole('button', { name: 'End workout' }).click();
+  await expect(asking).toBeHidden();
+  const done = page.getByRole('dialog', { name: 'Workout done' });
+  if (await done.isVisible()) {
+    // The X, which closes it without answering the question.
+    await done.getByRole('button', { name: 'Close' }).click();
+    await expect(done).toBeHidden();
+  }
+}
+
+// Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so a
+// celebration (the first-time card, then "New PR!") fires each time and must be dismissed before the next set can be logged.
 //
 // Use this rather than driving setStepper yourself -- see setStepperPair above for why, and note
 // the failure mode is remote from the cause: a 315x2 logged as 45x2 is no longer a PR, so what you
@@ -130,7 +202,8 @@ export async function logSetAt(page: Page, weight: number, reps: number) {
   await setStepperPair(page, weight, reps);
   await page.getByRole('button', { name: 'Log set' }).click();
 
-  const celebration = page.getByText('New PR!');
+  // The first set of a new exercise may get the quiet first-time card rather than "New PR!".
+  const celebration = prCelebration(page);
   await expect(celebration).toBeVisible();
   await celebration.click({ force: true });
   await expect(celebration).toBeHidden();
@@ -205,7 +278,7 @@ export async function logHoldAt(page: Page, seconds: number, { expectPr = true }
   await page.getByRole('button', { name: 'Log set' }).click();
 
   if (expectPr) {
-    const celebration = page.getByText('New PR!');
+    const celebration = prCelebration(page);
     await expect(celebration).toBeVisible();
     await celebration.click({ force: true });
     await expect(celebration).toBeHidden();
@@ -230,6 +303,9 @@ export async function addOwnTimedExercise(page: Page, name: string) {
 export async function openExistingViaAddOwn(page: Page, name: string, measure: 'Reps' | 'Time' = 'Reps') {
   await page.getByRole('button', { name: '+ Add your own exercise' }).click();
   await page.getByPlaceholder('Exercise name').fill(name);
-  await page.getByRole('dialog').getByRole('button', { name: measure, exact: true }).click();
+  // "Measured in" offers Weight & reps / Bodyweight / Time; a rep exercise is the first (the
+  // default, and the same movement family as Bodyweight for the duplicate check).
+  const option = measure === 'Time' ? 'Time' : 'Weight & reps';
+  await page.getByRole('dialog').getByRole('button', { name: option, exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: `Open ${name}`, exact: true }).click();
 }

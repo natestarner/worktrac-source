@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText } from './support/offline';
 
 // PR 3 of offline mode: the outbox count is surfaced ("N changes waiting to sync"), and online-only
@@ -13,7 +13,7 @@ test.describe('Offline mode — sync-count UX and Tier-3 gating', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await goHardOffline(page);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
 
     await expect(outboxCountText(page, 1)).toBeVisible();

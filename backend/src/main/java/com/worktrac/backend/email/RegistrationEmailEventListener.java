@@ -11,6 +11,7 @@ import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
 import com.worktrac.backend.user.PasswordResetConfirmedEvent;
 import com.worktrac.backend.user.RegistrationConfirmedEvent;
+import com.worktrac.backend.account.AccountDeletedEvent;
 import com.worktrac.backend.user.SecurityNoticeEvent;
 import com.worktrac.backend.user.VerificationCodeIssuedEvent;
 import org.slf4j.Logger;
@@ -52,6 +53,7 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
     static final String MEMBER_ACCEPTED_OWNER = "email.member-accepted-owner";
     static final String MEMBER_REVOKED = "email.member-revoked";
     static final String SECURITY_NOTICE = "email.security-notice";
+    static final String ACCOUNT_DELETED = "email.account-deleted";
 
     private final EmailService emailService;
     private final RegistrationAuditService auditService;
@@ -134,6 +136,15 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
         outbox.enqueue(SECURITY_NOTICE, event);
     }
 
+    /**
+     * A household was deleted: one row per login that had a way into it. Enqueued inside the
+     * deletion's transaction, so a deletion that rolls back sends nothing.
+     */
+    @EventListener
+    public void onAccountDeleted(AccountDeletedEvent event) {
+        outbox.enqueue(ACCOUNT_DELETED, event);
+    }
+
     @Override
     public List<OutboxHandler<?>> outboxHandlers() {
         return List.of(
@@ -177,7 +188,11 @@ public class RegistrationEmailEventListener implements OutboxHandlerProvider {
                 email(SECURITY_NOTICE, SecurityNoticeEvent.class, SecurityNoticeEvent::email,
                         emailService::sendSecurityNotice,
                         RegistrationEventType.SECURITY_NOTICE_EMAIL_SENT,
-                        RegistrationEventType.SECURITY_NOTICE_EMAIL_FAILED, "security notice"));
+                        RegistrationEventType.SECURITY_NOTICE_EMAIL_FAILED, "security notice"),
+                email(ACCOUNT_DELETED, AccountDeletedEvent.class, AccountDeletedEvent::email,
+                        emailService::sendAccountDeleted,
+                        RegistrationEventType.ACCOUNT_DELETED_EMAIL_SENT,
+                        RegistrationEventType.ACCOUNT_DELETED_EMAIL_FAILED, "account deleted"));
     }
 
     // The common shape of every handler above: the send's own failure propagates (so the outbox

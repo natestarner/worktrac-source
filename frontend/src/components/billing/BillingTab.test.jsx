@@ -29,7 +29,7 @@ vi.mock('./EmbeddedCheckout', () => ({
 }));
 vi.mock('../../api/logins', () => ({ listLogins: vi.fn() }));
 
-function render(account, subscription, { logins = [], membership } = {}) {
+function render(account, subscription, { logins = [], membership, url = '/app/billing' } = {}) {
   useAuth.mockReturnValue({
     account,
     refreshPeople: vi.fn().mockResolvedValue(),
@@ -40,7 +40,7 @@ function render(account, subscription, { logins = [], membership } = {}) {
   getSubscription.mockResolvedValue(subscription ?? null);
   listLogins.mockResolvedValue(logins);
   return renderWithQuery(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <BillingTab />
     </MemoryRouter>,
   );
@@ -86,10 +86,19 @@ describe('BillingTab', () => {
 
   // Free is permanent, so deferring costs nothing -- this is an equal-weight escape, not fine
   // print, especially for someone routed here straight from marketing's "Go Plus".
-  it('offers a way to stay on Free', async () => {
-    render({ id: 1, plan: 'FREE' });
+  it('offers a way to stay on Free to someone arriving from sign-up', async () => {
+    render({ id: 1, plan: 'FREE' }, null, { url: '/app/billing?intent=plus' });
 
     expect(await screen.findByRole('button', { name: /Start with Free/ })).toBeInTheDocument();
+  });
+
+  // From the menu or the Go Plus badge the household is already on Free; offering to "start" it
+  // read as a mistake.
+  it('does not offer to start Free to a household opening billing from the app', async () => {
+    render({ id: 1, plan: 'FREE' });
+
+    expect(await screen.findByRole('button', { name: 'Upgrade to Plus' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Start with Free/ })).toBeNull();
   });
 
   // Midday UTC, not midnight: dates render in the VIEWER's local time (see utils/datetime.js),
@@ -480,7 +489,7 @@ describe('BillingTab Pro upgrade', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
 
     await waitFor(() =>
-      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'PRACTICE' }));
+      expect(createCheckoutSession).toHaveBeenCalledWith('MONTH', { plan: 'PRO', band: 'PRACTICE' }));
   });
 
   // The smallest band, because a trainer arriving here has one or two clients far more often than
@@ -489,17 +498,60 @@ describe('BillingTab Pro upgrade', () => {
     renderTab();
 
     expect(await screen.findByLabelText('How many clients?')).toHaveValue('STARTER');
-    expect(screen.getByText('$190 / year')).toBeInTheDocument();
+    expect(screen.getByText('$19 / month')).toBeInTheDocument();
   });
 
-  // One interval control on the screen, driving both cards: two prices quoting different billing
-  // periods at once is how somebody compares $29/year against $19/month and concludes wrongly.
-  it('prices Pro in whichever interval the screen is showing', async () => {
+  // ── The Pro card owns its own interval ──────────────────────────────────────────────────────
+  // It used to be the PLUS card's radio group, which silently priced Pro too: App Review (1.3.0,
+  // 2026-11-23) could not find the monthly Pro plans because the screen sat on Yearly, and nothing
+  // on the Pro card said where its billing period was set.
+
+  // Monthly first, as for-trainers.html's price table leads with Monthly -- while Plus keeps Yearly.
+  it('starts the Pro card on monthly, with its own control, while Plus stays on yearly', async () => {
     renderTab();
 
-    fireEvent.click(await screen.findByRole('radio', { name: /Monthly/ }));
+    expect(await screen.findByRole('radio', { name: 'Pro monthly' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Pro yearly' })).not.toBeChecked();
+    expect(screen.getByRole('radiogroup', { name: 'Pay monthly or yearly?' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Yearly/ })).toBeChecked();
+  });
 
+  it('switches Pro to yearly from the Pro card, and checks out Pro yearly', async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'Pro yearly' }));
+    expect(screen.getByText('$190 / year')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'STARTER' }));
+  });
+
+  // ⚠️ The two cards are NOT linked any more. Each half fails against the old shared interval.
+  it("the Plus card's interval no longer moves Pro's price", async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('radio', { name: /^Monthly/ }));
+    expect(screen.getByRole('radio', { name: 'Pro monthly' })).toBeChecked();
     expect(screen.getByText('$19 / month')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Pro yearly' }));
+    // Plus is still monthly: changing Pro moved nothing on the Plus card.
+    expect(screen.getByRole('radio', { name: /^Monthly/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade to Plus' }));
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('MONTH', { plan: 'PLUS', band: null }));
+  });
+
+  // Unlimited is the band App Review could not find. On the web it is sold both ways.
+  it('Unlimited is reachable on the Pro card at either interval on the web', async () => {
+    renderTab();
+
+    fireEvent.change(await screen.findByLabelText('How many clients?'), { target: { value: 'UNLIMITED' } });
+    expect(screen.getByText('$149 / month')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Pro yearly' }));
+    expect(screen.getByLabelText('How many clients?')).toHaveValue('UNLIMITED');
+    expect(screen.getByText('$1,490 / year')).toBeInTheDocument();
   });
 
   it('still sends Plus from the Plus button', async () => {
@@ -598,6 +650,20 @@ describe('BillingTab Pro upgrade', () => {
 
       const upgrade = screen.getByRole('button', { name: 'Subscribe to Pro' });
       fireEvent.click(upgrade);
+
+      await waitFor(() =>
+        expect(createCheckoutSession).toHaveBeenCalledWith('MONTH', { plan: 'PRO', band: 'STARTER' }));
+    });
+
+    // The PLUS screen has no Plus interval control at all, so before the Pro card carried its own a
+    // Plus household could only ever be sold Pro yearly from here.
+    it('lets a Plus household choose Pro yearly on the Pro card', async () => {
+      render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+      await screen.findByText('Huddle Plus');
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Pro yearly' }));
+      expect(screen.getByText('$190 / year')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
 
       await waitFor(() =>
         expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'STARTER' }));

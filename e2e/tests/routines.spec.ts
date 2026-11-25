@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, dismissPrCelebration } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, prCelebration, tapLogSet, logSetButton } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -37,7 +37,7 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: 'Start routine' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByText('1 of 2')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
@@ -81,9 +81,9 @@ test.describe('Routines', () => {
     // Log at position 1, walk to position 3 (the same exercise again), and log there too. Both
     // sets belong to one exercise in one session, so the second position resumes the first's list
     // rather than starting a fresh one -- that is the point of cycling back.
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 3')).toBeVisible();
@@ -97,7 +97,7 @@ test.describe('Routines', () => {
     await expect(pills.getByRole('button', { name: 'Barbell Bench Press, done', exact: true })).toHaveCount(1);
     await expect(pills.getByRole('button', { name: 'Dumbbell Overhead Press, skipped', exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2', { exact: true })).toBeVisible();
 
@@ -225,8 +225,8 @@ test.describe('Routines', () => {
 
     // Ending the routine is not ending the workout, and it doesn't yank you off the exercise you
     // were on -- the set logger is still right there to keep using off-script.
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(logSetButton(page)).toBeVisible();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
 

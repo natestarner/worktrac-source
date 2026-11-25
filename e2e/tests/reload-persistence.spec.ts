@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, endWorkout, pickExercise, prCelebration, tapLogSet } from './support/exercises';
 
 function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
@@ -61,16 +61,15 @@ test.describe('State survives reload and stays live without a full reload', () =
     // right away, without a reload, and Sam's pill must stay dot-less.
     await personPill(page, 'Alex').click();
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await expect(liveSessionDot(page, 'Alex')).toBeVisible();
     await expect(liveSessionDot(page, 'Sam')).toHaveCount(0);
 
     // Ending the workout must clear the dot immediately too -- not just on next reload.
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await endWorkout(page);
     await expect(liveSessionDot(page, 'Alex')).toHaveCount(0);
   });
 });

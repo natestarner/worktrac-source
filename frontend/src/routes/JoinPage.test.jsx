@@ -18,6 +18,7 @@ const SET_PASSWORD = {
   email: 'sam@example.com',
 };
 const SIGN_IN = { ...SET_PASSWORD, mode: 'SIGN_IN' };
+const LAST_USED_KEY = 'huddle-last-sign-in-method';
 
 function renderAt(search) {
   return render(
@@ -49,6 +50,51 @@ describe('JoinPage', () => {
     acceptInvite.mockResolvedValue(null);
     previewInvite.mockResolvedValue(SET_PASSWORD);
     signedInAs(null);
+    localStorage.removeItem(LAST_USED_KEY);
+  });
+
+  // The sign-in screens mark the way this device signed in last ("Last used"). Joining with a
+  // password is a password sign-in, so on a shared device it must replace whoever's Apple or Google
+  // button was marked before; joining on a session that already exists signed nobody in.
+  describe('"Last used" on the sign-in screens', () => {
+    it('becomes the password once somebody joins with one', async () => {
+      localStorage.setItem(LAST_USED_KEY, 'apple'); // a sibling's Apple sign-in, earlier
+      renderAt('?i=42&t=secret-token');
+
+      fireEvent.change(await screen.findByPlaceholderText('At least 8 characters'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Join household' }));
+
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
+      expect(localStorage.getItem(LAST_USED_KEY)).toBe('password');
+    });
+
+    it('is left alone when joining on a session that already exists', async () => {
+      previewInvite.mockResolvedValue(SIGN_IN);
+      localStorage.setItem(LAST_USED_KEY, 'google');
+      signedInAs('sam@example.com');
+      renderAt('?i=42&t=secret-token');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Join household' }));
+
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
+      expect(localStorage.getItem(LAST_USED_KEY)).toBe('google');
+    });
+
+    it('is left alone when the join is refused', async () => {
+      localStorage.setItem(LAST_USED_KEY, 'apple');
+      acceptInvite.mockRejectedValue(new Error('That invitation link is no longer valid. Ask for a new one.'));
+      renderAt('?i=42&t=secret-token');
+
+      fireEvent.change(await screen.findByPlaceholderText('At least 8 characters'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Join household' }));
+
+      expect(await screen.findByText(/no longer valid/)).toBeInTheDocument();
+      expect(localStorage.getItem(LAST_USED_KEY)).toBe('apple');
+    });
   });
 
   describe('a brand-new address', () => {

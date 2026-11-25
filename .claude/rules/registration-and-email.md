@@ -1,6 +1,7 @@
 ---
 paths:
   - "backend/src/main/java/com/worktrac/backend/user/**"
+  - "backend/src/main/java/com/worktrac/backend/account/AccountDelet*.java"
   - "backend/src/main/java/com/worktrac/backend/email/**"
   - "backend/src/main/java/com/worktrac/backend/emaildelivery/**"
   - "backend/src/main/java/com/worktrac/backend/registrationaudit/**"
@@ -124,6 +125,29 @@ banks use, so a change somebody did not make gets noticed.
 - The event carries its time as epoch millis, not an `Instant`: the outbox's ObjectMapper has no
   java.time module.
 
+### Deleting a household emails every login that had a way in
+
+`account.AccountDeletedEvent` → `EmailService.sendAccountDeleted` (`email.account-deleted`), one
+outbox row per login, published at the end of `AccountDeletionService.deleteAccount`, inside its
+transaction. Same reasoning as the security notices: deletion takes the password or a fresh Apple /
+Google sign-in, so one nobody meant is a stolen credential, and for every OTHER member it is the only
+explanation of why the app stopped letting them in.
+
+- **Emails are captured BEFORE the deletes; `loginRemains` is asked AFTER the reap.** Before, there
+  is nothing left to ask who the household's logins were; after, `existsByEmail` tells truthfully
+  whether a login was kept because it belongs to another household. The email says which.
+- **A refused or rolled-back deletion sends nothing**, because the row is in the transaction.
+  `AccountDeletionTest#aRefusedDeletionEmailsNobody` is red only if the email ESCAPES the transaction
+  (a listener sending directly); where the publish sits inside it does not matter.
+- **Billing is said to the deleter only.** A web plan was cancelled with it (the Stripe outbox row
+  beside this one); an **App Store subscription is still billing** and only the subscriber can stop
+  it, so the email says where to cancel. Members never paid.
+- **No "Open Huddle" for a login that no longer exists**: it would open a sign-in that can only
+  fail. `simple-notice.html`'s button sits between `<!--CTA-->` markers for this. The only address
+  offered is support's (`support@huddle.fitness`, what the marketing site publishes), never a link
+  that signs in.
+- `ACCOUNT_DELETED_EMAIL_FAILED` is in `ALERTABLE`.
+
 ## Two levels of email truth — never conflate
 
 1. **Send accepted** — `EmailService.send` inspects ACS's `EmailSendResult.getStatus()`/
@@ -146,7 +170,8 @@ banks use, so a change somebody did not make gets noticed.
 2. **Actually delivered** — arrives later out of band via Event Grid
    (`Microsoft.Communication.EmailDeliveryReportReceived`) → `EmailDeliveryWebhookController`,
    correlated by that same `messageId`. Its `permitAll()` route is gated by a shared-secret query
-   param (`EMAIL_DELIVERY_WEBHOOK_KEY`). A new environment needs its own Event Grid subscription
+   param (`EMAIL_DELIVERY_WEBHOOK_KEY`), compared with `MessageDigest.isEqual` (constant time,
+   like `TestSupportController`'s key), never `String.equals`. A new environment needs its own Event Grid subscription
    or these events never arrive.
 
 Every failure event's `detail` carries the **real reason** (ACS code, the recipient server's SMTP
@@ -421,3 +446,13 @@ no longer keeps. There is no shared constant between the two — the string is d
 deliberately (Java `String.format`-shaped vs. a template literal), same tradeoff as
 `historyWindowCopy.js` deriving from a server value rather than hand-duplicating one, except here
 the shapes live in different languages and repos, so a shared constant isn't available at all.
+
+## A mistyped address has a way back ("Use a different email")
+
+`ConfirmEmailPage` offers it under Resend: back to `/register` (with `?plan=` kept) carrying the
+name, household name and email in router state, never the password. Nothing is undone on the
+server: no account exists until a code is confirmed, and the pending sign-up for the wrong
+address expires on its own. Before it, the confirm screen had no exit, and the App Store app has
+no browser Back. **Its label must not contain "Start over"** -- the Signing-you-in overlay's
+escape on the same screen is selected by that substring. Pinned in `ConfirmEmailPage.test.jsx`,
+`RegisterPage.test.jsx` and `new-user-polish.spec.ts`.

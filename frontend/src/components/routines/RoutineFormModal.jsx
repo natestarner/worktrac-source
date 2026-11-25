@@ -123,14 +123,14 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const searching = term.length > 0;
 
   // Mirrors the Log picker: default view is the person's list split into "Favorites" and
-  // "Other Previously Logged"; typing a search reveals the whole catalog, ranked. Already-added
+  // "Previously Logged"; typing a search reveals the whole catalog, ranked. Already-added
   // exercises deliberately STAY in these lists -- tapping one again adds a second occurrence.
   const searchResults = searching ? searchExercises(catalog, exerciseFilter) : [];
   const favorites = personExercises.filter((e) => e.isFavorite);
   const otherLogged = personExercises.filter((e) => !e.isFavorite);
   const groups = [];
   if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', items: favorites });
-  if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Other Previously Logged', items: otherLogged });
+  if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Previously Logged', items: otherLogged });
 
   function addExercise(id) {
     setRows((list) => [...list, { key: (nextRowKey.current += 1), exerciseId: id }]);

@@ -29,8 +29,9 @@ test.describe('billing', () => {
     // change shape between the page they just read and the screen they pay on.
     await expect(page.getByRole('radio', { name: /Yearly/ })).toBeChecked();
 
-    // Free is permanent, so deferring costs nothing. This is an equal-weight escape, not fine print.
-    await expect(page.getByRole('button', { name: /Start with Free/ })).toBeVisible();
+    // "Start with Free, decide later" is for someone arriving from sign-up still deciding
+    // (billing-onboarding-order.spec.ts). Opened from the menu, the household is already on Free.
+    await expect(page.getByRole('button', { name: /Start with Free/ })).toHaveCount(0);
   });
 
   test('the header offers Go Plus on Free and says Plus once upgraded', async ({ page, request }) => {

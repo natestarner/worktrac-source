@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { availableSignInProviders } from '../lib/native';
+import { describeSignInMethods } from '../lib/lastSignInMethod';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
@@ -23,6 +25,11 @@ export default function ResetPasswordPage() {
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [justSent, setJustSent] = useState(false);
+  // Shown to everyone, whatever email was typed, so it says nothing about whether that email has an
+  // account. It is the one hint that works on a NEW device: someone who joined with Apple's "Hide
+  // My Email" has an account under a relay address, so the email they typed matches nothing and no
+  // code will ever come. Names only the providers this build offers; none offered, no line.
+  const [providerNames] = useState(() => describeSignInMethods(availableSignInProviders()));
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -194,6 +201,16 @@ export default function ResetPasswordPage() {
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>
             New code sent.
           </div>
+        )}
+        {providerNames && (
+          <p className="sign-in-method-hint" data-testid="reset-no-code-provider-hint" style={{ margin: 'var(--space-4) 0 0' }}>
+            <strong>No code?</strong> If you signed up with {providerNames}, your account has no
+            password to reset: tap Continue with {providerNames} on the{' '}
+            <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
+              Log in screen
+            </Link>{' '}
+            instead.
+          </p>
         )}
       </form>
     </main>

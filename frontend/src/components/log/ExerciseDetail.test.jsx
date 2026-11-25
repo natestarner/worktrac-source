@@ -325,19 +325,10 @@ describe('ExerciseDetail PR celebration payload', () => {
     expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['est1rm']);
   });
 
-  it('marks a first-ever set as a baseline rather than claiming a stack of records', async () => {
-    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
-    renderExerciseDetail();
-
-    fireEvent.click(await screen.findByText('Log set'));
-
-    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
-    expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(true);
-  });
-
   // The first workout of an exercise is trivially its biggest, so a volume record there says
-  // nothing. The set records still show (with the "first time" framing) -- only volume waits for a
-  // second workout to have something to beat. Asserted against BOTH summary shapes: the current
+  // nothing. Clicked while the summary is still in flight, so the server has NOT confirmed a first
+  // and the full card shows (see the first-time suite below) -- the set records still fire, and only
+  // volume waits for a second workout to have something to beat. Asserted against BOTH summary shapes: the current
   // one, and the pre-volumeKind one a cached summary may still hold.
   it.each([
     ['current', { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null }],
@@ -351,7 +342,7 @@ describe('ExerciseDetail PR celebration payload', () => {
 
     await waitFor(() => expect(showCelebration).toHaveBeenCalled());
     const payload = showCelebration.mock.calls.at(-1)[0];
-    expect(payload.firstTime).toBe(true);
+    expect(payload.firstTime).toBe(false);
     expect(payload.prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
   });
 
@@ -523,6 +514,237 @@ describe('ExerciseDetail PR celebration payload', () => {
 // Every test here waits for BOTH queries to have landed before tapping, rather than for UI text:
 // what the cards show differs between the unfixed and fixed code, so a text wait would make the
 // "before" run measure a different moment from the "after" run.
+// THE QUIET FIRST-TIME CARD (2026-11-24 walk-through: 5 "New PR!" pop-ups in a new person's first 6
+// sets). The first set EVER of an exercise gets "First <exercise>" with one "starting mark" row --
+// but only when the server has confirmed this person never logged it. Nate's rule is that an actual
+// PR is never missed, and "nothing on this device" is not proof (Free holds 90 days; offline the
+// summary may be from another day). Anything unconfirmed gets the full "New PR!" as before.
+// Only set 1 is quiet: set 2 of the same workout has set 1 folded into its priors, so beating it is
+// a full "New PR!". See prDetection.js#isCertainFirstEver.
+describe('ExerciseDetail first-time celebration: quiet only when certain', () => {
+  const NEVER_LOGGED = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null };
+  let showCelebration;
+  let draft;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    showCelebration = vi.fn();
+    draft = { weight: 135, reps: 8 };
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockImplementation(() => typedDraft(draft));
+    useUI.mockReturnValue({ showCelebration, showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue(NEVER_LOGGED);
+    getHistory.mockResolvedValue([]);
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+  });
+
+  // Not remounted between sets, exactly as LogTab keeps it; the force button gives the component a
+  // render in which to pick up a re-typed draft.
+  function Harness() {
+    const [, force] = useState(0);
+    return (
+      <div>
+        <button onClick={() => force((n) => n + 1)}>force render</button>
+        <ExerciseDetail
+          exercise={exercise}
+          personId={7}
+          editingSessionId={null}
+          liveSession={null}
+          refetchLiveSession={vi.fn().mockResolvedValue()}
+          onBack={vi.fn()}
+        />
+      </div>
+    );
+  }
+
+  const lastCard = () => showCelebration.mock.calls.at(-1)?.[0];
+
+  async function settled(queryClient) {
+    await waitFor(() => {
+      const state = queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null));
+      expect(state?.status).toBe('success');
+      expect(state?.fetchStatus).toBe('idle');
+      expect(queryClient.getQueryState(queryKeys.history(7))?.status).toBe('success');
+    });
+  }
+
+  async function logSet() {
+    // "Log set for Sam" once the household has two people.
+    await waitFor(() => expect(screen.getByText(/^Log set/).closest('button')).not.toBeDisabled());
+    fireEvent.click(screen.getByText(/^Log set/));
+  }
+
+  async function retype(next) {
+    draft = next;
+    fireEvent.click(screen.getByText('force render'));
+  }
+
+  it('gives a confirmed first-ever set the quiet card: one starting-mark row, no records', async () => {
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard()).toEqual({
+      exerciseName: exercise.name,
+      personFirstName: null,
+      firstTime: true,
+      prs: [{ type: 'startingMark', valueText: '135 lb × 8', caption: 'Your starting mark' }],
+    });
+  });
+
+  it('says a bodyweight starting mark in reps', async () => {
+    draft = { weight: 0, reps: 10 };
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().firstTime).toBe(true);
+    expect(lastCard().prs).toEqual([{ type: 'startingMark', valueText: '10 reps', caption: 'Your starting mark' }]);
+  });
+
+  // Weighted bodyweight (a pull-up with a plate on) reads like any loaded set.
+  it('says a weighted bodyweight starting mark with its load', async () => {
+    draft = { weight: 25, reps: 6 };
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().prs[0].valueText).toBe('25 lb × 6');
+  });
+
+  it('names the person when the household has two or more', async () => {
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [{ id: 7, name: 'Sam Starner' }, { id: 8, name: 'Nate' }] });
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard()).toMatchObject({ firstTime: true, personFirstName: 'Sam' });
+  });
+
+  // Option (c): set 1 is the starting mark, and anything that beats it -- even minutes later, in the
+  // same first workout -- is a real record with the full card. Nothing is held back for "day one".
+  it('celebrates a later set in the same first workout that beats the first as a full New PR', async () => {
+    // Set 1's write stays in flight, so it is on screen only as a not-yet-synced row -- the case
+    // where nothing on the server knows about it yet and only the local fold can stop set 2 being
+    // called "first" too. (This harness never feeds the live session back in, so a write that
+    // landed would drop off the screen in a way the real app's does not.)
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().firstTime).toBe(true);
+
+    await retype({ weight: 155, reps: 6 });
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(2));
+    expect(lastCard().firstTime).toBe(false);
+    // 155 beats 135 on top weight, and 155x6 (186) beats 135x8 (171) on est. 1RM: both at once.
+    expect(lastCard().prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+  });
+
+  it('shows nothing for a later set that does not beat the first', async () => {
+    // Set 1's write stays in flight, so it is on screen only as a not-yet-synced row -- the case
+    // where nothing on the server knows about it yet and only the local fold can stop set 2 being
+    // called "first" too. (This harness never feeds the live session back in, so a write that
+    // landed would drop off the screen in a way the real app's does not.)
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+
+    await retype({ weight: 125, reps: 8 });
+    await logSet();
+    expect(await screen.findByText('125 lb × 8')).toBeInTheDocument();
+
+    expect(showCelebration).toHaveBeenCalledTimes(1);
+  });
+
+  // ⚠️ The Free case the safety rule exists for. Five months ago is outside a Free device's History
+  // but not outside the summary, which reads everything. That is a SECOND workout, never a first.
+  it('never calls a set "first" when the server knows of older history the device cannot see', async () => {
+    getExerciseSummary.mockResolvedValue({ ...NEVER_LOGGED, best: { weight: 135, reps: 8, unit: 'lb', est1rm: 171 }, heaviestWeightLb: 135 });
+    draft = { weight: 155, reps: 6 };
+    const { queryClient } = renderWithQuery(<Harness />);
+    await settled(queryClient);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().firstTime).toBe(false);
+    expect(lastCard().prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+  });
+
+  // Not certain -> the full "New PR!", exactly as every first set was celebrated before.
+  it('falls back to the full card while the summary has not answered yet', async () => {
+    getExerciseSummary.mockImplementation(() => new Promise(() => {}));
+    renderWithQuery(<Harness />);
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().firstTime).toBe(false);
+    expect(lastCard().prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+  });
+
+  it('falls back to the full card under lie-fi (the summary fetch fails)', async () => {
+    getExerciseSummary.mockRejectedValue(new Error('network error'));
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderWithQuery(<Harness />);
+    await waitFor(() => expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('error'));
+
+    await logSet();
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+    expect(lastCard().firstTime).toBe(false);
+  });
+
+  // Hard offline, with a cached summary that said "never logged" on some earlier day. Cached is not
+  // confirmed: another device, or the Free window, may have changed the answer since.
+  it('falls back to the full card hard offline, even with a cached "never logged" summary', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
+    registerOfflineMutationDefaults(queryClient, { retry: false });
+    queryClient.setQueryData(queryKeys.history(7), []);
+    queryClient.setQueryData(queryKeys.exerciseSummary(7, exercise.id, null), NEVER_LOGGED);
+
+    onlineManager.setOnline(false);
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Harness />
+        </QueryClientProvider>,
+      );
+
+      await logSet();
+
+      await waitFor(() => expect(showCelebration).toHaveBeenCalledTimes(1));
+      expect(lastCard().firstTime).toBe(false);
+      expect(lastCard().prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+});
+
 describe('ExerciseDetail record priors: an out-of-date summary and history (#326)', () => {
   let showCelebration;
 
@@ -1727,6 +1949,62 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     }
   });
 
+  // A set queued while this exercise was still a temp id is keyed under that temp id. Once the
+  // create lands, LogTab moves the screen to the real id while the set is still queued -- and it
+  // must stay drawn until it lands (docs/incidents/2026-11-24-new-exercise-sets-vanish-on-reconnect.md).
+  function queueSetUnder(queryClient, exerciseId, { weight, reps, tempId }) {
+    const mutationKey = ['logSet', 7, exerciseId];
+    return act(async () => {
+      new MutationObserver(queryClient, { ...queryClient.getMutationDefaults(mutationKey), mutationKey })
+        .mutate({
+          mode: 'live', personId: 7, sessionId: null, exerciseId, unit: 'lb', weight, reps,
+          tempId, idempotencyKey: `idem-${tempId}`, clientLoggedAt: new Date().toISOString(),
+        })
+        .catch(() => {});
+    });
+  }
+
+  it('keeps drawing a set queued under the temp id once the screen has moved to the real id', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const tempId = newTempExerciseId();
+    setExerciseIdMapping(tempId, exercise.id);
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      await queueSetUnder(queryClient, tempId, { weight: 60, reps: 10, tempId: 'test-temp-remapped' });
+
+      const row = (await screen.findByText('60 lb × 10')).parentElement;
+      expect(within(row).getByText('Set 1')).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  // ...and resolving must not widen the match: a temp id that maps to ANOTHER exercise, or that has
+  // not mapped yet, is somebody else's set.
+  it('does not draw a set queued under a temp id that is not this exercise', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const otherTemp = newTempExerciseId();
+    setExerciseIdMapping(otherTemp, 999);
+    const unmappedTemp = newTempExerciseId();
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      await queueSetUnder(queryClient, otherTemp, { weight: 70, reps: 10, tempId: 'test-temp-other' });
+      await queueSetUnder(queryClient, unmappedTemp, { weight: 80, reps: 10, tempId: 'test-temp-unmapped' });
+      // A set for THIS exercise as a positive control, so the absences below are not vacuous.
+      await queueSetUnder(queryClient, exercise.id, { weight: 90, reps: 10, tempId: 'test-temp-mine' });
+
+      expect(await screen.findByText('90 lb × 10')).toBeInTheDocument();
+      expect(screen.queryByText('70 lb × 10')).not.toBeInTheDocument();
+      expect(screen.queryByText('80 lb × 10')).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   // Nothing exists server-side to key a "session in progress" banner/dot on until this
   // queued write actually replays, so onMutate optimistically seeds a provisional session
   // (id: null, so it can never leak into contextSessionId/activeSessionId or any id-keyed
@@ -2187,7 +2465,7 @@ describe('ExerciseDetail weight prefill', () => {
   // would show what the test seeded rather than what the component computed. Mirrors the reducer's
   // SET_DRAFT case exactly -- all five fields written together, starting unowned so the prefill is
   // free to seed it.
-  function Harness({ liveSession = null }) {
+  function Harness({ liveSession = null, loadType }) {
     const [slice, setSlice] = useState({
       weightDraft: null,
       repsDraft: 8,
@@ -2216,6 +2494,7 @@ describe('ExerciseDetail weight prefill', () => {
         liveSession={liveSession}
         refetchLiveSession={vi.fn().mockResolvedValue()}
         onBack={vi.fn()}
+        loadType={loadType}
       />
     );
   }
@@ -2243,16 +2522,105 @@ describe('ExerciseDetail weight prefill', () => {
     expect(weightInput).toHaveAttribute('placeholder', '—');
   });
 
-  it('logs a blank weight as 0 instead of refusing the tap', async () => {
-    // The bodyweight case: a first-ever pull-up is correct with no interaction at all, and
-    // blocking the button would punish it to protect a weighted lift where the em dash is
-    // already visibly not a number.
+  // ## A first set asks for its weight according to the exercise's load type (2026-11-24)
+  //
+  // This used to be "logs a blank weight as 0 instead of refusing the tap", for every exercise:
+  // right for a pull-up, and how a new person's first Barbell Bench Press got recorded as a
+  // bodyweight set ("BW x 8") with a Most reps record. Now the exercise says which it is.
+
+  it('asks for a weight on the first set of an exercise that expects one', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+
+    const button = await screen.findByRole('button', { name: 'Enter a weight' });
+    expect(button).toBeDisabled();
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('');
+    expect(screen.getByLabelText('Weight (lb)')).toHaveClass('stepper-value--needed');
+    fireEvent.click(button);
+    expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  it('logs once any weight is entered, and reads "Log set" again', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    const weight = await screen.findByLabelText('Weight (lb)');
+    fireEvent.focus(weight);
+    fireEvent.change(weight, { target: { value: '135' } });
+    fireEvent.blur(weight);
+
+    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 135, reps: 8 })));
+  });
+
+  it('"No weight, just bodyweight" logs the first set at 0', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'No weight, just bodyweight' }));
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('0');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  });
+
+  // A first-ever pull-up is right with no interaction at all.
+  it('starts a bodyweight exercise at 0 under "Added", one tap to log', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="bodyweight" />);
+
+    await waitFor(() => expect(screen.getByLabelText('Added (lb)')).toHaveValue('0'));
+    expect(await screen.findByText('Most reps')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  });
+
+  // Typing a number and tapping straight away: the tap is what blurs (and so commits) the field,
+  // so the button has to be enabled already. Otherwise the first tap is swallowed.
+  it('enables Log set as soon as a weight is typed, before the field commits', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    const weight = await screen.findByLabelText('Weight (lb)');
+    await screen.findByRole('button', { name: 'Enter a weight' });
+    fireEvent.focus(weight);
+    fireEvent.change(weight, { target: { value: '95' } });
+
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeEnabled();
+    fireEvent.blur(weight);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 95 })));
+  });
+
+  // Until the screen knows there is no history it must not claim there is none: no flash of
+  // "Enter a weight" over an exercise whose last session is still loading.
+  it('does not ask for a weight while the summary is still loading', async () => {
+    getExerciseSummary.mockReturnValue(new Promise(() => {}));
+
+    renderWithQuery(<Harness loadType="external" />);
+    expect(await screen.findByRole('button', { name: 'Log set' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Enter a weight' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+  });
+
+  // A catalog cached before load types existed (axis D) has no loadType: the safe reading.
+  it('treats an exercise with no load type as expecting a weight', async () => {
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
 
     renderWithQuery(<Harness />);
-    fireEvent.click(await screen.findByText('Log set'));
+    expect(await screen.findByRole('button', { name: 'Enter a weight' })).toBeDisabled();
+  });
 
-    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  // Only BLANK is affected: history still fills in, and a carried-forward set still logs as it reads.
+  it('never asks when last session fills the weight in', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: { sets: [{ weight: 0, reps: 10, unit: 'lb' }] }, best: null });
+
+    renderWithQuery(<Harness loadType="external" />);
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('0'));
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeEnabled();
   });
 
   it("carries today's last set forward when there is no prior session", async () => {

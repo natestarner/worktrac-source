@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import SectionLabel from './SectionLabel';
-import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise, updateExerciseMuscles } from '../../api/exercises';
+import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise, updateExerciseLoadType, updateExerciseMuscles } from '../../api/exercises';
+import { EXERCISE_KIND_OPTIONS, fieldsForKind, kindOf } from '../../utils/exerciseLoad';
 import MusclePicker from '../exercise/MusclePicker';
+import SegmentedToggle from './SegmentedToggle';
 import { setPersistentNote } from '../../api/notes';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
@@ -39,6 +41,10 @@ export default function ConfigureExerciseModal({
   // { primary, secondary } -- the exercise's catalog-row muscles (ExerciseDetail passes its own).
   muscles = { primary: [], secondary: [] },
   onMusclesSaved,
+  // 'external' | 'bodyweight' from the exercise's CATALOG row (the person's picker row carries none),
+  // and the callback that writes the server's answer back into the cached catalog.
+  loadType = 'external',
+  onLoadTypeSaved,
 }) {
   const { isMember, ownerName } = useAccountAccess();
   const isHousehold = !!exercise && !exercise.isGlobal;
@@ -78,6 +84,11 @@ export default function ConfigureExerciseModal({
   // canRename above: an older cached DTO lacks createdByYou, and the server is the authority.
   const canEditMuscles = isHousehold && (exercise.createdByYou !== false || !isMember);
   const shownMuscles = musclesDraft ?? muscles;
+  // Weight & reps <-> Bodyweight, for the same people and exercises as muscles. Never Time: an
+  // exercise's measure is fixed once sets exist (Exercise.trackingType has no setter), so a timed
+  // exercise shows no choice here at all. Saved the moment it is tapped, like a toggle.
+  const canEditLoadType = canEditMuscles && exercise?.trackingType !== 'duration';
+  const [shownKind, setShownKind] = useState(() => kindOf({ trackingType: exercise?.trackingType, loadType }));
   // `busy` stays the source of truth for `locked` because it also covers the non-write work these
   // handlers do (onExerciseChanged/onTagsChanged refetches). useGatedMutation adds the error path
   // every one of these handlers was missing -- each had try/finally with no catch, so a failed
@@ -109,6 +120,23 @@ export default function ConfigureExerciseModal({
       const updated = await updateExerciseMuscles(exercise.id, musclesDraft);
       if (onMusclesSaved) onMusclesSaved(updated);
       setMusclesDraft(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // A gated write, saved on tap. The toggle moves at once and goes back if the save fails, so it
+  // never shows a choice the server didn't keep.
+  async function saveKind(next) {
+    const previous = shownKind;
+    setShownKind(next);
+    setBusy(true);
+    try {
+      const updated = await updateExerciseLoadType(exercise.id, fieldsForKind(next).loadType);
+      if (onLoadTypeSaved) onLoadTypeSaved(updated);
+    } catch (error) {
+      setShownKind(previous);
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -209,6 +237,7 @@ export default function ConfigureExerciseModal({
     errorMessage: "Your muscle changes didn't save. Try again.",
     showServerMessage: true,
   });
+  const guardedSaveKind = run(saveKind, { offlineMessage: 'Editing needs a connection.' });
   const guardedToggleTag = run(toggleTag, { offlineMessage: 'Editing needs a connection.' });
   const guardedAddTag = run(addTag, { offlineMessage: 'Editing needs a connection.' });
   const guardedAddField = run(addField, { offlineMessage: 'Editing needs a connection.' });
@@ -283,6 +312,21 @@ export default function ConfigureExerciseModal({
         placeholder="e.g. Keep elbows tucked, bad knee — go light"
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
+
+      {canEditLoadType && (
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <SectionLabel>Measured in</SectionLabel>
+          <SegmentedToggle
+            ariaLabel="Measured in"
+            fill
+            value={shownKind}
+            onChange={(next) => {
+              if (next !== shownKind && !locked) guardedSaveKind(next);
+            }}
+            options={EXERCISE_KIND_OPTIONS.filter((o) => o.value !== 'time')}
+          />
+        </div>
+      )}
 
       {canEditMuscles && (
         <div style={{ marginBottom: 'var(--space-5)' }}>

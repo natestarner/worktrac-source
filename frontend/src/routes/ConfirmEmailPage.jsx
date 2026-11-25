@@ -5,6 +5,8 @@ import { useUI } from '../context/UIContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
 import { rememberSignInMethod } from '../lib/lastSignInMethod';
+import SigningInOverlay from '../components/auth/SigningInOverlay';
+import { useSigningIn } from '../components/auth/useSigningIn';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -21,10 +23,32 @@ export default function ConfirmEmailPage() {
   // which one -- the billing screen already carries a card for each.
   const wantsPlan = location.state?.wantsPlan ?? null;
 
+  // "Use a different email": back to sign-up with what was typed, so a mistyped address is a
+  // one-letter fix rather than a dead end. Before this the screen offered only Confirm and Resend,
+  // and in the App Store app there is no browser Back button to find. Nothing needs undoing on the
+  // server: no account exists until a code is confirmed, and the pending sign-up for the wrong
+  // address simply expires (RegistrationService). The plan a marketing link named rides along in
+  // the URL, which is where RegisterPage reads it.
+  function startOver() {
+    const plan = wantsPlan ? `?plan=${wantsPlan.toLowerCase()}` : '';
+    navigate(`/register${plan}`, {
+      replace: true,
+      state: {
+        startOver: {
+          email,
+          personName: location.state?.personName ?? '',
+          accountName: location.state?.accountName ?? '',
+        },
+      },
+    });
+  }
+
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState(false);
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  // Tapping Confirm creates the account AND signs in, so it gets the same full-screen overlay an
+  // Apple / Google sign-up's "Create" does, in the same words (SigningInOverlay.jsx).
+  const { busy: submitting, begin, abandon: abandonAttempt } = useSigningIn();
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [justSent, setJustSent] = useState(false);
@@ -52,29 +76,47 @@ export default function ConfirmEmailPage() {
       return;
     }
 
-    setSubmitting(true);
+    const attempt = begin();
+    const { isCurrent } = attempt;
     try {
       await confirmEmail({ email, code: trimmedCode });
       rememberSignInMethod('password'); // a password registration, now signed in
-      if (wantsPlan) {
-        // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
-        // that effect runs as soon as the shell mounts. Setting it after the navigation would race
-        // the modal it exists to suppress.
-        deferOnboarding();
-        // ?intent reports WHICH plan they named; the billing screen decides what to do with it.
-        // Carried for both rather than only for Pro, so this page stays "say where they came from"
-        // and the one screen that acts on it owns the behaviour. Today only 'pro' changes anything
-        // there -- billing already leads with Plus, so a Plus arrival is already looking at what it
-        // came for, while the Pro card is deliberately quieter and further down.
-        navigate(`/app/billing?intent=${wantsPlan.toLowerCase()}`);
-      } else {
-        navigate('/app/log');
-      }
+      if (isCurrent()) await attempt.settled();
+      // Even when abandoned from the overlay: the account exists and the session is live, so the
+      // app is the only honest place to go (same rule as a late sign-in, SigningInOverlay.jsx).
+      enterApp();
     } catch (err) {
+      if (isCurrent()) await attempt.settled();
+      if (!isCurrent()) return;
       setError(err.message || 'Could not confirm this code');
     } finally {
-      setSubmitting(false);
+      attempt.end();
     }
+  }
+
+  // Where a just-confirmed registration lands.
+  function enterApp() {
+    if (wantsPlan) {
+      // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
+      // that effect runs as soon as the shell mounts. Setting it after the navigation would race
+      // the modal it exists to suppress.
+      deferOnboarding();
+      // ?intent reports WHICH plan they named; the billing screen decides what to do with it.
+      // Carried for both rather than only for Pro, so this page stays "say where they came from"
+      // and the one screen that acts on it owns the behaviour. Today only 'pro' changes anything
+      // there -- billing already leads with Plus, so a Plus arrival is already looking at what it
+      // came for, while the Pro card is deliberately quieter and further down.
+      navigate(`/app/billing?intent=${wantsPlan.toLowerCase()}`);
+    } else {
+      navigate('/app/log');
+    }
+  }
+
+  // "Start over" on the overlay. The code may still be on its way; a late answer is handled as
+  // handleSubmit says above.
+  function abandon() {
+    abandonAttempt();
+    setError("That's taking longer than it should. Please try again.");
   }
 
   async function handleResend() {
@@ -108,6 +150,13 @@ export default function ConfirmEmailPage() {
         padding: 'var(--space-6)',
       }}
     >
+      {submitting && (
+        // A Pro arrival's account is an "Account", like RegisterPage's and SocialSignIn's wording.
+        <SigningInOverlay
+          label={wantsPlan === 'PRO' ? 'Creating your account…' : 'Creating your household…'}
+          onAbandon={abandon}
+        />
+      )}
       <form
         onSubmit={handleSubmit}
         style={{
@@ -122,7 +171,7 @@ export default function ConfirmEmailPage() {
       >
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Check your email</h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
-          Enter the 6-digit code we sent to {email}.
+          Enter the 6-digit code we sent to {email}. Not there? Check your spam or junk folder.
         </div>
 
         {error && (
@@ -159,13 +208,9 @@ export default function ConfirmEmailPage() {
         />
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
 
-        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Confirm</span>
-          {submitting && (
-            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color="currentColor" />
-            </span>
-          )}
+        {/* No spinner of its own: the overlay covers the screen while this is disabled. */}
+        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={primaryButtonStyle}>
+          Confirm
         </button>
 
         <button
@@ -194,6 +239,27 @@ export default function ConfirmEmailPage() {
               <Spinner color="var(--color-muted)" />
             </span>
           )}
+        </button>
+
+        {/* Quieter than Resend: most people typed the address right. Muted text, not accent, so
+            the two actions read as "the usual fix" and "the other one". */}
+        <button
+          type="button"
+          onClick={startOver}
+          disabled={submitting}
+          className="pressable"
+          style={{
+            width: '100%',
+            minHeight: 44,
+            padding: 'var(--space-3)',
+            background: 'transparent',
+            color: 'var(--color-muted)',
+            border: 'none',
+            fontSize: 'var(--text-sm)',
+            cursor: 'pointer',
+          }}
+        >
+          Use a different email
         </button>
         {justSent && cooldown > 0 && (
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>

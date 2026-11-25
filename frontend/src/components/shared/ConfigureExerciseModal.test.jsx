@@ -3,7 +3,78 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigureExerciseModal from './ConfigureExerciseModal';
 import { setPersistentNote } from '../../api/notes';
-import { updateExerciseMuscles } from '../../api/exercises';
+import { updateExerciseLoadType, updateExerciseMuscles } from '../../api/exercises';
+
+// "Measured in" in Customize: Weight & reps <-> Bodyweight for the household's own REP exercises,
+// saved on tap (an online-only edit), never offered for a library exercise or a timed one (an
+// exercise's measure is fixed once sets exist).
+describe('ConfigureExerciseModal load type', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ showToast: vi.fn() });
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  function renderWith(exercise, { loadType = 'external', accountAccess = { isMember: false, ownerName: null } } = {}) {
+    access.current = accountAccess;
+    const onLoadTypeSaved = vi.fn();
+    render(
+      <ConfigureExerciseModal
+        exercise={exercise}
+        personId={1}
+        exerciseId={exercise.id}
+        allTags={[]}
+        appliedTagNames={[]}
+        customFields={[]}
+        onClose={vi.fn()}
+        onFieldsChanged={vi.fn()}
+        onTagsChanged={vi.fn()}
+        onExerciseChanged={vi.fn()}
+        onRequestDelete={vi.fn()}
+        loadType={loadType}
+        onLoadTypeSaved={onLoadTypeSaved}
+      />,
+    );
+    return onLoadTypeSaved;
+  }
+
+  const MY_DIP = { id: 9, name: 'Ring Dip', trackingType: 'strength', isGlobal: false, createdByYou: true, renamable: true };
+
+  it('switches a rep exercise to Bodyweight and hands back the saved row', async () => {
+    const updated = { id: 9, loadType: 'bodyweight' };
+    updateExerciseLoadType.mockResolvedValue(updated);
+    const onLoadTypeSaved = renderWith(MY_DIP);
+
+    expect(screen.getByRole('button', { name: 'Weight & reps' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'Time' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Bodyweight' }));
+
+    await waitFor(() => expect(updateExerciseLoadType).toHaveBeenCalledWith(9, 'bodyweight'));
+    await waitFor(() => expect(onLoadTypeSaved).toHaveBeenCalledWith(updated));
+    expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('goes back to what was saved when the save fails', async () => {
+    updateExerciseLoadType.mockRejectedValue(new Error('nope'));
+    renderWith(MY_DIP, { loadType: 'bodyweight' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weight & reps' }));
+    await waitFor(() => expect(updateExerciseLoadType).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('is not offered for a library exercise or a timed one', () => {
+    renderWith({ id: 1, name: 'Pull-up', trackingType: 'strength', isGlobal: true });
+    expect(screen.queryByRole('button', { name: 'Bodyweight' })).toBeNull();
+  });
+
+  it('is not offered for a timed exercise of your own', () => {
+    renderWith({ ...MY_DIP, trackingType: 'duration' });
+    expect(screen.queryByRole('button', { name: 'Bodyweight' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Weight & reps' })).toBeNull();
+  });
+});
 
 // Muscles worked on the household's own exercises: an online-only edit, offered to whoever may
 // change them, handing the server's row back so the caller can update the cached catalog.
@@ -163,6 +234,7 @@ vi.mock('../../api/exercises', () => ({
   setExerciseTags: vi.fn(),
   updateExercise: vi.fn(),
   updateExerciseMuscles: vi.fn(),
+  updateExerciseLoadType: vi.fn(),
 }));
 
 vi.mock('../../api/notes', () => ({

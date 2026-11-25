@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
 import { goHardOffline, goOnline, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
@@ -80,7 +80,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     // this app -- comparableLb switches to comparing reps, which would quietly change what the
     // assertions below are measuring.
     await setWeight(page, 45);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -106,7 +106,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await registerHousehold(page, request, 'Wren');
     await pickExercise(page, 'Barbell Bench Press');
     await setWeight(page, 45);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -116,11 +116,11 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await expect(page.getByText(/data as of/)).toBeHidden();
 
     await page.getByRole('link', { name: 'Log' }).click();
-    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(logSetButton(page)).toBeVisible();
 
     await goHardOffline(page);
     await setWeight(page, 50);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(2);
     await expect(outboxCountText(page, 1)).toBeVisible();
@@ -140,7 +140,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await registerHousehold(page, request, 'Jules');
     await pickExercise(page, 'Barbell Bench Press');
     await setWeight(page, 45);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -190,9 +190,9 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
   test('PRs with a real logged set resolves hard offline', async ({ page, request }) => {
     await registerHousehold(page, request, 'Marlowe');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('link', { name: 'PRs' }).click();
     // toHaveURL as well as the name: "Barbell Bench Press" is ALSO the Log screen's own title, so
@@ -218,9 +218,9 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
   test('PRs with a real logged set resolves during lie-fi (fetch attempted but fails)', async ({ page, request }) => {
     await registerHousehold(page, request, 'Adair');
     await pickExercise(page, 'Barbell Bench Press');
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true });
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true });
 
     await page.getByRole('link', { name: 'PRs' }).click();
     // toHaveURL + networkidle for the same two reasons as the hard-offline test above.
@@ -252,11 +252,10 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     await pickExercise(page, 'Barbell Bench Press');
     // Explicit, not the prefill -- see the note on the 'Indigo' test above.
     await setWeight(page, 45);
-    await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible();
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await tapLogSet(page);
+    await expect(prCelebration(page)).toBeVisible();
+    await prCelebration(page).click({ force: true }); // dismiss (scrim click)
+    await endWorkout(page);
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
     // Confirm liveSession has genuinely settled to "none" (the person-pill's live-session dot
@@ -341,7 +340,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
 
     // 55x8 -> comparable 69.7, comfortably past the 57 pre-offline best.
     await setWeight(page, 55);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(rows).toHaveCount(before + 1);
 
@@ -356,7 +355,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // Back down to 45x8 -- ties the PRE-offline best (57) but not the real one (69.7), so it must
     // stay unbadged. Before the fix this row is what got the badge instead.
     await setWeight(page, 45);
-    await page.getByRole('button', { name: /Log set/ }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
     await expect(rows).toHaveCount(before + 2);
 

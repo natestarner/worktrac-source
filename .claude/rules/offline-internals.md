@@ -275,7 +275,7 @@ treated as live and its still-cached sets render under "This session". Online th
 corrects it on the next refetch; **offline nothing can**, so it stands for the whole stretch.
 
 `endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
-clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
+clear (`EndWorkoutSheet`), which `useLiveSession` consults. localStorage specifically
 because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
 pin and `outboxPersistence.js`'s scope pointer. The marker is never cleared and needs no
 clearing: each id suppresses exactly one session, and session ids are never reused. It holds the
@@ -376,7 +376,7 @@ collections the server wholly owns:
 | `routines` | ✅ | routine CRUD is online-gated, so the cache can't hold an unsent routine |
 | `history` | ✅ | no optimistic writer; invalidation-driven only. (The PRs board and Trends are derived from it on the device, so warming History warms them; there is no `prs` key any more.) |
 | `exercises`, `personExercises` | ❌ | `insertOptimisticExercise` holds a **temp exercise** here while its create is still queued — refetching deletes it from the picker mid-flight |
-| `liveSession` | ❌ | `EndWorkoutConfirmModal` optimistically nulls it on end-workout |
+| `liveSession` | ❌ | `EndWorkoutSheet` optimistically nulls it on end-workout |
 
 **Before marking any new key, ask: can this key ever hold state that hasn't reached the server?**
 If yes, forcing a refetch destroys it. That trade is the whole reason this is a per-key list and
@@ -483,7 +483,7 @@ restored `null` hid a workout that had just started (it showed as "Last time") u
 happened to refetch. `useLiveSession`'s `staleTime` is therefore 0 for a `null` **restored from disk**
 (`dataUpdatedAt < PAGE_LOADED_AT`) as well as for `{ id: null }`.
 
-- **⚠️ Never for a `null` written during the page.** `EndWorkoutConfirmModal` writes one, and
+- **⚠️ Never for a `null` written during the page.** `EndWorkoutSheet` writes one, and
   refetching it at once pulls the ended session back into the raw cache while the end is still in
   the outbox — `ExerciseDetail`'s `prev ?? provisional` then keeps it and the next workout inherits
   its sets. `isSessionEnded` does not help there: it filters the hook's return, not the cache.

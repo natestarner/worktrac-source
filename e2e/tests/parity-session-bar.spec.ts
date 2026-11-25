@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -44,7 +44,7 @@ forEachConnectivityMode<{ personName: string }>('session bar appears with the re
   },
 
   act: async (page) => {
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     await dismissPrCelebration(page);
   },
 

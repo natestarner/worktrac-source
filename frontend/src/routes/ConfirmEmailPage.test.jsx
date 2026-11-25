@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfirmEmailPage from './ConfirmEmailPage';
+import { SIGNING_IN_ESCAPE_MS, SIGNING_IN_MIN_MS } from '../components/auth/useSigningIn';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 
@@ -64,7 +65,7 @@ describe('ConfirmEmailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => expect(confirmEmail).toHaveBeenCalledWith({ email: 'alex@example.com', code: '123456' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/app/log');
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
     // An ordinary registration must NOT defer the welcome modal -- it is the whole first-run
     // experience, and suppressing it here would silently cost every non-Go-Plus household the tour.
     expect(deferOnboarding).not.toHaveBeenCalled();
@@ -157,5 +158,141 @@ describe('ConfirmEmailPage', () => {
 
     resolveResend();
     expect(await screen.findByRole('button', { name: 'Resend code (60s)' })).toBeDisabled();
+  });
+
+  // Confirm creates the account AND signs in, so it gets the same full-screen overlay an Apple /
+  // Google sign-up's "Create" does -- with the same minimum time on screen and the same way out.
+  describe('the "Creating your household" overlay', () => {
+    function deferred() {
+      let resolve;
+      let reject;
+      const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+      return { promise, resolve, reject };
+    }
+
+    function submitCode() {
+      fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('covers the screen in the same words as an Apple / Google sign-up', async () => {
+      confirmEmail.mockReturnValue(new Promise(() => {}));
+      renderWithEmail();
+      submitCode();
+
+      const overlay = await screen.findByTestId('signing-in-overlay');
+      expect(overlay).toHaveTextContent('Creating your household…');
+      expect(overlay.parentElement).toBe(document.body);
+    });
+
+    it('says "account" for a Pro arrival, as Register and Apple / Google do', async () => {
+      confirmEmail.mockReturnValue(new Promise(() => {}));
+      renderWithEmail('sam@example.com', { wantsPlan: 'PRO' });
+      submitCode();
+
+      expect(await screen.findByTestId('signing-in-overlay')).toHaveTextContent('Creating your account…');
+    });
+
+    it('stays up for its minimum time even when the answer is instant, then lands', async () => {
+      vi.useFakeTimers();
+      renderWithEmail();
+      submitCode();
+      await act(async () => {});
+
+      act(() => vi.advanceTimersByTime(SIGNING_IN_MIN_MS - 1));
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(mockNavigate).toHaveBeenCalledWith('/app/log');
+    });
+
+    it('a wrong code takes it down and shows the reason on the code screen', async () => {
+      vi.useFakeTimers();
+      confirmEmail.mockRejectedValue(new Error('That code is not right'));
+      renderWithEmail();
+      submitCode();
+      await act(async () => {});
+      expect(screen.getByTestId('signing-in-overlay')).toBeInTheDocument();
+
+      await act(async () => { vi.advanceTimersByTime(SIGNING_IN_MIN_MS); });
+      expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('That code is not right');
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('"Start over" gives back a working screen, and a late success still goes into the app', async () => {
+      vi.useFakeTimers();
+      const request = deferred();
+      confirmEmail.mockReturnValueOnce(request.promise);
+      renderWithEmail();
+      submitCode();
+      await act(async () => {});
+
+      act(() => vi.advanceTimersByTime(SIGNING_IN_ESCAPE_MS));
+      fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+      expect(screen.queryByTestId('signing-in-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('taking longer than it should');
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+
+      // The account was created and the session is live: the app is the only honest place to go.
+      await act(async () => request.resolve());
+      expect(mockNavigate).toHaveBeenCalledWith('/app/log');
+    });
+
+    it('a late failure after "Start over" changes nothing on screen', async () => {
+      vi.useFakeTimers();
+      const request = deferred();
+      confirmEmail.mockReturnValueOnce(request.promise);
+      renderWithEmail();
+      submitCode();
+      await act(async () => {});
+
+      act(() => vi.advanceTimersByTime(SIGNING_IN_ESCAPE_MS));
+      fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+      await act(async () => request.reject(new Error('Old failure')));
+      await act(async () => { vi.advanceTimersByTime(SIGNING_IN_MIN_MS); });
+
+      expect(screen.queryByText('Old failure')).not.toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// A mistyped address used to be a dead end: Confirm and Resend both act on the wrong email, and
+// the App Store app has no browser Back button. "Use a different email" goes back to sign-up with
+// what was typed (never the password), keeping the plan a marketing link named. Its name must not
+// contain "Start over" -- the overlay's escape on this same screen is selected by that substring.
+describe('ConfirmEmailPage — a different email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ confirmEmail: vi.fn(), resendCode: vi.fn() });
+    useUI.mockReturnValue({ deferOnboarding: vi.fn() });
+  });
+
+  it('says where else the code might be', () => {
+    renderWithEmail('alex@example.com');
+    expect(screen.getByText(/Check your spam or junk folder/)).toBeInTheDocument();
+  });
+
+  it('goes back to sign-up with the name, household and email filled back in', () => {
+    renderWithEmail('alx@example.com', { wantsPlan: null, personName: 'Alex', accountName: 'The Crew' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use a different email' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/register', {
+      replace: true,
+      state: { startOver: { email: 'alx@example.com', personName: 'Alex', accountName: 'The Crew' } },
+    });
+  });
+
+  it('keeps the plan a marketing link named', () => {
+    renderWithEmail('sam@example.com', { wantsPlan: 'PRO', personName: 'Sam', accountName: '' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use a different email' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/register?plan=pro', expect.objectContaining({ replace: true }));
   });
 });

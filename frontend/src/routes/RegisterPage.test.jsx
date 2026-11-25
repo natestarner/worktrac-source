@@ -66,7 +66,7 @@ describe('RegisterPage validation', () => {
       }),
     );
     expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-      state: { email: 'alex@example.com', wantsPlan: null },
+      state: expect.objectContaining({ email: 'alex@example.com', wantsPlan: null }),
     });
   });
 
@@ -83,7 +83,7 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPlan: 'PLUS' },
+        state: expect.objectContaining({ email: 'alex@example.com', wantsPlan: 'PLUS' }),
       }),
     );
   });
@@ -104,7 +104,7 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'sam@example.com', wantsPlan: 'PRO' },
+        state: expect.objectContaining({ email: 'sam@example.com', wantsPlan: 'PRO' }),
       }),
     );
   });
@@ -131,7 +131,7 @@ describe('RegisterPage validation', () => {
       renderPage('/register?plan=pro');
 
       const accountField = screen.getByLabelText('Account name (optional)');
-      expect(accountField).toHaveAttribute('placeholder', 'Defaults to your account');
+      expect(accountField).toHaveAttribute('placeholder', 'We’ll name it after you');
 
       fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Sam' } });
       expect(accountField).toHaveAttribute('placeholder', "Defaults to “Sam's Account”");
@@ -188,7 +188,7 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPlan: null },
+        state: expect.objectContaining({ email: 'alex@example.com', wantsPlan: null }),
       }),
     );
   });
@@ -209,7 +209,7 @@ describe('RegisterPage validation', () => {
 
       await waitFor(() =>
         expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-          state: { email: 'alex@example.com', wantsPlan: null },
+          state: expect.objectContaining({ email: 'alex@example.com', wantsPlan: null }),
         }),
       );
     },
@@ -238,7 +238,7 @@ describe('RegisterPage validation', () => {
     renderPage();
 
     const householdField = screen.getByLabelText('Household name (optional)');
-    expect(householdField).toHaveAttribute('placeholder', 'Defaults to your household');
+    expect(householdField).toHaveAttribute('placeholder', 'We’ll name it after you');
 
     fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
 
@@ -269,5 +269,38 @@ describe('RegisterPage validation', () => {
 
     expect(await screen.findByText('An account with that email already exists')).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// The confirm screen's "Use a different email" returns here with what was typed, so fixing an
+// address is a one-letter edit. The password is never carried, and is the one field left blank.
+describe('RegisterPage — coming back from the confirm screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ register: vi.fn().mockResolvedValue({}) });
+  });
+
+  it('fills the form back in, except the password', () => {
+    renderPage({
+      pathname: '/register',
+      state: { startOver: { email: 'alx@example.com', personName: 'Alex', accountName: 'The Crew' } },
+    });
+    expect(screen.getByPlaceholderText('e.g. Alex')).toHaveValue('Alex');
+    expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('alx@example.com');
+    expect(screen.getByDisplayValue('The Crew')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('At least 8 characters')).toHaveValue('');
+  });
+
+  it('hands the confirm screen what it needs to come back', async () => {
+    renderPage('/register');
+    fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: ' Alex ' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+        state: { email: 'alex@example.com', wantsPlan: null, personName: 'Alex', accountName: '' },
+      }),
+    );
   });
 });

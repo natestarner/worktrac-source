@@ -27,13 +27,11 @@ runs:
         cache: npm
         cache-dependency-path: frontend/package-lock.json
 
-    # Capacitor 8 is built against Xcode 26; the runner image's default may be older.
-    - name: Select newest Xcode
+    # The same Xcode the signed release uses (mobile-release.yml), so this gate proves the toolchain
+    # that ships. Fails rather than falling back; the reason is in the script.
+    - name: Select Xcode 27
       shell: bash
-      run: |
-        XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-        if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
-        xcodebuild -version
+      run: bash "$GITHUB_WORKSPACE/scripts/select-xcode.sh" 27
 
     - name: Build the web bundle and copy it into the iOS project
       shell: bash
