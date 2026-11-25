@@ -825,37 +825,70 @@ img {
    since it scales with the photo rather than with the viewport. Desktop: an iPad in landscape,
    like the one on our gym wall, big enough to read.
 
-   Made to sit IN the scene rather than on top of it (2026-11-25 review: "plopped over the image"):
-   - Lit like the photo. Its light comes from the windows on the right, so the shadows fall down
-     and to the left, in three layers (a tight edge, a mid shadow, a wide soft one using the
-     site's --contact-shadow), and the rim catches light on its right and top edges.
-   - A metal bezel (a dark gradient), not a flat fill.
-   - A slight turn toward the words (rotateY), so it reads as held rather than pasted flat.
-   - Glass: a faint diagonal reflection and a very light warm tint over the screen
-     (.device__screen::after), so the app's clean white meets the photo's warm grade.
-   Every offset is a fraction of --dev-w, so the depth scales with the device. */
+   A real object in the scene, built the way tilted-device heroes usually are, and measured against
+   the real devices (2026-11-25 reviews: "plopped over the image", then "slightly warped"):
+   - Real proportions. iPad Air 11" in landscape: the black border is ~3.8% of the width a side
+     and the corners ~7.5%; the screenshot is its 1180 x 820 screen. iPhone (phone layout below):
+     the screen is exactly the capture's 440 x 956, with the status bar INSIDE it, as on a real
+     phone -- an extra band above the screenshot made it 4% too tall.
+   - A long lens. Perspective on the PARENT (.hero__stage--over) at 12x the device's width: a
+     camera close enough to keystone the edges (it was 5x) is what read as warped.
+   - Tilted on three axes, gently: --rx tips the top back, --ry turns it toward the words, --rz
+     leans it.
+   - Thickness as an extrusion: solid shadows stepped toward the edges the tilt shows you (right
+     and bottom), lit metal fading to shade. Box-shadows follow the rounded corners, which separate
+     side faces could not (they left gaps at every corner).
+   - Lit like the photo: its light is the windows on the right, so the soft shadows fall down and
+     to the left (tight, mid, and a wide one using the site's --contact-shadow), and the rim
+     catches light on its right and top edges.
+   - Glass: a faint reflection and a light warm tint over the screen (.device__screen::after), so
+     the app's clean white meets the photo's warm grade.
+   Every length is a fraction of --dev-w, so it all scales with the device. */
+.hero__stage--over {
+  perspective: calc(var(--dev-w) * 12);
+  perspective-origin: 78% 35%;
+}
+
 .hero__stage .hero__device {
+  --rx: 6deg;
+  --ry: -16deg;
+  --rz: 1.5deg;
+  --bezel: calc(var(--dev-w) * 0.038);
+  --radius: calc(var(--dev-w) * 0.075);
+  /* The extrusion: how far the back edge shows, right and down (thickness x the tilt's sines). */
+  --ex: calc(var(--dev-w) * 0.008);
+  --ey: calc(var(--dev-w) * 0.003);
   position: absolute;
   left: 78%;
   top: 14%;
   width: var(--dev-w);
-  padding: calc(var(--dev-w) * 0.022);
-  border-radius: calc(var(--dev-w) * 0.055);
-  background: linear-gradient(150deg, #4b4741 0%, #24211d 30%, #131210 70%, #2a2722 100%);
-  transform: translateX(-50%) perspective(calc(var(--dev-w) * 3.2)) rotateY(-9deg) rotate(1.5deg);
+  padding: var(--bezel);
+  border-radius: var(--radius);
+  background: linear-gradient(150deg, #3a3732 0%, #1b1916 35%, #0e0d0b 75%, #1f1d1a 100%);
+  transform: translateX(-50%) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
   box-shadow:
-    /* rim light from the windows: right and top edges */
-    inset calc(var(--dev-w) * -0.002) calc(var(--dev-w) * 0.002) 0 rgba(255, 244, 228, 0.35),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-    /* tight edge, mid, wide soft -- all falling down and to the left */
-    calc(var(--dev-w) * -0.004) calc(var(--dev-w) * 0.006) calc(var(--dev-w) * 0.01) rgba(0, 0, 0, 0.5),
-    calc(var(--dev-w) * -0.03) calc(var(--dev-w) * 0.05) calc(var(--dev-w) * 0.08) rgba(0, 0, 0, 0.45),
-    calc(var(--dev-w) * -0.08) calc(var(--dev-w) * 0.14) calc(var(--dev-w) * 0.22) var(--contact-shadow);
+    /* rim light from the windows on the top and right edges */
+    inset calc(var(--dev-w) * -0.0015) calc(var(--dev-w) * 0.0015) 0 rgba(255, 244, 228, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    /* the edge band: lit metal nearest the face, shade at the back */
+    calc(var(--ex) * 0.25) calc(var(--ey) * 0.25) 0 #8b857b,
+    calc(var(--ex) * 0.5) calc(var(--ey) * 0.5) 0 #6a655d,
+    calc(var(--ex) * 0.75) calc(var(--ey) * 0.75) 0 #4a4640,
+    var(--ex) var(--ey) 0 #2c2925,
+    /* tight, mid and wide soft shadows, all falling down and to the left */
+    calc(var(--dev-w) * -0.006) calc(var(--dev-w) * 0.012) calc(var(--dev-w) * 0.016) rgba(0, 0, 0, 0.5),
+    calc(var(--dev-w) * -0.04) calc(var(--dev-w) * 0.06) calc(var(--dev-w) * 0.1) rgba(0, 0, 0, 0.42),
+    calc(var(--dev-w) * -0.1) calc(var(--dev-w) * 0.16) calc(var(--dev-w) * 0.26) var(--contact-shadow);
 }
 
 .hero__stage .hero__device .device__screen {
   position: relative;
   border-radius: calc(var(--dev-w) * 0.035);
+}
+
+/* The phone's status bar is drawn only in the phone layout. */
+.device__status {
+  display: none;
 }
 
 /* The glass: a soft reflection from the top right, and a warm tint that matches the photo's grade.
@@ -997,9 +1030,9 @@ img {
     --hero-frame-h: clamp(320px, 100vw, 560px);
     --hero-stage-w: max(100vw, var(--hero-frame-h) * 1.5);
     --hero-phone-w: min(var(--hero-stage-w) * 0.32, 260px);
-    /* top (16% of the stage) + the phone's height (2.35 x its width: screen, status band, bezel,
-       lean) - the frame. */
-    --hero-overhang: max(0px, var(--hero-stage-w) / 1.5 * 0.16 + var(--hero-phone-w) * 2.35 - var(--hero-frame-h));
+    /* top (16% of the stage) + the phone's height (2.15 x its width: a 440 x 956 screen, its
+       border, and the tilt) - the frame. */
+    --hero-overhang: max(0px, var(--hero-stage-w) / 1.5 * 0.16 + var(--hero-phone-w) * 2.15 - var(--hero-frame-h));
   }
 
   .hero__photo {
@@ -1013,31 +1046,79 @@ img {
     --dev-w: min(var(--stage-w) * 0.32, 260px);
   }
 
-  .hero__stage .hero__device {
-    left: 79%;
-    top: 16%;
-    padding: calc(var(--dev-w) * 0.035);
-    border-radius: calc(var(--dev-w) * 0.14);
-    transform: translateX(-50%) perspective(calc(var(--dev-w) * 4)) rotateY(-10deg) rotate(3deg);
+  .hero__stage--over {
+    perspective-origin: 79% 45%;
   }
 
-  /* A status-bar band for the island to sit in, white like the app's header in the capture. */
+  /* An iPhone: a thin black border (3% a side), rounded corners, about a tenth of its width
+     thick, which the tilt shows as a wider edge band than the iPad's. */
+  .hero__stage .hero__device {
+    --rx: 6deg;
+    --ry: -16deg;
+    --rz: 3deg;
+    --bezel: calc(var(--dev-w) * 0.03);
+    --radius: calc(var(--dev-w) * 0.15);
+    --ex: calc(var(--dev-w) * 0.026);
+    --ey: calc(var(--dev-w) * 0.01);
+    left: 79%;
+    top: 16%;
+  }
+
+  /* The screen at the capture's own 440 x 956, status bar included: the bar's 62pt sits on top of
+     the screenshot's area, and the screenshot is cropped at the bottom to make room, rather than
+     the bar being added above it (which made the phone too tall). */
   .hero__stage .hero__device .device__screen {
-    border-radius: calc(var(--dev-w) * 0.11);
-    padding-top: calc(var(--dev-w) * 0.075);
+    aspect-ratio: 440 / 956;
+    border-radius: calc(var(--dev-w) * 0.125);
+    padding-top: calc(var(--dev-w) * 0.94 * 62 / 440);
     background: #ffffff;
   }
 
-  .hero__stage .hero__device::after {
+  .hero__stage .hero__device .device__screen picture {
+    display: block;
+    height: 100%;
+  }
+
+  .hero__stage .hero__device .device__screen img {
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+  }
+
+  /* The Dynamic Island: 126 x 37pt, 11pt from the top of a 440pt-wide screen. */
+  .hero__stage .hero__device .device__screen::before {
     content: '';
     position: absolute;
-    top: calc(var(--dev-w) * 0.05);
+    z-index: 1;
+    top: calc(var(--dev-w) * 0.94 * 11 / 440);
     left: 50%;
     transform: translateX(-50%);
-    width: calc(var(--dev-w) * 0.2);
-    height: calc(var(--dev-w) * 0.055);
+    width: calc(var(--dev-w) * 0.94 * 126 / 440);
+    height: calc(var(--dev-w) * 0.94 * 37 / 440);
     border-radius: var(--radius-full);
-    background: #14130f;
+    background: #0b0a09;
+  }
+
+  /* The status bar: the time in the left ear, signal / Wi-Fi / battery in the right. */
+  .device__status {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: calc(var(--dev-w) * 0.94 * 62 / 440);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 calc(var(--dev-w) * 0.09) 0 calc(var(--dev-w) * 0.1);
+    color: #000000;
+    font: 600 calc(var(--dev-w) * 0.94 * 17 / 440) / 1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  .device__status svg {
+    width: calc(var(--dev-w) * 0.2);
+    height: auto;
   }
 
   /* Fades into the dark ground at both ends: the lead above, the hanging iPhone below. */
