@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildGrid, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
+import { buildGrid, firstClearLabelColumn, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
 import { localeFormat } from '../../utils/datetime';
 import ChartHelp from '../shared/ChartHelp';
 import { CONSISTENCY_HELP } from './chartHelp';
@@ -92,6 +92,19 @@ export default function ConsistencyHeatmap({ workoutDays }) {
     return () => observer.disconnect();
   }, []);
 
+  // Month labels that have slid under the pinned weekday column are hidden rather than cut to a
+  // fragment (consistencyGrid.js#firstClearLabelColumn). Follows the scroll, and re-reads when the
+  // squares resize. jsdom never scrolls, so there it is always 0 and every label shows.
+  const [firstLabel, setFirstLabel] = useState(0);
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return undefined;
+    const update = () => setFirstLabel(firstClearLabelColumn(node.scrollLeft, cellSize, GAP, LABELS_GAP));
+    update();
+    node.addEventListener('scroll', update, { passive: true });
+    return () => node.removeEventListener('scroll', update);
+  }, [cellSize]);
+
   return (
     <Card size="dense">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -137,8 +150,12 @@ export default function ConsistencyHeatmap({ workoutDays }) {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${HEATMAP_WEEKS}, ${cellSize + GAP}px)`, height: 16 }}>
               {labels.map((label, i) => (
-                <div key={i} style={{ fontSize: 9, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
-                  {label}
+                <div
+                  key={i}
+                  data-testid={label && i >= firstLabel ? 'consistency-month-label' : undefined}
+                  style={{ fontSize: 9, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}
+                >
+                  {i >= firstLabel ? label : ''}
                 </div>
               ))}
             </div>

@@ -241,6 +241,26 @@ test.describe('Trends analytics', () => {
     const labelBox = (await mondayLabel.boundingBox())!;
     expect(labelBox.x, 'the weekday label scrolled away with the oldest weeks').toBeGreaterThanOrEqual(containerBox.x - 1);
     expect(labelBox.x, 'the weekday label is not pinned near the left edge').toBeLessThanOrEqual(containerBox.x + 30);
+
+    // ...and no month label is left half under that pinned column. Scrolled to today, the oldest
+    // visible month's label used to start under it and read as a fragment ("ul" for Jul). Every
+    // label drawn must start at or right of the weekday column's right edge -- at the opening
+    // scroll position and back at the start.
+    const dayLabels = page.getByTestId('consistency-day-labels');
+    const monthLabels = page.getByTestId('consistency-month-label');
+    async function expectNoMonthLabelUnderWeekdays(where: string) {
+      const pinned = (await dayLabels.boundingBox())!;
+      const pinnedRight = pinned.x + pinned.width;
+      await expect(monthLabels.first(), `no month label shown at all (${where})`).toBeVisible();
+      for (const box of await monthLabels.evaluateAll((els) => els.map((e) => ({ text: e.textContent, x: e.getBoundingClientRect().x })))) {
+        expect(box.x, `"${box.text}" starts under the weekday labels (${where})`).toBeGreaterThanOrEqual(pinnedRight - 0.5);
+      }
+    }
+    await expectNoMonthLabelUnderWeekdays('opened at today');
+    await scrollContainer.evaluate((el) => { el.scrollLeft = 0; });
+    // Column 0 is clear at the start, so its month is back.
+    await expect.poll(() => monthLabels.count()).toBeGreaterThan(0);
+    await expectNoMonthLabelUnderWeekdays('scrolled back to the start');
   });
 
   // Only a real browser can prove this: jsdom computes no layout. On a phone every "?" opens a

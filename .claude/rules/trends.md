@@ -337,6 +337,12 @@ one of those passes or gets a projection/`@Query` aggregate — it does not add 
   dataviz skill's `validateOrdinal` against each mode's surface — not the categorical
   `--chart-cat-*` slots. Re-validate if you restep it; the categorical validator fails a correct
   sequential ramp by design.
+- **The heatmap draws a month label whole or not at all.** On a phone the grid scrolls (opening at
+  today) under a weekday column pinned with an opaque background, so the oldest visible month's
+  label started under it and read as a fragment ("ul" for Jul). `consistencyGrid.js#firstClearLabelColumn`
+  hides any label whose column has slid under that column, following the scroll. Don't "fix" it by
+  making the label row sticky or transparent: the weekday column needs its ground to stay readable
+  over the squares. `trends.spec.ts`'s scroll test measures every drawn label (red against the old code).
 - Weekly buckets start **Monday** (`DayOfWeek.MONDAY` server-side, `mondayOf` client-side). The
   heatmap's rows and the bar chart must agree or the same day lands in different weeks.
 

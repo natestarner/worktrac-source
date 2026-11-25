@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGrid, intensityLevel, mondayOf, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
+import { buildGrid, firstClearLabelColumn, intensityLevel, mondayOf, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
 
 // Local dates throughout -- the backend already bucketed by the viewer's zone, so the grid must
 // build in local time too or a square lands a day off. new Date(y, m, d) is local by construction;
@@ -120,5 +120,33 @@ describe('monthLabels', () => {
         if (i > 0 && label) expect(labels[i - 1]).toBe('');
       });
     }
+  });
+});
+
+// On a phone the grid scrolls and the weekday column is pinned over its left edge; a month label
+// under it was cut to a fragment ("ul" for Jul). Columns are cellSize + gap apart, starting
+// labelsGap past the weekday column. Here: 10px squares, 3px gaps, 6px between labels and grid.
+describe('firstClearLabelColumn', () => {
+  it('shows every label before the grid scrolls (and in jsdom, which never does)', () => {
+    expect(firstClearLabelColumn(0, 10, 3, 6)).toBe(0);
+    expect(firstClearLabelColumn(undefined, 10, 3, 6)).toBe(0);
+  });
+
+  it('still shows column 0 while the scroll has not reached past the labels gap', () => {
+    expect(firstClearLabelColumn(6, 10, 3, 6)).toBe(0);
+  });
+
+  it('hides a column the moment any of it is under the weekday column', () => {
+    // Column 0 starts at 6, so a scroll of 7 covers its first pixel.
+    expect(firstClearLabelColumn(7, 10, 3, 6)).toBe(1);
+    // Column 1 starts at 19: exactly clear at 19, covered at 20.
+    expect(firstClearLabelColumn(19, 10, 3, 6)).toBe(1);
+    expect(firstClearLabelColumn(20, 10, 3, 6)).toBe(2);
+  });
+
+  it('follows the measured square size on a wider card', () => {
+    // 20px squares: columns 23px apart. Scrolled 52: column 2 starts at 6 + 46 = 52, clear.
+    expect(firstClearLabelColumn(52, 20, 3, 6)).toBe(2);
+    expect(firstClearLabelColumn(53, 20, 3, 6)).toBe(3);
   });
 });
