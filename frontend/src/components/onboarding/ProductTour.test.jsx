@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductTour from './ProductTour';
+import { TOUR_SAMPLE_DRAFT } from './tourSteps';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -148,6 +149,63 @@ describe('ProductTour focus management', () => {
 
     expect(document.activeElement).toBe(secondDialog);
     expect(secondDialog).not.toBe(firstDialog);
+  });
+});
+
+// Steps 5-6 spotlight the steppers and Log set on a brand-new person's first Barbell Back Squat,
+// where the weight is blank and the button would read a disabled "Enter a weight". A sample draft
+// makes it read "Log set" (TestFlight 1.4, 2026-11-25); the exit handler's restore puts the
+// person's own draft back, so the LAST setDraft is always the snapshot.
+describe('ProductTour sample weight on steps 5-6', () => {
+  const squat = { id: 11, name: 'Barbell Back Squat', trackingType: 'reps' };
+
+  function renderAtStep(stepIndex, appState) {
+    useAppState.mockReturnValue(baseAppState(appState));
+    useExercises.mockReturnValue({ exercises: [squat] });
+    usePersonExercises.mockReturnValue({ exercises: [] });
+    return render(
+      <MemoryRouter initialEntries={['/app/log']}>
+        <LocationProbe />
+        <Harness initialStepIndex={stepIndex} />
+      </MemoryRouter>,
+    );
+  }
+
+  it.each([4, 5])('step %i opens the exercise with a sample weight, as a user draft', (stepIndex) => {
+    const appState = { selectExercise: vi.fn(), setDraft: vi.fn() };
+    renderAtStep(stepIndex, appState);
+
+    expect(appState.selectExercise).toHaveBeenCalledWith(11);
+    expect(appState.setDraft).toHaveBeenCalledWith({
+      exerciseId: 11,
+      weight: TOUR_SAMPLE_DRAFT.weight,
+      reps: TOUR_SAMPLE_DRAFT.reps,
+      durationSeconds: null,
+      setCount: 0,
+      source: 'user',
+    });
+  });
+
+  it('the customize step (7) opens the exercise without writing a sample', () => {
+    const appState = { selectExercise: vi.fn(), setDraft: vi.fn() };
+    renderAtStep(6, appState);
+    expect(appState.selectExercise).toHaveBeenCalledWith(11);
+    expect(appState.setDraft).not.toHaveBeenCalled();
+  });
+
+  it("Skip tour puts the person's own draft back after the sample", () => {
+    const appState = { selectExercise: vi.fn(), setDraft: vi.fn(), weightDraft: null, repsDraft: null, draftSource: 'prefill' };
+    renderAtStep(5, appState);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip tour' }));
+
+    expect(appState.setDraft).toHaveBeenLastCalledWith({
+      exerciseId: null,
+      weight: null,
+      reps: null,
+      durationSeconds: 30,
+      setCount: 0,
+      source: 'prefill',
+    });
   });
 });
 

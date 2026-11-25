@@ -29,15 +29,24 @@ const plugins = vi.hoisted(() => ({
 vi.mock('@capacitor-community/keep-awake', () => ({
   KeepAwake: { keepAwake: plugins.keepAwake, allowSleep: plugins.allowSleep },
 }));
-vi.mock('@capacitor/local-notifications', () => ({
-  LocalNotifications: {
+// Shaped like a REAL Capacitor plugin: a Proxy that answers every property with a method, `then`
+// included, and whose unknown methods reject without ever calling the callbacks they are handed.
+// A plain object here is how notifications.js shipped returning the plugin from an async function:
+// the await adopted the Proxy as a thenable and hung forever, on every build (2026-11-25).
+vi.mock('@capacitor/local-notifications', () => {
+  const methods = {
     checkPermissions: plugins.checkPermissions,
     requestPermissions: plugins.requestPermissions,
     schedule: plugins.schedule,
     getPending: plugins.getPending,
     cancel: plugins.cancel,
-  },
-}));
+  };
+  const LocalNotifications = new Proxy(methods, {
+    get: (target, prop) =>
+      prop in target ? target[prop] : () => Promise.reject(new Error(`"LocalNotifications.${String(prop)}()" is not implemented`)),
+  });
+  return { LocalNotifications };
+});
 vi.mock('@capacitor/filesystem', () => ({
   Filesystem: { writeFile: plugins.writeFile },
   Directory: { Cache: 'CACHE' },
@@ -64,6 +73,7 @@ import {
   allowScreenSleep,
   scheduleRestNotifications,
   cancelRestNotifications,
+  ensureRestNotificationPermission,
 } from './index';
 
 beforeEach(() => {
@@ -310,6 +320,26 @@ describe('rest notifications', () => {
       schedule: { at },
       extra: { kind: 'rest', personId: 1 },
     });
+  });
+
+  // Never silently: a failure is logged, and the next rest asks again. The ask never reaching iOS on
+  // any build through 1.4.0 left nothing behind to say why (TestFlight, 2026-11-25).
+  it('asks for permission once it works, and again after a failure', async () => {
+    native.on = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    plugins.checkPermissions.mockRejectedValueOnce(new Error('plugin not implemented'));
+    await ensureRestNotificationPermission();
+    expect(warn).toHaveBeenCalledWith('[rest-notifications] failed asking for permission:', 'plugin not implemented');
+
+    plugins.checkPermissions.mockResolvedValue({ display: 'prompt' });
+    plugins.requestPermissions.mockResolvedValue({ display: 'granted' });
+    await ensureRestNotificationPermission();
+    expect(plugins.requestPermissions).toHaveBeenCalledTimes(1);
+
+    // Answered: not asked again this session.
+    await ensureRestNotificationPermission();
+    expect(plugins.checkPermissions).toHaveBeenCalledTimes(2);
   });
 
   it('cancel only rest nudges when the app comes back', async () => {

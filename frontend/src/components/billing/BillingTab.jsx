@@ -44,6 +44,7 @@ import {
 } from '../../lib/native';
 import { syncAndFinish } from '../../lib/storeSync';
 import { findStoreProduct, useStoreCatalog } from '../../hooks/useStoreCatalog';
+import BenefitList from './BenefitList';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -548,6 +549,13 @@ function paidControls(channel, billingSource, { handleManageBilling, handleManag
         onUpgrade: null,
         billedElsewhere: null,
         billedInStore: billingSourceName(source),
+        // Pro is sold in the same subscription group, so a household this store bills switches to
+        // it in the store's own sheet -- prepare refuses an entitled household (billing.md), which
+        // is why there is no Pro card here. Without this line the app said nothing about Pro at
+        // all to a Plus household, while the web shows "Training clients?" (TestFlight 1.4).
+        // Only for the store's own households: pointing a Stripe one to the web is the link-out
+        // App Review rejected (3.1.1).
+        proInStore: true,
       };
     }
     return {
@@ -603,6 +611,7 @@ function PaidSummary({
   manageLabel = 'Manage billing',
   billedElsewhere = null,
   billedInStore = null,
+  proInStore = false,
   onRequestRefund = null,
   pausableLogins = [],
   proInterval,
@@ -707,6 +716,20 @@ function PaidSummary({
             Request a refund
           </Button>
         </OfflineDisabledWrap>
+      )}
+
+      {/* Plus -> Pro for a household the app's store bills: no card (the store's sheet does the
+          switch), just where to find it. See paidControls' proInStore. */}
+      {plan === 'PLUS' && !comped && proInStore && onManage && (
+        <>
+          <SectionLabel>Training clients?</SectionLabel>
+          <div style={cardStyle}>
+            <p style={{ ...mutedLineStyle, margin: 0 }}>
+              Huddle Pro gives each client a private login, with assistants, programs and a roster.
+              To switch, tap {manageLabel} above and choose a Pro plan.
+            </p>
+          </div>
+        </>
       )}
 
       {/* Plus -> Pro, the one upgrade path this screen offers a PAYING household. Reuses
@@ -983,14 +1006,7 @@ function ProUpgradeCard({
 
         <p style={{ ...planHeadingStyle, marginTop: 'var(--space-3)' }}>{price}</p>
 
-        <ul style={benefitListStyle}>
-          {PRO_ADDITIONS.map((benefit) => (
-            <li key={benefit.id} style={benefitItemStyle}>
-              <BenefitCheck />
-              <span>{benefit.label}</span>
-            </li>
-          ))}
-        </ul>
+        <BenefitList benefits={PRO_ADDITIONS} />
 
         {/* See ctaVariant's header comment above: secondary on the FREE screen (which already has
             its one primary above this card), primary on the PLUS screen (which has none). */}
@@ -1025,45 +1041,6 @@ const bandSelectStyle = {
   borderRadius: 'var(--radius-md)',
 };
 
-// Deliberately the same treatment as the marketing site's pricing card -- an accent tick per
-// benefit -- so the page someone read before signing up and the screen they upgrade on feel like
-// one product rather than two.
-//
-// --color-accent is the right token here: it fails AA as small TEXT, but icons, borders and the
-// focus ring are exactly what it is for (see .claude/rules/frontend-core.md).
-function BenefitCheck() {
-  return (
-    <svg
-      width="19"
-      height="19"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-accent)"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0, marginTop: 2 }}
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-function BenefitList({ benefits = PLUS_BENEFITS }) {
-  return (
-    <ul style={benefitListStyle}>
-      {benefits.map((benefit) => (
-        <li key={benefit.id} style={benefitItemStyle}>
-          <BenefitCheck />
-          <span>{benefit.label}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 const cardStyle = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
@@ -1096,22 +1073,6 @@ const warningLineStyle = {
   borderRadius: 'var(--radius-sm)',
   padding: 'var(--space-3)',
   margin: 'var(--space-3) 0 0 0',
-};
-
-const benefitListStyle = {
-  listStyle: 'none',
-  padding: 0,
-  margin: '0 0 var(--space-5) 0',
-  display: 'grid',
-  gap: 'var(--space-3)',
-};
-
-const benefitItemStyle = {
-  color: 'var(--color-text)',
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 'var(--space-3)',
-  lineHeight: 1.45,
 };
 
 const finePrintStyle = {

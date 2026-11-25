@@ -16,9 +16,25 @@ const REST_KIND = 'rest';
 
 let permissionAsked = false;
 
+// Every step and every failure is logged, under one prefix. These catches used to be silent, and the
+// ask never reaching iOS (Huddle absent from Settings > Notifications on every build through 1.4.0,
+// 2026-11-25) left nothing behind to say which step stopped. The console is what the simulator flows
+// capture (07-rest-notification-permission.yaml) and what Safari's Web Inspector shows on a phone.
+function note(message, error) {
+  if (error) console.warn(`[rest-notifications] ${message}`, error?.message ?? error);
+  else console.info(`[rest-notifications] ${message}`);
+}
+
+// ⚠️ Returns the MODULE, never the plugin itself. A Capacitor plugin is a Proxy that answers
+// every property name with a method -- `then` included -- so returning it from an async function
+// makes the promise adopt it as a thenable: JS calls `LocalNotifications.then(resolve, reject)`,
+// Capacitor looks for a native method called "then", finds none, and never calls either callback.
+// The await never settles, silently. That was this file's whole history until 2026-11-25: no
+// permission ask, no schedule, no cancel ever reached iOS, on every build (Huddle absent from
+// Settings > Notifications). Found by 07-rest-notification-permission.yaml: its console showed no
+// `To Native -> LocalNotifications` call at all. Pinned by adapters.test.js's thenable mock.
 async function plugin() {
-  const { LocalNotifications } = await import('@capacitor/local-notifications');
-  return LocalNotifications;
+  return import('@capacitor/local-notifications');
 }
 
 // Asked the first time a rest timer starts, never at launch: the question only makes sense once
@@ -27,13 +43,18 @@ export async function ensureRestNotificationPermission() {
   if (!isNativeApp() || permissionAsked) return;
   permissionAsked = true;
   try {
-    const notifications = await plugin();
+    const { LocalNotifications: notifications } = await plugin();
     const { display } = await notifications.checkPermissions();
+    note(`permission: ${display}`);
     if (display === 'prompt' || display === 'prompt-with-rationale') {
-      await notifications.requestPermissions();
+      const answer = await notifications.requestPermissions();
+      note(`permission answered: ${answer?.display}`);
     }
-  } catch {
-    // No permission means no nudge; the timer on screen is unaffected.
+  } catch (error) {
+    // No permission means no nudge; the timer on screen is unaffected. Ask again at the next rest
+    // rather than never again this session: a failure here is not an answer from the person.
+    permissionAsked = false;
+    note('failed asking for permission:', error);
   }
 }
 
@@ -41,7 +62,7 @@ export async function ensureRestNotificationPermission() {
 export async function scheduleRestNotifications(items) {
   if (!isNativeApp()) return;
   try {
-    const notifications = await plugin();
+    const { LocalNotifications: notifications } = await plugin();
     await cancelPending(notifications);
     if (items.length === 0) return;
     await notifications.schedule({
@@ -53,8 +74,10 @@ export async function scheduleRestNotifications(items) {
         extra: { kind: REST_KIND, personId: item.personId },
       })),
     });
-  } catch {
+    note(`scheduled ${items.length}`);
+  } catch (error) {
     // Same as above: the nudge is lost, nothing else is.
+    note('failed scheduling:', error);
   }
 }
 
@@ -63,9 +86,10 @@ export async function scheduleRestNotifications(items) {
 export async function cancelRestNotifications() {
   if (!isNativeApp()) return;
   try {
-    await cancelPending(await plugin());
-  } catch {
+    await cancelPending((await plugin()).LocalNotifications);
+  } catch (error) {
     // A notification that still fires is about a rest the timer on screen also shows as done.
+    note('failed cancelling:', error);
   }
 }
 

@@ -55,6 +55,13 @@ export default function ExercisePicker({
   // The search result being previewed ("Preview exercise": its muscles and video, before choosing
   // it). Local for the same reason as the two above: a person switch remounts this component.
   const [preview, setPreview] = useState(null);
+  // Set on the first tap into the search and kept for the visit: from then on the space below the
+  // field is held a screen tall (`.picker-search-body`), so the focus scroll below can actually
+  // bring the field to the top. Held only while `searching`, a bare tap on a short page had no room
+  // to scroll into, the browser clamped, and the field stayed low (TestFlight, 2026-11-25). Never
+  // reset on blur: dropping the space again would shorten the page under the person, which is the
+  // jump the warning below exists to prevent.
+  const [searchEngaged, setSearchEngaged] = useState(false);
   const term = exerciseSearch.trim().toLowerCase();
   const searching = term.length > 0;
 
@@ -158,12 +165,18 @@ export default function ExercisePicker({
         className="exercise-search-input"
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
-        onFocus={scrollSearchIntoView}
+        onFocus={() => {
+          setSearchEngaged(true);
+          // A frame later, once the space below the field (granted just above) is laid out.
+          // Scrolled now, a page only a screen tall has nowhere to go: the scroll clamps at 0 and
+          // the field stays where it was.
+          requestAnimationFrame(scrollSearchIntoView);
+        }}
         placeholder="Search all exercises"
         style={sectionSpacing}
       />
 
-      <div className={searching ? 'picker-search-body' : undefined}>
+      <div className={searching || searchEngaged ? 'picker-search-body' : undefined}>
         {loading && (
           <>
             <Skeleton width={84} height={12} style={sectionLabelSpacing} />

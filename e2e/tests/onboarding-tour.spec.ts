@@ -160,6 +160,12 @@ test.describe('The full walk at portrait phone', () => {
     await page.getByRole('button', { name: 'Show me around' }).click();
     for (let i = 0; i < 5; i++) await clickContinue(page);
     await expectStep(page, 5);
+    // The spotlit button is a working "Log set" (the tour's sample weight, TOUR_SAMPLE_DRAFT), not a
+    // disabled "Enter a weight" -- which is also what makes the click below a real test again: from
+    // #602 until the sample, the button under the spotlight was disabled, so this passed vacuously.
+    const logSet = page.locator(ANCHOR.logSet).first();
+    await expect(logSet).toHaveText(/^Log set/);
+    await expect(logSet).toBeEnabled();
 
     const box = await page.locator('.tour-spotlight').boundingBox();
     expect(box).not.toBeNull();
@@ -167,6 +173,13 @@ test.describe('The full walk at portrait phone', () => {
 
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(0);
     await expectStep(page, 5); // the tour itself is unaffected -- still on the same step
+
+    // Leaving the tour takes the sample away: the person's own (blank) draft is back.
+    await page.getByRole('button', { name: 'Skip tour' }).click();
+    await page.getByPlaceholder('Search all exercises').fill('Barbell Back Squat');
+    await page.getByRole('button', { name: 'Barbell Back Squat', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Enter a weight' })).toBeDisabled();
+    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
   });
 });
 

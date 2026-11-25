@@ -346,15 +346,17 @@ the same index, else **the last set logged today**, else `weight: null`. Three t
     your own): a blank shows as **0** under **"Added"** (`Added (lb)`; "Added weight (lb)" wrapped to two lines on an iPhone), and Log set is one tap.
   - **`external`** (the default, and what any unknown or missing value reads as): a blank stays an
     em dash, the box is highlighted (`stepper-value--needed`), **Log set is disabled and reads
-    "Enter a weight"**, and **"No weight, just bodyweight"** sets 0. Before this, a blank logged 0
+    "Enter a weight"**, and the muted line **"Enter 0 for bodyweight"** under it says how to log
+    none (typing 0). It was a "No weight, just bodyweight" ghost button above Log set until
+    2026-11-25: it read as plain text on TestFlight, and its leaving moved Log set up under the thumb. Before this, a blank logged 0
     for every exercise, so a new person's first Barbell Bench Press was a bodyweight set ("BW x 8")
     with a Most reps record.
   - **Only blank is affected** (`needsWeight`): a prefill, a carried-forward set or a typed 0 logs
     as it reads, so after the first set nothing changes. 0 still means "bodyweight" everywhere
     downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`); records
     never read the load type. Not a connectivity branch: the load type rides on the cached catalog.
-  - The "No weight" link sits between the steppers and Log set, **outside** Log set's
-    `ReadOnlyWrap` (which wraps exactly one child) and inside its own.
+  - The hint sits UNDER Log set, outside its `ReadOnlyWrap` (which wraps exactly one child). It is
+    text, not a control, so nothing above it moves when it goes.
 - **The effect reads `displaySets`, never `sessionSets`** — and is declared below `displaySets`
   for that reason. Offline, `contextSessionId` stays null for the person's whole outage, so the
   `sessionSets` query never runs and its data stays `[]` however many sets they log. Reading it
@@ -610,6 +612,15 @@ re-scroll pulled it back, a visible jump down and back (2026-11-08). Everything 
 BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or empty result list
 from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
 `keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
+
+**The same space is held from the first TAP, and the focus scroll waits a frame for it.** Tapping
+the empty search is meant to bring the field to the top, but the space was held only while
+searching, and on a page about one screen tall the scroll clamped at 0: the field stayed where it
+was (TestFlight 1.4, 2026-11-25). `searchEngaged` holds `.picker-search-body` from the first focus
+for the rest of the visit (never dropped on blur, which would shorten the page under the person),
+and the scroll runs in `requestAnimationFrame` so that space is laid out first. Pinned by
+`keyboard-scroll.spec.ts`'s "tapping the empty search on a short page" (taps at full phone height,
+THEN shrinks the window, as the keyboard does; red against the old code by 102px).
 
 ## The picker is BOUNDED but never REORDERED
 

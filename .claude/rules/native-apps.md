@@ -37,6 +37,14 @@ anywhere else.
 - **A new device capability = a new function in `lib/native`, with a test that pins its web
   branch.** If the web branch is not provably today's behaviour, the change is not invisible on
   the web, and its PR must say so.
+- **⚠️ Never RETURN a plugin from an async function (or resolve a promise with one).** A
+  Capacitor plugin is a Proxy that answers every property with a method, `then` included, so the
+  promise adopts it as a thenable, calls `Plugin.then(resolve, reject)`, and Capacitor's "no such
+  native method" rejection never calls either: the await hangs forever, silently.
+  `notifications.js`'s `plugin()` helper did exactly this, so the rest notification never asked
+  iOS for permission on any build through 1.4.0 (2026-11-25). Destructure it from the awaited
+  module where it is used, as every other adapter does, or return the module. Test mocks of a
+  plugin should be a Proxy like `adapters.test.js`'s LocalNotifications, or they cannot see this.
 - **Plugin chunks are not precached on the web.** `vite.config.js` names any lazy chunk made only of
   `@capacitor/*` (core excepted) and `@capgo/capacitor-*` plugins (plus the `tslib` helper they
   import) `native-*.js`, and the service worker's `globIgnores` skips them. `@capgo/capacitor-*`
@@ -318,6 +326,17 @@ contains it.
 | `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen. If the sheet never draws its close control in a minute, the app is relaunched and Terms opened ONCE more: the runner's SafariViewService has hung on its cold start, leaving a blank sheet with nothing to tap (2026-10-31). A sheet that never opens fails both attempts |
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
+| `08-paste-the-emailed-code` | Goes through Forgot password (sign-up's lower fields sit under the keyboard, where Maestro's taps hit keys). EVIDENCE more than gate: `08-after-two-taps.png` (no Paste menu on two taps, as on TestFlight 1.4) and `08-paste-bubble.png` (Paste code raises iOS's paste prompt). Maestro cannot read the screen while that prompt is up, so the pasted value is pinned by Playwright and the unit tests instead |
+| `07-rest-notification-permission` | The first rest timer asks iOS for permission: afterwards Settings > Apps > Huddle offers **Notifications** (iOS 27 has no top-level Notifications list; the row exists only once the app has asked -- the TestFlight symptom). The only flow launched with notifications **unset** (`NOTIFICATIONS: unset` into `subflows/sign-in.yaml`). Maestro accepts the system alert itself, so the alert is not the check |
+
+- **Maestro GRANTS every permission at launch unless a flow says otherwise, and ACCEPTS a system
+  permission alert by itself when one appears.** So no flow ever saw
+  iOS ask about notifications, and the rest notification never asking at all (Huddle absent from
+  Settings > Notifications on every build through 1.4.0) went unnoticed until a person tested it
+  (2026-11-25). A flow about a permission ask must pass that permission as `unset`.
+- **Every step of `lib/native/notifications.js` logs under `[rest-notifications]`**, including each
+  failure (the catches used to be silent). Flow 07's app evidence reads those lines; on a phone,
+  Safari's Web Inspector shows them.
 
 - **Scope: critical path plus what differs from the web.** Everything else is the same React code
   the Playwright suite already covers; don't port specs here.
@@ -327,7 +346,7 @@ contains it.
   (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
   a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
   Seeding through the API also means the welcome modal is never armed.
-- **Three shards, and one retry that classifies.** The six flows run two per runner, in parallel
+- **Three shards, and one retry that classifies.** The eight flows run two or three per runner, in parallel
   (`mobile-flows.yml`'s matrix; a check fails the job if a flow file isn't in exactly one shard). A
   flow that ran and failed gets ONE more attempt: **passed**, **flaky** (failed, then passed: a
   `::warning::`, not a red run) or **failed** (both). Each shard's step summary and `results.tsv` say
@@ -378,6 +397,10 @@ contains it.
 - **Maestro matches the WHOLE accessibility label, as a regex.** iOS often reports a compound control
   as one label: the account menu is `"Alex ▾"`, a History card is its name plus its set pills. Use
   `.*name.*` or the full label. Section labels use `(?i)` (`text-transform: uppercase`).
+- **A field under the keyboard can't be tapped: Maestro taps its frame, which is a keyboard key.**
+  Pick flows whose next field stays above the keyboard, or set values without it (the weight's
+  `\+` in `log-a-set.yaml`). Typing a weight and then tapping Reps with the number pad up was
+  unreliable on the runner for the same reason.
 - **Two traps that cost a round each:** `LoginPage` has a visually hidden `<h1>Log in</h1>` that iOS
   reports over the email field, so target the button `below: 'Forgot password\?'`; and on iOS
   Maestro's `hideKeyboard` presses the keyboard's Go key (submitting the login form) and cannot

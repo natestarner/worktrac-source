@@ -1,0 +1,64 @@
+# Pasting an emailed code (TestFlight 1.4, 2026-11-25, on "Check your email"): tapping the box did
+# not bring up iOS's Paste menu. Focusing it sets things moving at once -- the app's window shrinks
+# above the keyboard, the page re-centres its card, iOS's one-time-code AutoFill bar appears -- and
+# iOS drops its edit menu when the field moves under it. "Paste code" reads the clipboard itself.
+#
+# Evidence, mostly: what two taps on the box show (08-after-two-taps.png; on the runner, no Paste
+# menu, as on TestFlight), and that Paste code raises iOS's paste prompt (08-paste-bubble.png). The
+# gate is only that the screen, the box and the button are reached; see step 2 for why.
+appId: fitness.huddle.app
+name: Paste the emailed code
+---
+- retry:
+    maxRetries: 1
+    commands:
+      - launchApp:
+          clearState: true
+          arguments:
+            huddleConsoleToFile: true
+- runFlow:
+    when:
+      visible: 'Open in .*Huddle.*'
+    commands:
+      - tapOn: 'Cancel'
+- extendedWaitUntil:
+    visible: 'Forgot password\?'
+    timeout: 60000
+# Through Forgot password, not sign-up: sign-up's Email and Password sit under the keyboard once
+# the name field has focus, so Maestro's taps landed on keyboard keys and everything was typed into
+# the name (2026-11-25). The reset screen has the same code box and the same Paste code button.
+# Any address reaches it (the request never says whether an account exists).
+- tapOn: 'Forgot password\?'
+- extendedWaitUntil:
+    visible: 'you@example.com'
+    timeout: 20000
+- tapOn: 'you@example.com'
+- inputText: 'huddle+e2e-maestro-nobody@starner.co'
+- tapOn: 'Send reset code'
+- extendedWaitUntil:
+    visible: 'Reset code'
+    timeout: 60000
+
+# 1. Evidence: two taps on the box, then what iOS shows.
+- setClipboard: '123 456'
+# iOS reports the box by its <label> ("Reset code"), as sign-in's Email field.
+- tapOn:
+    text: 'Reset code'
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    text: 'Reset code'
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: mobile-flows-out/08-after-two-taps
+
+# 2. Paste code, as far as Maestro can follow it. Tapping it makes iOS show its own "Paste"
+#    bubble (the clipboard permission prompt), and Maestro cannot read the screen while that bubble
+#    is up ("Unknown error", run 4, 2026-11-25) -- so the flow stops at the bubble, screenshots it,
+#    and the value itself is pinned by Playwright (verification-code-paste.spec.ts) and the unit
+#    tests. 08-paste-bubble.png showing the bubble is the evidence that the app asked.
+- assertVisible: 'Paste code'
+- tapOn: 'Paste code'
+- takeScreenshot: mobile-flows-out/08-paste-bubble

@@ -116,7 +116,8 @@ export const PLANS = {
     blurb: 'Unlock complete workout history and give every family member their own login.',
     benefits: PLUS_BENEFITS,
     bands: null,
-    welcome: 'Your whole history, every record, and import are unlocked. Thanks for keeping Huddle going.',
+    // Above the benefit list PlusCelebration draws, so it names none of them itself.
+    welcome: 'Thanks for keeping Huddle going. Here’s what’s unlocked:',
   },
   PRO: {
     id: 'PRO',
@@ -125,7 +126,7 @@ export const PLANS = {
     blurb: "Everything trainers need — individual client logins, with your clients' training kept private from each other.",
     benefits: PRO_ADDITIONS,
     bands: PRO_BANDS,
-    welcome: 'Your clients get their own logins, kept private from each other, and a roster that shows you who has gone quiet.',
+    welcome: 'Here’s what Pro adds for you and your clients:',
   },
 };
 

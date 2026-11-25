@@ -798,7 +798,7 @@ export default function ExerciseDetail({
   // logged today. What blank should then MEAN depends on the exercise:
   //   - bodyweight: 0, under "Added" (lb or kg on top of you) -- "just me" is the right first answer, one tap.
   //   - external:   genuinely empty, and Log set waits for a number ("Enter a weight"), with
-  //                 "No weight, just bodyweight" for anyone who does it without. Before this a blank
+  //                 "Enter 0 for bodyweight" under it for anyone who does it without. Before this a blank
   //                 logged 0, so a new person's first Barbell Bench Press was recorded as a
   //                 bodyweight set ("BW x 8") and took a Most reps record.
   // Only blank is affected: a prefill, a carried-forward set or a typed 0 always logs as it reads.
@@ -1683,19 +1683,6 @@ export default function ExerciseDetail({
                 mid-set, which is the whole point. */}
             {/* The screen's one primary action, and the one that matters most here: a member
                 must never be able to log a set onto somebody else's history. */}
-            {/* Only while a first set's weight is missing (needsWeight above). Under the steppers rather
-                than under the weight box, so the side-by-side layout on a wide screen keeps its two
-                halves level. Outside ReadOnlyWrap, which wraps exactly one child;
-                inside its own, because it writes this person's draft. */}
-            {needsWeight && (
-              <div className="first-set-weight-hint">
-                <ReadOnlyWrap personId={personId}>
-                <Button variant="ghost" size="sm" onClick={() => commitDraft({ weight: 0 })}>
-                  No weight, just bodyweight
-                </Button>
-                </ReadOnlyWrap>
-              </div>
-            )}
             <ReadOnlyWrap personId={personId}>
             <Button
               onClick={handleLogSet}
@@ -1721,6 +1708,12 @@ export default function ExerciseDetail({
               </span>
             </Button>
             </ReadOnlyWrap>
+            {/* Only while a first set's weight is missing (needsWeight above): how to log one with
+                nothing in your hands. Plain text UNDER the button, decided with Nate 2026-11-25. It
+                was a "No weight, just bodyweight" ghost button ABOVE it, which read as plain text
+                anyway (TestFlight 1.4) and, when it went away, moved Log set up under the thumb.
+                Below, it moves nothing above it; typing 0 is the same act as any other weight. */}
+            {needsWeight && <p className="first-set-weight-hint">Enter 0 for bodyweight</p>}
           </div>
         </div>
 

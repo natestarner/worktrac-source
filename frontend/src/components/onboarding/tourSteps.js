@@ -32,6 +32,12 @@ export const TOUR_ANCHORS = {
 // for `exercise: 'none'`; call `selectExercise(tourExerciseId)` for `exercise: 'open'`. Declarative
 // rather than an imperative switch is what makes stepping BACKWARDS re-arrange for free -- there is
 // no separate "undo" path to keep in sync with the forward one.
+// What steps 5-6 show in the steppers (`screen.sampleDraft`), so the spotlit Log set is a working
+// button and not a disabled "Enter a weight". Written as a 'user' draft, which is what keeps the
+// prefill from stomping it; ProductTour's exit handler restores the person's own draft from its
+// snapshot, as it always has. Nothing is logged: the tour never taps anything.
+export const TOUR_SAMPLE_DRAFT = { weight: 95, reps: 8 };
+
 export const TOUR_STEPS = [
   {
     id: 'log-tab',
@@ -65,20 +71,20 @@ export const TOUR_STEPS = [
     id: 'set-entry',
     anchor: TOUR_ANCHORS.SET_ENTRY,
     title: 'Weight and reps',
-    // The tour opens Barbell Back Squat, which expects a weight: on a first visit the box is empty
-    // and highlighted and the button reads "Enter a weight", so this says why.
+    // The tour opens Barbell Back Squat, which expects a weight. On a first visit the box would be
+    // empty and the button would read "Enter a weight", so steps 5-6 put a sample in
+    // (TOUR_SAMPLE_DRAFT) and the exit handler puts the person's own draft back.
     body: 'These fill in from your last session, so a repeat set is one tap. The first time, enter the weight you lifted.',
-    screen: { route: '/app/log', exercise: 'open' },
+    screen: { route: '/app/log', exercise: 'open', sampleDraft: true },
   },
   {
     id: 'log-set',
     anchor: TOUR_ANCHORS.LOG_SET,
     title: 'One button per set',
-    // Spotlit, this button is disabled and reads "Enter a weight": the tour's Barbell Back Squat is
-    // a brand-new person's first set of a weighted exercise (#602). The copy says so, rather than
-    // describing a button that looks broken under the spotlight (#606).
-    body: 'Once there’s a weight, this button starts the session, kicks off the rest timer, and saves your set.',
-    screen: { route: '/app/log', exercise: 'open' },
+    // With the sample weight in (step 5's sampleDraft), the spotlit button reads "Log set" rather
+    // than a disabled "Enter a weight" (TestFlight 1.4, 2026-11-25; supersedes #613's copy-only fix).
+    body: 'This button starts the session, kicks off the rest timer, and saves your set.',
+    screen: { route: '/app/log', exercise: 'open', sampleDraft: true },
   },
   {
     id: 'customize-exercise',
