@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Api } from '../lib/api.mjs';
-import { dismiss, goTab, playwright } from '../lib/browser.mjs';
+import { dismiss, goTab, logSetButton, playwright, tapLogSet } from '../lib/browser.mjs';
 import { REPO_ROOT, localTestSupportKey, log, sleep } from '../lib/config.mjs';
 
 const EXERCISES = ['Barbell Bench Press', 'Barbell Back Squat', 'Barbell Row', 'Pull-up'];
@@ -96,7 +96,7 @@ async function capture(target, creds, { offline }) {
     if (!(await picker.isVisible())) { await page.getByRole('button', { name: /All exercises/ }).first().click(); await picker.waitFor(); }
     await picker.fill(name);
     await page.getByRole('button', { name, exact: true }).first().click();
-    await page.getByRole('button', { name: 'Log set' }).waitFor();
+    await logSetButton(page).waitFor();
     await sleep(1500);
   };
   const history = () => page.evaluate(() => {
@@ -145,7 +145,7 @@ async function capture(target, creds, { offline }) {
     const weight = page.locator('.stepper-row').filter({ hasText: 'Weight' }).locator('.stepper-value');
     const reps = page.locator('.stepper-row').filter({ hasText: 'Reps' }).locator('.stepper-value');
     await weight.fill('500'); await weight.press('Enter'); await reps.fill('5'); await reps.press('Enter');
-    await page.getByRole('button', { name: 'Log set' }).click();
+    await tapLogSet(page);
     const pr = page.getByText('New PR!');
     await pr.waitFor({ timeout: 10000 }).catch(() => {});
     // The celebration is a dialog portalled outside <main>, so main() can never see it.
@@ -247,9 +247,9 @@ async function countFlows(target, creds) {
     await picker.or(page.getByRole('button', { name: /All exercises/ })).first().waitFor();
     if (!(await picker.isVisible())) { await page.getByRole('button', { name: /All exercises/ }).first().click(); await picker.waitFor(); }
     await picker.fill(name); await page.getByRole('button', { name, exact: true }).first().click();
-    await page.getByRole('button', { name: 'Log set' }).waitFor();
+    await logSetButton(page).waitFor();
   };
-  const logSet = async () => { await page.getByRole('button', { name: 'Log set' }).click(); await sleep(400); await dismiss(page); };
+  const logSet = async () => { await tapLogSet(page); await sleep(400); await dismiss(page); };
   try {
     await count('sign in on a new device', async () => {
       await page.goto(`${target.app}/login`);
@@ -264,12 +264,12 @@ async function countFlows(target, creds) {
     await count('first set (starts a workout)', async () => { await goTab(page, 'Log'); await toExercise('Barbell Bench Press'); await logSet(); });
     await count('each further set', () => logSet());
     await count('back to the session list, next exercise', async () => { await page.getByRole('button', { name: /All exercises/ }).first().click(); await sleep(800); await toExercise('Barbell Row'); });
-    await count('reopen mid-workout', async () => { await page.reload(); await page.getByRole('button', { name: 'Log set' }).waitFor(); });
+    await count('reopen mid-workout', async () => { await page.reload(); await logSetButton(page).waitFor(); });
     await count('offline set, app closed, reopened online', async () => {
       await ctxt.setOffline(true); await logSet(); await sleep(1500);
       const next = await ctxt.newPage(); await page.close(); page = next; hook(page);
       await ctxt.setOffline(false);
-      await page.goto(`${target.app}/app/log`); await page.getByRole('button', { name: /Log set|All exercises/ }).first().waitFor();
+      await page.goto(`${target.app}/app/log`); await logSetButton(page).or(page.getByRole('button', { name: /All exercises/ })).first().waitFor();
     }, 6000);
     await count('end the workout', async () => {
       await page.getByRole('button', { name: 'End workout' }).first().click();
