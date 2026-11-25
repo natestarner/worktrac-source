@@ -20,7 +20,25 @@ import { pickExercise } from './support/exercises';
 // computed transform at the instant the button goes :active is still the identity matrix and only
 // reaches scale(0.97) a frame or two later. A single read here returns "matrix(1, 0, 0, 1, 0, 0)"
 // against a perfectly working rule.
+//
+// It also waits for the control to HOLD STILL before measuring where to press. A raw mouse-down
+// has none of click()'s "stable" check, and filling the Log search scrolls the page to bring the
+// field to the top (#621): on lower's slower runners the chip was still moving when the mouse went
+// down, so the press landed beside it and no transform ever painted (2026-11-25, 3/3). A person
+// taps after the page settles; so does this.
+async function holdsStill(locator: Locator) {
+  await expect
+    .poll(async () => {
+      const a = await locator.boundingBox();
+      await locator.page().waitForTimeout(150);
+      const b = await locator.boundingBox();
+      return !!a && !!b && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
+    }, { message: 'the control never stopped moving' })
+    .toBe(true);
+}
+
 async function whilePressed(locator: Locator, check: () => Promise<void>) {
+  await holdsStill(locator);
   const box = await locator.boundingBox();
   if (!box) throw new Error('control is not visible, so it cannot be pressed');
   const page = locator.page();
