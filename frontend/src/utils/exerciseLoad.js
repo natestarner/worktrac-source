@@ -16,7 +16,7 @@ export const LOAD_BODYWEIGHT = 'bodyweight';
 
 // ⚠️ Anything else -- a catalog cached before the field existed (axis D), an optimistic row built by
 // an older bundle, or a value a newer server added -- reads as 'external': an empty weight box with
-// "No weight, just bodyweight" under it. That can cost one tap; it can never strand anyone.
+// "Enter 0 for bodyweight" under Log set. That can cost typing a 0; it can never strand anyone.
 export function loadTypeOf(exercise) {
   return exercise?.loadType === LOAD_BODYWEIGHT ? LOAD_BODYWEIGHT : LOAD_EXTERNAL;
 }
