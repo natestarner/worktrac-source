@@ -390,8 +390,10 @@ scaled to cover it and slid to a focal point. The device sits in an unclipped tw
 (`.hero__stage--over`), so it is placed in percentages of the photo but is a layer on top of it,
 never cut off by its edges. Desktop shows the iPad capture in a tablet frame, big (from just past
 the boy's face to the photo's right edge), with the words on the left over a scrim; at 900px and
-below it becomes the iPhone capture in a phone frame (one `<picture>`, so only one is downloaded),
-the photo is a frame on top, the iPhone hangs below its bottom edge, and the words sit below that.
+below it becomes the iPhone capture in a phone frame (one `<picture>`, so only one is downloaded), and
+the order is headline and lead, then the photo with the iPhone hanging below its bottom edge, then
+the buttons (Nate picked this on 2026-11-25 over photo-first, which left the headline at the bottom
+of the first screen, and words-first).
 
 Two layouts were tried and dropped on 2026-11-25: the device clipped inside the photo (read as
 pasted into the scene, and too small), and the photo as an inset card beside the words (Nate:

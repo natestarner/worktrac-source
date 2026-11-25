@@ -190,7 +190,7 @@ in the desktop layout, an iPhone at 900px and below (one `<picture>`, one frame)
 `.hero__stage` (its own 3:2 shape, cropped by hand in CSS) inside the clipping `.hero__clip`; the
 device sits in `.hero__stage--over`, an unclipped twin with identical geometry, so it is placed in
 the photo's percentages yet is a layer ON the photo (on phones it hangs below the photo's bottom
-edge, and the words start under its overhang). **Never move the photo to `background-size: cover` /
+edge; the order there is headline and lead, photo, then the buttons under its overhang). **Never move the photo to `background-size: cover` /
 `object-fit: cover`, or the device out of the twin stage**: the crop and the device then follow
 different boxes and his face shows beside it at some widths. Nate wants the device big: the iPad
 runs from just past the boy's face to the photo's right edge. `landing.spec.ts` hit-tests his face (covered), the boy's face and the headline

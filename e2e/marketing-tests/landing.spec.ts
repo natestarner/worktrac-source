@@ -346,6 +346,9 @@ test.describe('marketing landing page', () => {
       const page = await context.newPage();
       await page.goto('/');
       await page.locator('.hero__stage-img').evaluate((img: HTMLImageElement) => img.decode());
+      // On phones the headline comes first, so on a short screen (a landscape phone) the photo
+      // starts below it. Check what a visitor sees when they reach the photo.
+      await page.locator('.hero__photo').evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
       const result = await page.evaluate(({ face, kid }) => {
         const stage = document.querySelector('.hero__stage')!.getBoundingClientRect();
         const frame = document.querySelector('.hero__photo')!.getBoundingClientRect();
@@ -377,7 +380,7 @@ test.describe('marketing landing page', () => {
           const r = el.getBoundingClientRect();
           for (const fx of [0.02, 0.5, 0.98]) for (const fy of [0.1, 0.5, 0.9]) {
             const p: [number, number] = [r.left + r.width * fx, r.top + r.height * fy];
-            if (p[1] < window.innerHeight) words.push(p);
+            if (p[1] >= 0 && p[1] < window.innerHeight) words.push(p);
           }
         }
         return {

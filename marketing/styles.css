@@ -942,19 +942,27 @@ img {
   }
 }
 
-/* Phones and portrait tablets: the photo becomes a frame on top, the words go below it on the same
-   dark ground. Same stage, same percentages -- only the frame and the focal point change, and the
-   iPhone takes a bigger share of the photo so the app is legible. It hangs below the frame's bottom
-   edge, so the words start under its overhang (--hero-overhang).
+/* Phones and portrait tablets: headline and lead first, then the photo with the iPhone, then the
+   buttons (chosen by Nate 2026-11-25 over photo-first, which put the headline at the bottom of the
+   first screen, and words-first, which put the photo after everything). .hero__copy and .hero__cta
+   become display: contents so their children can be ordered around the photo.
 
-   The overhang is worked out in vw because the words are outside the photo's container and can't
-   read its cq units. The photo frame is full width at these sizes, so 100vw is its width, give or
+   Same stage, same percentages as desktop -- only the frame and the focal point change, and the
+   iPhone takes a bigger share of the photo so the app is legible. It hangs below the frame's bottom
+   edge, so the buttons start under its overhang (--hero-overhang).
+
+   The overhang is worked out in vw because the photo's margin is set on the container itself, which
+   can't read its own cq units. The photo frame is full width at these sizes, so 100vw is its width, give or
    take a desktop scrollbar (which only adds a few px of gap). In this range the stage's top is
    always 0: its height equals the frame's. */
 @media (max-width: 900px) {
   .hero--photo {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     min-height: 0;
+    padding-bottom: var(--space-10);
+    --hero-pad: clamp(20px, 5vw, 72px);
     --hero-frame-h: clamp(320px, 100vw, 560px);
     --hero-stage-w: max(100vw, var(--hero-frame-h) * 1.5);
     --hero-phone-w: min(var(--hero-stage-w) * 0.32, 260px);
@@ -964,9 +972,11 @@ img {
   }
 
   .hero__photo {
+    order: 3;
     position: relative;
     inset: auto;
     height: var(--hero-frame-h);
+    margin-bottom: calc(var(--hero-overhang) + var(--space-6));
     --fx: 0.66;
     --fy: 0.4;
     --dev-w: min(var(--stage-w) * 0.32, 260px);
@@ -999,14 +1009,42 @@ img {
     background: #14130f;
   }
 
+  /* Fades into the dark ground at both ends: the lead above, the hanging iPhone below. */
   .hero__scrim {
-    background: linear-gradient(0deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0.6) 14%, rgba(28, 27, 25, 0) 34%);
+    background:
+      linear-gradient(180deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0) 22%),
+      linear-gradient(0deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0.5) 14%, rgba(28, 27, 25, 0) 30%);
   }
 
-  .hero__copy {
-    max-width: none;
-    margin: 0;
-    padding: calc(var(--hero-overhang) + var(--space-6)) clamp(20px, 5vw, 72px) var(--space-10);
+  .hero__copy,
+  .hero--photo .hero__cta {
+    display: contents;
+  }
+
+  .hero--photo .hero__title {
+    order: 1;
+    margin: var(--space-8) var(--hero-pad) var(--space-3);
+  }
+
+  .hero--photo .hero__lead {
+    order: 2;
+    margin: 0 var(--hero-pad) var(--space-8);
+  }
+
+  .hero--photo .hero__actions {
+    order: 4;
+    margin: 0 var(--hero-pad);
+  }
+
+  .hero--photo .hero__more {
+    order: 5;
+    align-self: flex-start;
+    margin: var(--space-4) var(--hero-pad) 0;
+  }
+
+  .hero--photo .hero__trust {
+    order: 6;
+    margin: var(--space-4) var(--hero-pad) 0;
   }
 }
 
