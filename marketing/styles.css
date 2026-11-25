@@ -823,7 +823,17 @@ img {
 
 /* The bezel is the site's own .device; every size on it is a fraction of the device's width,
    since it scales with the photo rather than with the viewport. Desktop: an iPad in landscape,
-   like the one on our gym wall, big enough to read. */
+   like the one on our gym wall, big enough to read.
+
+   Made to sit IN the scene rather than on top of it (2026-11-25 review: "plopped over the image"):
+   - Lit like the photo. Its light comes from the windows on the right, so the shadows fall down
+     and to the left, in three layers (a tight edge, a mid shadow, a wide soft one using the
+     site's --contact-shadow), and the rim catches light on its right and top edges.
+   - A metal bezel (a dark gradient), not a flat fill.
+   - A slight turn toward the words (rotateY), so it reads as held rather than pasted flat.
+   - Glass: a faint diagonal reflection and a very light warm tint over the screen
+     (.device__screen::after), so the app's clean white meets the photo's warm grade.
+   Every offset is a fraction of --dev-w, so the depth scales with the device. */
 .hero__stage .hero__device {
   position: absolute;
   left: 78%;
@@ -831,13 +841,34 @@ img {
   width: var(--dev-w);
   padding: calc(var(--dev-w) * 0.022);
   border-radius: calc(var(--dev-w) * 0.055);
-  transform: translateX(-50%) rotate(2deg);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: linear-gradient(150deg, #4b4741 0%, #24211d 30%, #131210 70%, #2a2722 100%);
+  transform: translateX(-50%) perspective(calc(var(--dev-w) * 3.2)) rotateY(-9deg) rotate(1.5deg);
+  box-shadow:
+    /* rim light from the windows: right and top edges */
+    inset calc(var(--dev-w) * -0.002) calc(var(--dev-w) * 0.002) 0 rgba(255, 244, 228, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    /* tight edge, mid, wide soft -- all falling down and to the left */
+    calc(var(--dev-w) * -0.004) calc(var(--dev-w) * 0.006) calc(var(--dev-w) * 0.01) rgba(0, 0, 0, 0.5),
+    calc(var(--dev-w) * -0.03) calc(var(--dev-w) * 0.05) calc(var(--dev-w) * 0.08) rgba(0, 0, 0, 0.45),
+    calc(var(--dev-w) * -0.08) calc(var(--dev-w) * 0.14) calc(var(--dev-w) * 0.22) var(--contact-shadow);
 }
 
 .hero__stage .hero__device .device__screen {
+  position: relative;
   border-radius: calc(var(--dev-w) * 0.035);
+}
+
+/* The glass: a soft reflection from the top right, and a warm tint that matches the photo's grade.
+   Decoration over a picture of a screen; pointer-events none so it never catches a hit-test. */
+.hero__stage .hero__device .device__screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(225deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(0deg, rgba(242, 166, 90, 0.07), rgba(242, 166, 90, 0.07));
 }
 
 /* Dark from the left where the words sit, clear over the people; a fade at the top for the header
@@ -987,7 +1018,7 @@ img {
     top: 16%;
     padding: calc(var(--dev-w) * 0.035);
     border-radius: calc(var(--dev-w) * 0.14);
-    transform: translateX(-50%) rotate(3deg);
+    transform: translateX(-50%) perspective(calc(var(--dev-w) * 4)) rotateY(-10deg) rotate(3deg);
   }
 
   /* A status-bar band for the island to sit in, white like the app's header in the capture. */
