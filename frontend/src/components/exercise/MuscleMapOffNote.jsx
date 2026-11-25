@@ -20,11 +20,14 @@ export default function MuscleMapOffNote({ muscleMap, link = true }) {
   );
   return (
     <p className="muscle-map-off" data-testid="muscle-map-off">
+      {/* An invitation, not a status report (2026-11-25): "is off by default" read like a note to
+          an admin. The owner is offered the drawing; anyone else is told why there isn't one and
+          who can change it. The handbook still states the default (HelpTab, user-facing-help.md). */}
       {muscleMap.canChange ? (
-        <>The muscle highlighter is off by default. To turn it on, visit the {settings}.</>
+        <>Want to see these muscles on a body diagram? Turn on the muscle highlighter on the {settings}.</>
       ) : (
         <>
-          The muscle highlighter is off by default. Your {muscleMap.owner} can turn it on from the{' '}
+          Body diagrams are turned off. Your {muscleMap.owner} can turn on the muscle highlighter on the{' '}
           {settings}.
         </>
       )}

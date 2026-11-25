@@ -1,6 +1,6 @@
 import { queryKeys } from '../api/queryKeys';
 import { getLiveSession } from '../api/sessions';
-import { isCreateInEndedWorkout } from './endedSessions';
+import { isCreateInEndedWorkout, isSessionEnded } from './endedSessions';
 import { pendingLiveSetCreates } from './queryClient';
 
 // The ONE fetcher for queryKeys.liveSession -- useLiveSession and offlineCacheWarm both use it.
@@ -37,9 +37,20 @@ import { pendingLiveSetCreates } from './queryClient';
 //     The old code reached the same state, one round trip later, when LOG_SET promoted it.
 //
 // Not a connectivity branch: one code path, and it only ever runs on an answer the server gave.
+//
+// ## …and neither does an answer naming a workout this device has already ENDED (2026-11-25)
+//
+// Ending one workout and starting the next straight away: the End is still on its way, so a read
+// that left before it reached the server comes back naming the workout just ended. As "a real
+// session" it replaced the new workout's placeholder, useLiveSession suppressed the ended id, and
+// the session bar vanished for a round trip -- closing an open "End this workout?" sheet with it
+// (SessionBar). Seen on lower's nightly as parity-session-recap's "Just me" flake, both engines.
+// It is the same question as a `null`: the server has not seen this workout yet. So an ended id
+// is treated like one -- kept over the placeholder only while this person has a set queued, and
+// returned as answered otherwise (useLiveSession then suppresses it, as before).
 export async function fetchLiveSession(client, personId) {
   const session = await getLiveSession(personId);
-  if (session != null) return session;
+  if (session != null && !isSessionEnded(personId, session.id)) return session;
   const held = client.getQueryData(queryKeys.liveSession(personId));
   if (held && held.id == null && hasQueuedLiveSets(client, personId)) return held;
   return session;

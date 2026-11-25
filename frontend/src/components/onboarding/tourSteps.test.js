@@ -52,6 +52,15 @@ describe('TOUR_STEPS', () => {
     }
   });
 
+  // The tour opens a weighted exercise for a brand-new person, so the button step 6 spotlights is
+  // disabled and reads "Enter a weight" (#602). Its copy must not describe it as ready to press
+  // (#606); step 5 is the one that says to enter a weight, and both have to stay true together.
+  it('says the Log set button needs a weight first, as it does on the screen the tour opens', () => {
+    const steps = Object.fromEntries(TOUR_STEPS.map((s) => [s.id, s]));
+    expect(steps['set-entry'].body).toMatch(/enter the weight/i);
+    expect(steps['log-set'].body).toMatch(/^Once there’s a weight,/);
+  });
+
   // Mirrors chartHelp.test.js's mutual-non-containment check: "Step N of 9" is rendered beside the
   // title, so two titles that overlap as substrings would make a Playwright getByText/getByRole
   // selector for one step ambiguous with another.
