@@ -29,15 +29,24 @@ const plugins = vi.hoisted(() => ({
 vi.mock('@capacitor-community/keep-awake', () => ({
   KeepAwake: { keepAwake: plugins.keepAwake, allowSleep: plugins.allowSleep },
 }));
-vi.mock('@capacitor/local-notifications', () => ({
-  LocalNotifications: {
+// Shaped like a REAL Capacitor plugin: a Proxy that answers every property with a method, `then`
+// included, and whose unknown methods reject without ever calling the callbacks they are handed.
+// A plain object here is how notifications.js shipped returning the plugin from an async function:
+// the await adopted the Proxy as a thenable and hung forever, on every build (2026-11-25).
+vi.mock('@capacitor/local-notifications', () => {
+  const methods = {
     checkPermissions: plugins.checkPermissions,
     requestPermissions: plugins.requestPermissions,
     schedule: plugins.schedule,
     getPending: plugins.getPending,
     cancel: plugins.cancel,
-  },
-}));
+  };
+  const LocalNotifications = new Proxy(methods, {
+    get: (target, prop) =>
+      prop in target ? target[prop] : () => Promise.reject(new Error(`"LocalNotifications.${String(prop)}()" is not implemented`)),
+  });
+  return { LocalNotifications };
+});
 vi.mock('@capacitor/filesystem', () => ({
   Filesystem: { writeFile: plugins.writeFile },
   Directory: { Cache: 'CACHE' },

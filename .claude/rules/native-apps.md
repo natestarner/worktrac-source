@@ -37,6 +37,14 @@ anywhere else.
 - **A new device capability = a new function in `lib/native`, with a test that pins its web
   branch.** If the web branch is not provably today's behaviour, the change is not invisible on
   the web, and its PR must say so.
+- **⚠️ Never RETURN a plugin from an async function (or resolve a promise with one).** A
+  Capacitor plugin is a Proxy that answers every property with a method, `then` included, so the
+  promise adopts it as a thenable, calls `Plugin.then(resolve, reject)`, and Capacitor's "no such
+  native method" rejection never calls either: the await hangs forever, silently.
+  `notifications.js`'s `plugin()` helper did exactly this, so the rest notification never asked
+  iOS for permission on any build through 1.4.0 (2026-11-25). Destructure it from the awaited
+  module where it is used, as every other adapter does, or return the module. Test mocks of a
+  plugin should be a Proxy like `adapters.test.js`'s LocalNotifications, or they cannot see this.
 - **Plugin chunks are not precached on the web.** `vite.config.js` names any lazy chunk made only of
   `@capacitor/*` (core excepted) and `@capgo/capacitor-*` plugins (plus the `tslib` helper they
   import) `native-*.js`, and the service worker's `globIgnores` skips them. `@capgo/capacitor-*`
