@@ -7,6 +7,7 @@ import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/
 import Spinner from '../components/shared/Spinner';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 import PasswordInput from '../components/shared/PasswordInput';
+import { codeFromInput } from '../utils/verificationCode';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -126,11 +127,11 @@ export default function ResetPasswordPage() {
           name="one-time-code"
           autoComplete="one-time-code"
           inputMode="numeric"
-          maxLength={6}
+          // No maxLength: it would cut a paste before the digits are pulled out (utils/verificationCode.js).
           placeholder="123456"
           value={code}
           onChange={(e) => {
-            setCode(e.target.value.replace(/\D/g, ''));
+            setCode(codeFromInput(e.target.value));
             if (codeError) setCodeError(false);
           }}
           className={`input ${codeError ? 'input-invalid' : ''}`}
