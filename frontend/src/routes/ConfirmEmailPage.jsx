@@ -7,6 +7,7 @@ import Spinner from '../components/shared/Spinner';
 import { rememberSignInMethod } from '../lib/lastSignInMethod';
 import SigningInOverlay from '../components/auth/SigningInOverlay';
 import { useSigningIn } from '../components/auth/useSigningIn';
+import { codeFromInput } from '../utils/verificationCode';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -188,11 +189,11 @@ export default function ConfirmEmailPage() {
           name="one-time-code"
           autoComplete="one-time-code"
           inputMode="numeric"
-          maxLength={6}
+          // No maxLength: it would cut a paste before the digits are pulled out (utils/verificationCode.js).
           placeholder="123456"
           value={code}
           onChange={(e) => {
-            setCode(e.target.value.replace(/\D/g, ''));
+            setCode(codeFromInput(e.target.value));
             if (codeError) setCodeError(false);
           }}
           className={`input ${codeError ? 'input-invalid' : ''}`}
