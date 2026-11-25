@@ -693,10 +693,6 @@ img {
   max-width: 48ch;
 }
 
-/* Sits after .hero__devices now, not right under the lead paragraph -- the product shots are
-   the pitch, so the ask comes right after the proof rather than before it. margin-top clears
-   the devices' own mask-fade + reserved phone-overlap padding, which already puts some empty
-   space above this; the rest is deliberate, not doubled. */
 .hero__cta {
   display: flex;
   flex-direction: column;
@@ -744,39 +740,342 @@ img {
   text-align: center;
 }
 
-/* A tablet with a phone leaning on it, grounded by an ordinary drop shadow rather than
-   fading into the page. An earlier version faded the bottom out with a CSS mask, but a mask
-   clips everything painted for the element, shadow included -- it was quietly swallowing
-   each .device's own box-shadow (below) along with the pixels, so the pair read as
-   dissolving rather than sitting above the page. device-ipad.jpg is cropped tight to its
-   real content now anyway (no dead space below the "Log set" button), so there's nothing
-   left worth fading past. */
-.hero__devices {
+/* ============================================================================
+   Photo hero (index.html) -- a full-bleed photo with the real app held over the dad's face
+   ========================================================================= */
+
+/* The ONE hard requirement: the phone covers the dad's face at every width. That is impossible to
+   guarantee with `background-size: cover` or `object-fit: cover`, because those crop the photo by
+   the viewport's shape while the phone is placed by the page's -- the two drift apart, which is
+   exactly what the first mockup did (covered at 1440px, his whole face beside the phone at 1024px,
+   phone hidden below 860px).
+
+   So the crop is done by hand. .hero__photo is a size container; .hero__stage is the photo at its
+   OWN 3:2 shape, scaled to cover that container, and slid so a focal point (--fx, --fy) stays in
+   view without ever exposing an edge. The phone is a child of the stage, placed in percentages of
+   the photo, so it moves and scales with the face whatever the crop.
+
+   In hero-row.jpg (1800 x 1200) the dad's face spans x 74-84%, y 22-36%: the phone is centred on
+   x 79% from y 16% down, and is at least 15% of the photo wide, so it overhangs the face on both
+   sides even with its 3deg lean. Re-measure those numbers if the photo is ever replaced;
+   landing.spec.ts checks the cover at real device widths.
+
+   No entrance animation on the phone, on purpose: anything that starts it elsewhere or transparent
+   shows his face for that moment. */
+.hero--photo {
+  --hero-night: #1c1b19;
+  --hero-cream: #f7f5f1;
   position: relative;
-  z-index: 0; /* contains the ::after contact shadow's negative z-index to this element */
-  /* 940 = an 820px tablet (82%) plus the phone standing beside it. */
-  width: min(940px, 100%);
-  margin: clamp(20px, 2.8vw, 40px) auto 0;
-  /* Room for the phone to hang below the tablet without crowding the CTA under it. At true scale
-     the phone is nearly the tablet's height and hangs ~60px lower, hence more than the old 44px. */
-  padding-bottom: clamp(28px, 4.5vw, 60px);
+  display: flex;
+  align-items: center;
+  /* Tall enough to feel like a photo, capped by width too so a tall, narrow desktop window doesn't
+     crop the photo so hard that the phone runs into the headline. */
+  min-height: clamp(600px, min(88svh, 72vw), 1100px);
+  padding: 0;
+  background: var(--hero-night);
+  color: var(--hero-cream);
 }
 
-/* A dedicated contact shadow under the pair, on top of each .device's own --shadow-4 below.
-   --shadow-4 alone reads fine up close but washes out to nearly nothing at full hero width --
-   diffuse ambient shadows do that, they're subtle by design. This is a second, tighter, darker
-   shadow concentrated right under the devices specifically, which is what actually reads as
-   "resting on the page" at a glance instead of on close inspection. */
-.hero__devices::after {
+.hero__photo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  container-type: size;
+  /* The stage's width: wide enough to cover the container in both directions. Substituted where
+     it is used, so the cq units there resolve against this container. */
+  --stage-w: max(100cqw, 150cqh);
+  --fx: 0.7;
+  --fy: 0.35;
+  /* No px cap: on an ultrawide monitor the face is 300px+ across, and a capped phone left it a few
+     pixels of margin each side. */
+  --phone-w: calc(var(--stage-w) * 0.15);
+}
+
+.hero__stage {
+  position: absolute;
+  width: var(--stage-w);
+  height: calc(var(--stage-w) / 1.5);
+  left: clamp(calc(100cqw - var(--stage-w)), calc(50cqw - var(--fx) * var(--stage-w)), 0px);
+  top: clamp(calc(100cqh - var(--stage-w) / 1.5), calc(50cqh - var(--fy) * var(--stage-w) / 1.5), 0px);
+}
+
+.hero__stage-img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+/* The bezel is the site's own .device--phone; every size on it is a fraction of the phone's width,
+   since the phone here scales with the photo rather than with the viewport. Specificity (0,2,0)
+   beats .device--phone's own placement rules, including its <=700px block. */
+.hero__stage .hero__phone {
+  position: absolute;
+  left: 79%;
+  top: 16%;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  width: var(--phone-w);
+  padding: calc(var(--phone-w) * 0.035);
+  border-radius: calc(var(--phone-w) * 0.14);
+  transform: translateX(-50%) rotate(3deg);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.hero__stage .hero__phone .device__screen {
+  border-radius: calc(var(--phone-w) * 0.11);
+  padding-top: calc(var(--phone-w) * 0.075);
+}
+
+.hero__stage .hero__phone::after {
+  top: calc(var(--phone-w) * 0.05);
+  width: calc(var(--phone-w) * 0.2);
+  height: calc(var(--phone-w) * 0.055);
+}
+
+/* Dark from the left where the words sit, clear over the people; a fade at the top for the header
+   and at the floor so the proof strip meets it without a seam. */
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(28, 27, 25, 0.94) 0%, rgba(28, 27, 25, 0.84) 38%, rgba(28, 27, 25, 0.45) 56%, rgba(28, 27, 25, 0) 76%),
+    linear-gradient(180deg, rgba(28, 27, 25, 0.6) 0%, rgba(28, 27, 25, 0) 18%),
+    linear-gradient(0deg, rgba(28, 27, 25, 0.8) 0%, rgba(28, 27, 25, 0) 26%);
+}
+
+.hero__copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  /* 52%: at desktop widths the phone's left edge stays to the right of that. */
+  max-width: min(600px, 52%);
+  margin-left: clamp(20px, 5vw, 72px);
+  padding: 120px 0 clamp(56px, 6vw, 88px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(14px, 1.4vw, 20px);
+  text-align: left;
+}
+
+.hero--photo .hero__title {
+  color: var(--hero-cream);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* On the photo the accent settles on amber, not --color-accent-text (a deep rust made for the
+   light page, too dark to read here). */
+.hero--photo .hero__title em {
+  animation-name: hero-accent-in-photo;
+}
+
+@keyframes hero-accent-in-photo {
+  to {
+    color: var(--color-amber);
+  }
+}
+
+.hero--photo .hero__lead {
+  color: rgba(247, 245, 241, 0.9);
+  max-width: 34em;
+}
+
+.hero--photo .hero__cta {
+  align-items: flex-start;
+  margin-top: var(--space-2);
+  text-align: left;
+}
+
+.hero--photo .hero__actions {
+  justify-content: flex-start;
+}
+
+.hero--photo .btn--secondary {
+  border-color: rgba(247, 245, 241, 0.4);
+  color: var(--hero-cream);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (hover: hover) {
+  .hero--photo .btn--secondary:hover {
+    border-color: var(--hero-cream);
+    color: var(--hero-cream);
+  }
+}
+
+.hero--photo .hero__more {
+  margin-top: 0;
+  color: var(--color-amber);
+}
+
+.hero--photo .hero__trust {
+  color: rgba(247, 245, 241, 0.75);
+  text-align: left;
+}
+
+/* Explicit resting state, not just the sitewide duration cap (.claude/rules/marketing.md). Later
+   and more specific than the base override, which would otherwise pin the light-page rust. */
+@media (prefers-reduced-motion: reduce) {
+  .hero--photo .hero__title em {
+    color: var(--color-amber) !important;
+  }
+}
+
+/* Desktop: the header sits on the photo. Below 901px it is back in the page's flow, above the
+   photo, because there the phone stands near the top of the frame and the header would sit on it. */
+@media (min-width: 901px) {
+  .site-header--over-photo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    border-bottom-color: transparent;
+  }
+
+  .site-header--over-photo .brand,
+  .site-header--over-photo .site-nav__link--strong {
+    color: #f7f5f1;
+  }
+
+  .site-header--over-photo .site-nav__link {
+    color: rgba(247, 245, 241, 0.86);
+  }
+
+  .site-header--over-photo .brand__mark-hairline {
+    stroke: none;
+  }
+}
+
+/* Phones and portrait tablets: the photo becomes a frame on top, the words go below it on the same
+   dark ground. Same stage, same phone, same percentages -- only the frame and the focal point
+   change, and the phone takes a bigger share of the photo so the app is still legible. */
+@media (max-width: 900px) {
+  .hero--photo {
+    display: block;
+    min-height: 0;
+  }
+
+  .hero__photo {
+    position: relative;
+    inset: auto;
+    height: clamp(320px, 100vw, 560px);
+    --fx: 0.66;
+    --fy: 0.4;
+    --phone-w: calc(var(--stage-w) * 0.24);
+  }
+
+  .hero__scrim {
+    background: linear-gradient(0deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0.6) 14%, rgba(28, 27, 25, 0) 34%);
+  }
+
+  .hero__copy {
+    max-width: none;
+    margin: 0;
+    padding: var(--space-6) clamp(20px, 5vw, 72px) var(--space-10);
+  }
+}
+
+/* Proof strip: four facts on the hero's ground. */
+.proof-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) clamp(24px, 4vw, 48px);
+  margin: 0;
+  padding: var(--space-5) clamp(20px, 5vw, 72px);
+  list-style: none;
+  background: #1c1b19;
+  color: rgba(247, 245, 241, 0.82);
+  font-size: var(--text-sm);
+  border-top: 1px solid rgba(247, 245, 241, 0.08);
+}
+
+/* Not flex: a flex <li> turns "<strong>No ads</strong> on Free" into two items and the gap
+   between them reads as a double space. */
+.proof-strip li {
+  position: relative;
+  padding-left: 16px;
+}
+
+.proof-strip li::before {
   content: '';
   position: absolute;
+  left: 0;
+  top: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+
+.proof-strip strong {
+  color: #f7f5f1;
+  font-weight: 600;
+}
+
+/* A wide photo with a caption pill, leading into a section. */
+.photo-wide {
+  position: relative;
+  margin-bottom: clamp(40px, 5vw, 72px);
+}
+
+.photo-wide img {
+  width: 100%;
+  /* 2:1 on wide screens so the photo leads into the section rather than filling the window;
+     its own 1.57:1 below 900px, where it is already short. */
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  object-position: center 12%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-3), 0 18px 40px -18px var(--contact-shadow);
+}
+
+@media (max-width: 900px) {
+  .photo-wide img {
+    aspect-ratio: auto;
+  }
+}
+
+.photo-wide__caption {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  padding: var(--space-2) 14px;
+  border-radius: var(--radius-full);
+  background: rgba(28, 27, 25, 0.78);
+  color: #f7f5f1;
+  font-size: var(--text-sm);
+  backdrop-filter: blur(6px);
+}
+
+/* The closing band with a photo behind it. The scrim keeps the band's own inverse text contrast. */
+.band-photo {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding-block: clamp(72px, 9vw, 128px);
+}
+
+.band-photo__img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: center 35%;
+}
+
+.band-photo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   z-index: -1;
-  left: 8%;
-  right: 8%;
-  bottom: 2px;
-  height: clamp(26px, 4vw, 50px);
-  background: radial-gradient(ellipse at center, var(--contact-shadow), transparent 72%);
-  filter: blur(10px);
+  background: rgba(28, 27, 25, 0.82);
 }
 
 /* ============================================================================
@@ -835,28 +1134,11 @@ img {
   background: var(--color-subtle-bg);
 }
 
-.device--tablet {
-  width: 82%;
-  border-radius: clamp(20px, 3.2vw, 40px);
-  padding: clamp(7px, 1.2vw, 14px);
-}
-
-.device--tablet .device__screen {
-  border-radius: clamp(13px, 2.1vw, 27px);
-}
-
-/* True to scale: a 6.9" iPhone is 78mm wide against an 11" iPad Air's 248mm in landscape, so the
-   phone is 31% of the tablet's width (25.5% of a container the tablet fills 82% of). It was 21%,
-   which read as a smaller phone standing farther back, though it sits in front.
-
-   At that size it would cover the tablet's "This session" column, so the tablet sits left in the
-   container and the phone stands at the right edge, overlapping only the tablet's last few percent.
-   right: 0 keeps it inside .hero__devices, so nothing is clipped at any width. */
+/* The phone bezel. Where it stands is up to each use: .device--solo in a section column, and
+   .hero__phone on the hero photo, which sizes every part of it from the photo instead. (Until
+   2026-11 the hero was an iPad with this phone leaning on it, placed from here.) */
 .device--phone {
-  position: absolute;
-  right: 0;
-  bottom: -3%;
-  width: 25.5%;
+  position: relative;
   border-radius: clamp(16px, 2.2vw, 26px);
   padding: clamp(3px, 0.6vw, 7px);
   z-index: 2;
@@ -891,10 +1173,6 @@ img {
    tablet screenshot scaled to 390px is unreadable, while a phone screenshot at
    phone size is exactly what a visitor on a phone is being sold. */
 @media (max-width: 700px) {
-  .device--tablet {
-    display: none;
-  }
-
   .device--phone {
     position: relative; /* keep the island anchored once it stops being absolute */
     right: auto;

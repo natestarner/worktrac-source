@@ -370,9 +370,29 @@ banner. The household clip and the offline phone stand alone in their columns wi
 `.device--solo`; the clip paints its band into the video and takes `.device--clip` to drop the CSS
 one.
 
-Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px is
-unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being
-sold.
+The hero no longer shows the iPad (2026-11-25, below); `device-ipad.jpg` is still captured but not
+on the page.
+
+## The photo hero and the stock photos
+
+Since 2026-11-25 the homepage carries three licensed Adobe Stock photos (`marketing/assets/photos/`):
+the hero, a household photo leading into "Everyone's in the huddle", and the closing band's
+background. They are the one exception to "every image comes from the demo household", and they
+are photos of people, not of the app: no app screen is ever composited into them except the hero
+phone, which is the real capture in its CSS bezel.
+
+**The hero phone covers the dad's face, at every screen size.** That is the design: the boy is the
+hero, and the app stands where the parent would. It cannot be done with `background-size: cover`
+or `object-fit: cover`, because those crop the photo by the viewport's shape while the phone is
+placed by the page's, so the two drift apart (the first mockup covered his face at 1440px only).
+Instead `.hero__photo` is a size container and `.hero__stage` is the photo at its own 3:2 shape,
+scaled to cover it and slid to a focal point; the phone is the stage's child, placed in percentages
+of the photo. Desktop puts the words on the left over a scrim; at 900px and below the photo is a
+frame on top and the words sit below it, with the phone a larger share of the photo.
+
+`landing.spec.ts` ("the hero phone covers the dad's face") hit-tests a grid over his face at 18
+real viewport sizes, 320 x 568 to 3440 x 1440. If `hero-row.jpg` is ever replaced, re-measure the
+face box there and the phone's `left`/`top` in `styles.css` together.
 
 ## The shop section (merch)
 

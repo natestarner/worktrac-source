@@ -183,6 +183,17 @@ a public page, which is what this replaced on 2026-10-27.
   then shows just the poster. The local preview types it right, so only `check-marketing.sh`
   check 11 and the deployed-site run of `landing.spec.ts` catch it (2026-10-28, `.mp4`).
 
+## The hero phone covers the dad's face, placed in the PHOTO's coordinates
+
+`index.html`'s hero is a stock photo with the real app on a phone over the dad's face, at every
+width. The phone is a child of `.hero__stage` (the photo at its own 3:2 shape, cropped by hand in
+CSS), placed in percentages of the photo. **Never move the photo to `background-size: cover` /
+`object-fit: cover` or the phone out of the stage**: the crop and the phone then follow different
+boxes and his face shows beside the phone at some widths. `landing.spec.ts` hit-tests his face at
+18 viewport sizes; replacing `hero-row.jpg` means re-measuring its face box and the phone's
+`left`/`top` together. No entrance animation on that phone: any frame where it is elsewhere or
+transparent shows his face. Narrative: `docs/marketing-site.md`, "The photo hero".
+
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop
 
 `device-ipad.jpg` used to be cropped tight to its interactive content (no dead space below the

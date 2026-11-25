@@ -320,4 +320,51 @@ test.describe('marketing landing page', () => {
       expect(declared, src).toBeCloseTo(natural, 2);
     }
   });
+
+  // The hero photo's one hard rule: the phone covers the dad's face, at every screen size. The
+  // first mockup only managed it at one width -- the photo was cropped by the viewport's shape and
+  // the phone placed by the page's, so his whole face showed beside the phone on a laptop and the
+  // phone vanished on phones. Asserted from what the browser actually hit-tests on top: a grid of
+  // points over his face (in the photo's own coordinates, so it follows any crop) must all land on
+  // the phone. Re-measure FACE if hero-row.jpg is ever replaced.
+  test('the hero phone covers the dad\'s face at every screen size', async ({ browser }) => {
+    // x 73.5-84.5%, y 21-37% of hero-row.jpg (1800 x 1200): his head, ears and beard, with margin.
+    const FACE = { left: 0.735, right: 0.845, top: 0.21, bottom: 0.37 };
+    const viewports = [
+      [320, 568], [360, 740], [375, 667], [390, 844], [430, 932], [844, 390], [768, 1024],
+      [820, 1180], [900, 1000], [901, 700], [1024, 768], [1180, 820], [1280, 720], [1366, 768],
+      [1440, 900], [1920, 1080], [2560, 1440], [3440, 1440],
+    ];
+    for (const [width, height] of viewports) {
+      const context = await browser.newContext({ viewport: { width, height } });
+      const page = await context.newPage();
+      await page.goto('/');
+      await page.locator('.hero__stage-img').evaluate((img: HTMLImageElement) => img.decode());
+      const misses = await page.evaluate((face) => {
+        const stage = document.querySelector('.hero__stage')!.getBoundingClientRect();
+        const frame = document.querySelector('.hero__photo')!.getBoundingClientRect();
+        const phone = document.querySelector('.hero__phone')!;
+        const out: string[] = [];
+        let visible = 0;
+        for (let i = 0; i <= 6; i++) {
+          for (let j = 0; j <= 6; j++) {
+            const x = stage.left + stage.width * (face.left + ((face.right - face.left) * i) / 6);
+            const y = stage.top + stage.height * (face.top + ((face.bottom - face.top) * j) / 6);
+            // A part of his face cropped out of the frame (or below a landscape phone's fold) isn't
+            // on screen to cover, and elementFromPoint can't see it.
+            if (x < frame.left || x > frame.right || y < frame.top || y > frame.bottom) continue;
+            if (x < 0 || x >= window.innerWidth || y < 0 || y >= window.innerHeight) continue;
+            visible++;
+            const hit = document.elementFromPoint(x, y);
+            if (!hit || !phone.contains(hit)) out.push(`(${Math.round(x)},${Math.round(y)}) hit ${hit?.className ?? 'nothing'}`);
+          }
+        }
+        // Vacuous if the crop hid his whole face: then nothing was checked.
+        return { visible, out };
+      }, FACE);
+      expect(misses.visible, `${width}x${height}: his face should be in the frame`).toBeGreaterThan(30);
+      expect(misses.out, `${width}x${height}`).toEqual([]);
+      await context.close();
+    }
+  });
 });
