@@ -294,7 +294,7 @@ export default function HelpTab() {
           <li>
             <strong>Weight &amp; reps</strong> (a barbell, dumbbells, a machine): the box starts empty
             and highlighted, and the button reads <T>Enter a weight</T> until you put a number in.
-            If you did it with nothing in your hands, tap <T>No weight, just bodyweight</T> under it.
+            If you did it with nothing in your hands, enter <T>0</T>.
           </li>
           <li>
             <strong>Bodyweight</strong> (pull-ups, push-ups, dips) and anything measured in{' '}

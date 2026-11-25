@@ -2550,17 +2550,25 @@ describe('ExerciseDetail weight prefill', () => {
     fireEvent.change(weight, { target: { value: '135' } });
     fireEvent.blur(weight);
 
-    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+    expect(screen.queryByText('Enter 0 for bodyweight')).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
     await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 135, reps: 8 })));
   });
 
-  it('"No weight, just bodyweight" logs the first set at 0', async () => {
+  // The hint under the disabled button says how: type 0 (TestFlight 1.4: the old "No weight, just
+  // bodyweight" button above it read as plain text).
+  it('says "Enter 0 for bodyweight" under the button, and a typed 0 logs the first set at 0', async () => {
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
 
     renderWithQuery(<Harness loadType="external" />);
-    fireEvent.click(await screen.findByRole('button', { name: 'No weight, just bodyweight' }));
+    expect(await screen.findByText('Enter 0 for bodyweight')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /bodyweight/i })).toBeNull();
+    const weight = screen.getByLabelText('Weight (lb)');
+    fireEvent.focus(weight);
+    fireEvent.change(weight, { target: { value: '0' } });
+    fireEvent.blur(weight);
     expect(screen.getByLabelText('Weight (lb)')).toHaveValue('0');
+    expect(screen.queryByText('Enter 0 for bodyweight')).toBeNull();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
     await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
@@ -2603,7 +2611,7 @@ describe('ExerciseDetail weight prefill', () => {
     renderWithQuery(<Harness loadType="external" />);
     expect(await screen.findByRole('button', { name: 'Log set' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Enter a weight' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'No weight, just bodyweight' })).toBeNull();
+    expect(screen.queryByText('Enter 0 for bodyweight')).toBeNull();
   });
 
   // A catalog cached before load types existed (axis D) has no loadType: the safe reading.

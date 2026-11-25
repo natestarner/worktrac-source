@@ -14,7 +14,7 @@ describe('loadTypeOf', () => {
     expect(loadTypeOf({ loadType: 'external' })).toBe('external');
   });
 
-  // Axis D and a newer server: never stuck, at worst one tap on "No weight, just bodyweight".
+  // Axis D and a newer server: never stuck, at worst typing a 0 ("Enter 0 for bodyweight").
   it.each([undefined, null, {}, { loadType: 'assisted' }, { loadType: '' }])(
     'reads %o as external',
     (row) => {

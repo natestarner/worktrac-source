@@ -29,21 +29,26 @@ export function logSetButton(page: Page) {
 //
 // A person's FIRST set of an exercise that expects a weight (load_type 'external', e.g. Barbell
 // Back Squat) now asks for one: Log set is disabled and reads "Enter a weight". A blank used to log
-// 0, a bodyweight set, so a spec that tapped Log set there meant exactly that -- and
-// "No weight, just bodyweight" is the button that still logs it. Anywhere else this is just the tap.
+// 0, a bodyweight set, so a spec that tapped Log set there meant exactly that -- and typing 0, as
+// the hint under the button says ("Enter 0 for bodyweight"), still logs it. Anywhere else this is
+// just the tap.
 //
 // ⚠️ It waits for the summary cards first ("Last time"), because that is when the screen KNOWS
 // whether there is history: before then nothing is asked (ExerciseDetail's `prefill != null`), so
 // an earlier check would see an enabled button that then flips.
 export async function tapLogSet(page: Page) {
   await expect(page.getByText(/^Last time/).first()).toBeVisible();
-  const noWeight = page.getByRole('button', { name: 'No weight, just bodyweight' });
+  const asking = page.getByRole('button', { name: 'Enter a weight' });
+  const weight = page.getByRole('textbox', { name: /^Weight \(/ });
   const logSet = page.getByRole('button', { name: /^Log set/ });
   // Polled, not checked once: on a just-created exercise under lie-fi the cards can draw a beat
   // before the device's History answers, and only then does the screen know to ask.
   await expect
     .poll(async () => {
-      if (await noWeight.isVisible()) await noWeight.click();
+      if (await asking.isVisible()) {
+        await weight.fill('0');
+        await weight.press('Enter');
+      }
       return (await logSet.count()) > 0 && (await logSet.first().isEnabled());
     })
     .toBe(true);
