@@ -46,7 +46,13 @@ appId: fitness.huddle.app
     direction: DOWN
     timeout: 10000
 - tapOn: 'Log set'
-# A first set is always a record, and the celebration stays up until dismissed.
+# A first set is always celebrated, and the card stays up until dismissed: the quiet
+# "First Barbell Bench Press" card (its button is "Nice"), or "New PR!" when the app can't confirm
+# it is a first. Only "New PR!" was handled, so the first card covered "End workout" and every
+# flow failed its first attempt (2026-11-25).
+- tapOn:
+    text: 'Nice'
+    optional: true
 - tapOn:
     text: 'New PR!'
     optional: true

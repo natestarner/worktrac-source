@@ -327,9 +327,10 @@ contains it.
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
 | `08-paste-the-emailed-code` | Signs UP (no seeded household); screenshots what two taps on the code box show (`08-after-two-taps.png`, evidence only), then "Paste code" must put a copied `123 456` in as `123456` |
-| `07-rest-notification-permission` | The first rest timer makes iOS ask to send notifications. The only flow launched with notifications **unset** (`NOTIFICATIONS: unset` into `subflows/sign-in.yaml`) |
+| `07-rest-notification-permission` | The first rest timer asks iOS for permission: afterwards Huddle is listed in **Settings > Notifications** (the TestFlight symptom). The only flow launched with notifications **unset** (`NOTIFICATIONS: unset` into `subflows/sign-in.yaml`). Maestro accepts the system alert itself, so the alert is not the check |
 
-- **Maestro GRANTS every permission at launch unless a flow says otherwise.** So no flow ever saw
+- **Maestro GRANTS every permission at launch unless a flow says otherwise, and ACCEPTS a system
+  permission alert by itself when one appears.** So no flow ever saw
   iOS ask about notifications, and the rest notification never asking at all (Huddle absent from
   Settings > Notifications on every build through 1.4.0) went unnoticed until a person tested it
   (2026-11-25). A flow about a permission ask must pass that permission as `unset`.

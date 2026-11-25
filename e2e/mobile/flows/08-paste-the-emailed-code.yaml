@@ -32,17 +32,13 @@ name: Paste the emailed code
 - extendedWaitUntil:
     visible: 'Your name'
     timeout: 20000
-- tapOn:
-    text: 'Your name'
-    index: 0
+# By placeholder: tapping the "Email" / "Password" labels here left focus in the name field, and
+# everything was typed into it (first run, 2026-11-25).
+- tapOn: 'e.g. Alex'
 - inputText: 'Maestro'
-- tapOn:
-    text: 'Email'
-    index: 0
+- tapOn: 'you@example.com'
 - inputText: ${'huddle+e2e-maestro-' + Date.now() + '@starner.co'}
-- tapOn:
-    text: 'Password'
-    index: 0
+- tapOn: 'At least 8 characters'
 - inputText: 'password123'
 - scrollUntilVisible:
     element: 'Create household'

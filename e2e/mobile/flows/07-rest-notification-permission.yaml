@@ -1,7 +1,8 @@
 # The first rest timer asks iOS for permission to say "Rest's up" (lib/native/notifications.js). It
 # never did on a real phone: Huddle was not even listed under Settings > Notifications, in the App
 # Store build (1.3.0) and in TestFlight 1.4.0 (2026-11-25). The other flows could not notice, because
-# Maestro grants every permission at launch; this one leaves notifications unset and waits for the ask.
+# Maestro grants every permission at launch; this one leaves notifications unset and checks iOS's
+# own list of apps that have asked.
 #
 # app-evidence: the app checked = \[rest-notifications\] permission:
 # app-evidence: the app asked iOS = \[rest-notifications\] permission answered
@@ -39,10 +40,23 @@ name: The first rest timer asks to send notifications
     direction: DOWN
     timeout: 10000
 - tapOn: 'Log set'
-# Logging the set started the rest timer, which is when the app asks. iOS's alert reads
-# '"Huddle Lower" Would Like to Send You Notifications' (the name depends on the build).
-- extendedWaitUntil:
-    visible: '.*Would Like to Send You Notifications.*'
-    timeout: 20000
-- tapOn: 'Allow'
+# Logging the set started the rest timer, which is when the app asks iOS. Maestro accepts system
+# permission alerts by itself (the first run's console showed "permission answered: granted" with
+# no alert left for this flow to see), so the alert is not the check. The check is the symptom
+# from TestFlight: is Huddle listed under Settings > Notifications at all? An app that never
+# called requestAuthorization is not.
+- tapOn:
+    text: 'Allow'
+    optional: true
+- tapOn:
+    text: 'Nice'
+    optional: true
 - assertVisible: 'End workout'
+- launchApp:
+    appId: com.apple.Preferences
+- tapOn: 'Notifications'
+- scrollUntilVisible:
+    element: '.*Huddle.*'
+    direction: DOWN
+    timeout: 20000
+- takeScreenshot: mobile-flows-out/07-settings-notifications
