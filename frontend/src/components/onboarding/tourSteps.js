@@ -74,7 +74,10 @@ export const TOUR_STEPS = [
     id: 'log-set',
     anchor: TOUR_ANCHORS.LOG_SET,
     title: 'One button per set',
-    body: 'This button starts the session, kicks off the rest timer, and saves your set.',
+    // Spotlit, this button is disabled and reads "Enter a weight": the tour's Barbell Back Squat is
+    // a brand-new person's first set of a weighted exercise (#602). The copy says so, rather than
+    // describing a button that looks broken under the spotlight (#606).
+    body: 'Once there’s a weight, this button starts the session, kicks off the rest timer, and saves your set.',
     screen: { route: '/app/log', exercise: 'open' },
   },
   {
