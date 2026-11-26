@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, closeSearch } from './support/exercises';
 
 // The first-run guided tour. Full design: the plan at
 // C:\Users\natha\.claude\plans\when-a-user-logs-steady-giraffe.md (components/onboarding/).
@@ -244,6 +244,8 @@ test.describe('Escape skips and restores', () => {
     await dismissWelcomeAndSearch(page);
 
     await page.getByPlaceholder('Search all exercises').fill('dead');
+    // The search layer covers the header; its Cancel keeps what was typed.
+    await closeSearch(page);
     await openHelp(page);
 
     await page.getByRole('button', { name: 'Take the tour' }).click();

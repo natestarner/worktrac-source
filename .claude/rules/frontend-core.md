@@ -217,12 +217,14 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   (`[data-modal-panel]`) clear of its sticky header (`[data-modal-header]`); on the page it keeps
   clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On
   the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
+  A field inside `[data-keyboard-layer]` (the Log picker's full-screen search, `log-screen.md`) is
+  never revealed: the layer pins it at the top of the visible viewport by construction.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
   `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
   and left the Log search field's focus border under the tab bar.
 - `e2e/tests/keyboard-scroll.spec.ts` stands in for the keyboard (a short window for the app, the
-  two published values for Safari); its three Safari/picker cases were verified red against the
+  two published values for Safari); its Safari dialog case was verified red against the
   old code.
 - **The panel itself carries no padding.** The sticky header and the content wrapper around
   `{children}` each own their own padding instead. Don't put padding back on the panel or bleed

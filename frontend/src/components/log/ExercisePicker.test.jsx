@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExercisePicker from './ExercisePicker';
 import { useAppState } from '../../context/AppStateContext';
@@ -92,8 +92,8 @@ describe('ExercisePicker tour anchors', () => {
   });
 });
 
-// The search field moved from a hand-rolled <input> to the Input primitive. Two things about that
-// swap fail SILENTLY, so both are pinned here rather than trusted.
+// The search field goes through the Input primitive. 16px is the threshold below which iOS Safari
+// zooms the viewport on focus; it is `.input`'s --text-md, which two e2e specs assert.
 describe('ExercisePicker search field', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,80 +101,145 @@ describe('ExercisePicker search field', () => {
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
-  // `Input` is a plain function component, not forwardRef -- so the ref only reaches the element
-  // because React 19 passes `ref` as an ordinary prop into `...rest`. If that ever stops being
-  // true, `searchInputRef.current` is null and the focus handler's `?.scrollIntoView` guard
-  // swallows it: the keyboard covers the results on a phone and nothing anywhere reports why.
-  it('forwards the ref to the real input, so the focus-scroll can still fire', async () => {
-    renderPicker();
-    const input = screen.getByPlaceholderText('Search all exercises');
-
-    const scrollIntoView = vi.fn();
-    input.scrollIntoView = scrollIntoView;
-    fireEvent.focus(input);
-
-    // A frame later, once the space below the field is laid out (see the component).
-    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' }));
-  });
-
-  // 16px is the threshold below which iOS Safari zooms the viewport on focus. It used to be a
-  // literal with a comment beside it; it is now `.input`'s --text-md, which two e2e specs assert.
   it('renders through the .input class rather than a hand-rolled copy of it', () => {
     renderPicker();
     expect(screen.getByPlaceholderText('Search all exercises')).toHaveClass('input');
   });
-
-  // Regression: the on-focus scroll landed the field at the very top of the scroll container,
-  // which is exactly where the sticky .app-chrome paints -- hiding the field behind it rather
-  // than below it. index.css's scroll-margin-top on this class is what fixes that; this only
-  // pins that the class is still there to carry it.
-  it('carries the scroll-margin-top class that keeps it clear of the sticky chrome', () => {
-    renderPicker();
-    expect(screen.getByPlaceholderText('Search all exercises')).toHaveClass('exercise-search-input');
-  });
 });
 
-// Regression (2026-11-08): starting a search used to HIDE the routine quick-start block and the
-// "Or pick an exercise" label above the field. The field moved up on the first letter typed, the
-// page clamped to its new end (the bottom of the list), and a re-scroll smooth-scrolled back up --
-// a jump down and back on every first letter. Nothing above the field may change on a search now,
-// so there is nothing to re-scroll.
-describe('ExercisePicker keeps everything above the search field while searching', () => {
+// #626: tapping the search used to scroll the PAGE to put the field at the top, and in the App
+// Store app the keyboard's resize defeated that about half the time. It now opens a full-screen
+// layer instead: the same <input>, lifted into a fixed layer with results under it and a Cancel.
+// The page itself is never scrolled.
+describe('ExercisePicker full-screen search', () => {
+  const catalog = [
+    { id: 11, name: 'Back Squat' },
+    { id: 12, name: 'Front Squat' },
+    { id: 13, name: 'Bench Press' },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
-  function renderSearching(term) {
-    useAppState.mockReturnValue({ exerciseSearch: term, setExerciseSearch: vi.fn() });
-    return renderPicker({ routines: routines(2) });
+  function tapSearch() {
+    act(() => screen.getByPlaceholderText('Search all exercises').focus());
   }
 
-  it('keeps the routine block and the "Or pick an exercise" label while a search is running', () => {
-    renderSearching('squ');
-    expect(screen.getByText('Start a routine')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Routine 1/ })).toBeInTheDocument();
-    expect(screen.getByText('Or pick an exercise')).toBeInTheDocument();
-    expect(screen.getByText('Search results')).toBeInTheDocument();
-  });
+  function withSearch(term, setExerciseSearch = vi.fn()) {
+    useAppState.mockReturnValue({ exerciseSearch: term, setExerciseSearch });
+    return setExerciseSearch;
+  }
 
-  it('does not scroll the focused field when a search starts', () => {
-    const setExerciseSearch = vi.fn();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch });
-    const { rerender } = renderPicker({ routines: routines(1) });
-
+  it('opens the layer on the first tap, around the SAME input, and scrolls nothing', () => {
+    withSearch('');
+    renderPicker({ catalog, routines: routines(1) });
     const input = screen.getByPlaceholderText('Search all exercises');
     const scrollIntoView = vi.fn();
     input.scrollIntoView = scrollIntoView;
-    input.focus();
-    scrollIntoView.mockClear(); // the focus event's own call isn't what this test is about
+    expect(screen.queryByRole('dialog')).toBeNull();
 
-    useAppState.mockReturnValue({ exerciseSearch: 's', setExerciseSearch });
+    act(() => input.focus());
+
+    const layer = screen.getByRole('dialog', { name: 'Exercise search' });
+    // Same node: React kept the element, so the focus (and on a phone, the keyboard) stayed.
+    expect(layer).toContainElement(input);
+    expect(document.activeElement).toBe(input);
+    expect(layer).toHaveClass('exercise-search-layer');
+    expect(layer).toHaveAttribute('data-keyboard-layer');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('shows the results inside the layer and hides the page behind it', () => {
+    withSearch('squ');
+    renderPicker({ catalog, routines: routines(2) });
+    tapSearch();
+    const layer = screen.getByRole('dialog', { name: 'Exercise search' });
+    expect(layer).toHaveTextContent('Search results');
+    expect(screen.getByRole('button', { name: 'Back Squat' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Front Squat' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bench Press' })).toBeNull();
+
+    // The page is still there, unchanged, so Cancel returns to exactly it -- but nothing in it can
+    // be reached while the layer covers it.
+    expect(screen.getByText('Start a routine')).toBeInTheDocument();
+    expect(screen.getByText('Or pick an exercise')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Routine 1/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: '+ Add your own exercise' })).toHaveLength(1);
+    expect(layer).toContainElement(screen.getByRole('button', { name: '+ Add your own exercise' }));
+  });
+
+  // A search restored by a person switch back or a reload sits in the field; it does not throw a
+  // full-screen layer over the page by itself. One tap brings its results back.
+  it('never opens by itself: a restored search waits in the field for a tap', () => {
+    withSearch('bench');
+    renderPicker({ catalog });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByPlaceholderText('Search all exercises')).toHaveValue('bench');
+    tapSearch();
+    expect(screen.getByRole('button', { name: 'Bench Press' })).toBeInTheDocument();
+  });
+
+  // Cancel keeps the text: it is this person's draft, which must survive a person switch, and the
+  // person bar is under the layer.
+  it('Cancel closes the layer, keeps the typed search and takes focus off the field', () => {
+    const setExerciseSearch = withSearch('squ');
+    renderPicker({ catalog });
+    const input = screen.getByPlaceholderText('Search all exercises');
+    act(() => input.focus());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(setExerciseSearch).not.toHaveBeenCalled();
+    expect(input).toHaveValue('squ');
+    // Through the ref: proves it still reaches the real <input> (React 19 passes `ref` as a prop).
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it("Escape is the keyboard's Cancel", () => {
+    const setExerciseSearch = withSearch('');
+    renderPicker({ catalog });
+    const input = screen.getByPlaceholderText('Search all exercises');
+    act(() => input.focus());
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(setExerciseSearch).not.toHaveBeenCalled();
+  });
+
+  it('choosing a result selects it and closes the layer', () => {
+    withSearch('squ');
+    const onSelectExercise = vi.fn();
+    renderPicker({ catalog, onSelectExercise });
+    tapSearch();
+    fireEvent.click(screen.getByRole('button', { name: 'Front Squat' }));
+    expect(onSelectExercise).toHaveBeenCalledWith(12);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('"+ Add your own exercise" in the layer starts from what was typed', () => {
+    withSearch('zercher');
+    const onAddExercise = vi.fn();
+    renderPicker({ catalog, onAddExercise });
+    tapSearch();
+    expect(screen.getByText(/No exercises match "zercher"/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add your own exercise' }));
+    expect(onAddExercise).toHaveBeenCalledWith('zercher');
+  });
+
+  it('typing changes nothing on the page: the default view stays under the layer', () => {
+    const setExerciseSearch = withSearch('');
+    const { container, rerender } = renderPicker({ catalog, personExercises: exercises(3, { favorite: true }) });
+    const before = container.querySelector('.picker-chip-wrap');
+    act(() => screen.getByPlaceholderText('Search all exercises').focus());
+    withSearch('s', setExerciseSearch);
     rerender(
       <ExercisePicker
-        personExercises={[]}
-        catalog={[]}
-        routines={routines(1)}
+        personExercises={exercises(3, { favorite: true })}
+        catalog={catalog}
+        routines={[]}
         loading={false}
         onSelectExercise={vi.fn()}
         onAddExercise={vi.fn()}
@@ -182,31 +247,7 @@ describe('ExercisePicker keeps everything above the search field while searching
         hasActiveRoutine={false}
       />
     );
-
-    expect(scrollIntoView).not.toHaveBeenCalled();
-  });
-
-  // The space below the field is held at a screen's height while searching, so a short result
-  // list cannot shorten the page under the field (index.css, .picker-search-body).
-  it('holds the space below the field while a search is running, and not before the field is used', () => {
-    const { container, unmount } = renderSearching('zzz');
-    expect(container.querySelector('.picker-search-body')).not.toBeNull();
-    expect(container.querySelector('.picker-search-body')).toHaveTextContent('+ Add your own exercise');
-    unmount();
-    const idle = renderSearching('');
-    expect(idle.container.querySelector('.picker-search-body')).toBeNull();
-  });
-
-  // ...and from the first tap, before anything is typed: the focus scroll brings the field to the
-  // top only if there is page below it to scroll into (TestFlight 2026-11-25). Kept after blur,
-  // because taking it away would shorten the page under the person.
-  it('holds the space below the field from the first tap, and keeps it after blur', () => {
-    const { container } = renderSearching('');
-    const input = screen.getByPlaceholderText('Search all exercises');
-    fireEvent.focus(input);
-    expect(container.querySelector('.picker-search-body')).not.toBeNull();
-    fireEvent.blur(input);
-    expect(container.querySelector('.picker-search-body')).not.toBeNull();
+    expect(container.querySelector('.picker-chip-wrap')).toBe(before);
   });
 });
 

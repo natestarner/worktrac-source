@@ -22,8 +22,6 @@
 // the keyboard (`Keyboard.resize: "native"`), so the visual viewport simply equals the window and
 // the properties describe the same box `inset: 0` already did.
 
-import { jumpAndSettle } from './jumpAndSettle';
-
 const FIELD = 'input, textarea, select, [contenteditable="true"]';
 // Breathing room kept between a revealed field and whatever edge it was revealed past, so its
 // focus ring (drawn outside the border) is not clipped by that edge.
@@ -91,6 +89,10 @@ export function trackVisibleViewport() {
 export function revealFocusedField({ onPage = true } = {}) {
   const el = document.activeElement;
   if (!el?.matches?.(FIELD)) return;
+  // A fixed layer sized to the visible viewport with its field pinned at the top (the Log picker's
+  // full-screen search) has nothing to reveal, and scrolling the page under it would only move the
+  // page the person comes back to.
+  if (el.closest('[data-keyboard-layer]')) return;
   const panel = el.closest('[data-modal-panel]');
   if (panel) {
     revealInPanel(panel, el);
@@ -112,9 +114,6 @@ function revealInPanel(panel, el) {
   else if (rect.bottom > bottom) panel.scrollTop += rect.bottom - bottom;
 }
 
-// The settle loop a `data-reveal="start"` reveal is running, if any (see revealOnPage).
-let cancelPageSettle = null;
-
 function revealOnPage(el) {
   const rect = el.getBoundingClientRect();
   const band = visibleBand();
@@ -125,30 +124,6 @@ function revealOnPage(el) {
   // SessionBar publishes its own height (frontend-core.md, "The bottom chrome"). In the app it rides
   // on top of the keyboard; in Safari it stays at the bottom of the layout viewport, behind it.
   const bottom = Math.min(band.bottom, window.innerHeight - readPx('--bottom-bar-height'));
-
-  // A field that scrolls ITSELF to the top on focus says so (`data-reveal="start"`, the Log
-  // search), and is PUT there once the keyboard has settled, even when it is already in view.
-  // Its own smooth scroll races the keyboard: while the window shrinks, WebKit can cut a smooth
-  // scroll short. Seen on the simulator both ways (2026-11-25): stopped part-way and then centred
-  // by the old reveal below (the TestFlight "up, then back to the middle"), or stopped part-way
-  // and left mid-screen. This runs after the keyboard's last event, so nothing cuts it short. It
-  // lands where the field's own scroll aims: its scroll-margin-top below the top of what is
-  // visible, clear of the sticky chrome. Where the page cannot scroll that far (a short page), it
-  // does nothing visible.
-  if (el.dataset?.reveal === 'start') {
-    const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-    const targetTop = () => visibleBand().top + margin;
-    const arrived = () => Math.abs(el.getBoundingClientRect().top - targetTop()) <= 2;
-    if (arrived()) return;
-    console.info(`[keyboard] reveal ${el.getAttribute('placeholder') ?? el.id ?? el.tagName} to its start (field ${Math.round(rect.top)}, target ${Math.round(targetTop())})`);
-    // Re-aimed every frame until it is AT its start (lib/jumpAndSettle.js, History's mechanism): a
-    // single scrollIntoView here was simply dropped on one simulator run in two -- issued while the
-    // WebView was still resizing for the keyboard -- and the search stayed mid-screen. ~1s budget,
-    // and it stops the moment the person scrolls, taps or types. A newer reveal replaces it.
-    cancelPageSettle?.();
-    cancelPageSettle = jumpAndSettle(el, { arrived, maxFrames: 60 });
-    return;
-  }
 
   if (rect.top >= top && rect.bottom <= bottom) return;
   // Logged because a reveal is a scroll nobody asked for: when one fights another scroll, this line

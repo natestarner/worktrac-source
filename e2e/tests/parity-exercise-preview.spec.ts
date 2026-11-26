@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, logSetAt, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, logSetAt, pickExercise, clearSearch } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // "Preview exercise": an exercise's muscles (and how-to video, where it has one) BEFORE choosing
@@ -33,7 +33,7 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
     const search = page.getByPlaceholder('Search all exercises');
     await search.fill(EXERCISE);
     await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-    await search.fill('');
+    await clearSearch(page);
   },
   navigate: async () => {},
   act: async (page) => {
@@ -48,12 +48,14 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
     await expect(sheet.getByRole('button', { name: 'Add muscles worked' })).toHaveCount(0);
 
     await sheet.getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    // Still on the picker, still searching: previewing did not choose the exercise.
+    await expect(sheet).toHaveCount(0);
+    // Still on the picker, still searching (back in the search layer it opened from): previewing
+    // did not choose the exercise.
+    await expect(page.getByRole('dialog', { name: 'Exercise search' })).toBeVisible();
     await expect(page.getByPlaceholder('Search all exercises')).toHaveValue(EXERCISE);
     await expect(page.getByRole('button', { name: 'Log set' })).toHaveCount(0);
     // Leave the picker as found: the harness ends on the tab bar.
-    await page.getByPlaceholder('Search all exercises').fill('');
+    await clearSearch(page);
   },
 });
 

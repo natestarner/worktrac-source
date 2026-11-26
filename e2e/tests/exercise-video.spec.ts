@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, clearSearch } from './support/exercises';
 import { goHardOffline } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -40,7 +40,7 @@ async function warmCatalog(page: Page) {
   const search = page.getByPlaceholder('Search all exercises');
   await search.fill(EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await search.fill('');
+  await clearSearch(page);
 }
 
 // PARITY: the button and the sheet come from the cached catalog, so they are the same in every

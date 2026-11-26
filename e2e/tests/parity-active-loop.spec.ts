@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, logSetButton } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, logSetButton, clearSearch } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY specs: one assertion body, run across online / lie-fi / hard-offline / pinned-offline.
@@ -53,7 +53,7 @@ async function warmCatalog(page: Page) {
   const search = page.getByPlaceholder('Search all exercises');
   await search.fill(EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await search.fill('');
+  await clearSearch(page);
 }
 
 // The single most-used flow in the app. `frontend-core.md` states the invariant this pins down:
@@ -251,7 +251,7 @@ forEachConnectivityMode<void>('switching exercises never shows the previous one\
     const search = page.getByPlaceholder('Search all exercises');
     await search.fill('Pull-up');
     await expect(page.getByRole('button', { name: 'Pull-up', exact: true })).toBeVisible();
-    await search.fill('');
+    await clearSearch(page);
   },
   navigate: async (page) => {
     await pickExercise(page, EXERCISE);
