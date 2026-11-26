@@ -45,9 +45,9 @@ export function weightLabel(loadType, unit) {
 // "(Reps)" / "(Time)" suffix that tells two same-named exercises apart, and Weight & reps vs
 // Bodyweight are the SAME movement family, never a reason for a second exercise.
 export const EXERCISE_KIND_OPTIONS = [
-  { label: 'Weight & reps', value: 'weight', hint: 'Barbell, dumbbells, a machine' },
-  { label: 'Bodyweight', value: 'bodyweight', hint: 'Pull-ups, push-ups, dips' },
-  { label: 'Time', value: 'time', hint: 'Planks, wall sits, dead hangs' },
+  { label: 'Weight & reps', value: 'weight', hint: 'e.g. barbell, dumbbells, a machine' },
+  { label: 'Bodyweight', value: 'bodyweight', hint: 'e.g. pull-ups, push-ups, dips' },
+  { label: 'Time', value: 'time', hint: 'e.g. planks, wall sits, dead hangs' },
 ];
 
 export const DEFAULT_EXERCISE_KIND = 'weight';

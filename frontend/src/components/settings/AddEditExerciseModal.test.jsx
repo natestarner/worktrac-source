@@ -98,9 +98,9 @@ describe('AddEditExerciseModal', () => {
         'measure-option pressable',
         'measure-option pressable',
       ]);
-      expect(screen.getByRole('radio', { name: 'Weight & reps' })).toHaveAccessibleDescription('Barbell, dumbbells, a machine');
-      expect(screen.getByRole('radio', { name: 'Bodyweight' })).toHaveAccessibleDescription('Pull-ups, push-ups, dips');
-      expect(screen.getByRole('radio', { name: 'Time' })).toHaveAccessibleDescription('Planks, wall sits, dead hangs');
+      expect(screen.getByRole('radio', { name: 'Weight & reps' })).toHaveAccessibleDescription('e.g. barbell, dumbbells, a machine');
+      expect(screen.getByRole('radio', { name: 'Bodyweight' })).toHaveAccessibleDescription('e.g. pull-ups, push-ups, dips');
+      expect(screen.getByRole('radio', { name: 'Time' })).toHaveAccessibleDescription('e.g. planks, wall sits, dead hangs');
     });
 
     it('creates a bodyweight exercise when Bodyweight is chosen, on the optimistic row too', async () => {
