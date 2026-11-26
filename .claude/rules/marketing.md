@@ -196,7 +196,9 @@ different boxes and his face shows beside it at some widths. Nate wants the devi
 runs from just past the boy's face to the photo's right edge. `landing.spec.ts` hit-tests his face (covered), the boy's face and the headline
 (both clear) at 18 viewport sizes; replacing `hero-row.jpg` means re-measuring both face boxes and
 the device's `left`/`top` together. No entrance animation on the device: any frame where it is
-elsewhere or transparent shows his face. The bezel is the site's CSS one, never Apple's: Apple's
+elsewhere or transparent shows his face. Every phone on the page is the one `.device--iphone` frame
+(the hero's iPad is that frame re-proportioned at 901px and up): change its look there, never in a
+second phone frame. The bezel is the site's CSS one, never Apple's: Apple's
 bezel license covers the App Store listing only. Narrative: `docs/marketing-site.md`, "The photo hero".
 
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop

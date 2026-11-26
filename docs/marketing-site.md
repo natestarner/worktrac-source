@@ -362,13 +362,17 @@ markup declares, so nothing is resampled. The app's layout genuinely differs at 
 log screen goes two-column on the tablet), and the CSS bezel takes its shape from the image, so a
 crop of some other screen would show as the wrong device (`.claude/rules/marketing.md`).
 
-The bezels themselves are **pure CSS** (`.device` in `styles.css`), with no chrome images to keep
-in sync. The phone frame adds a **status-bar band** above the screenshot, in the app's own header
-colour, for the dynamic island to sit in: a browser capture starts at the page content. The offline
-phone's band is the banner's colour instead (`.device--offline`), since that screen opens on the
-banner. The household clip and the offline phone stand alone in their columns with
-`.device--solo`; the clip paints its band into the video and takes `.device--clip` to drop the CSS
-one.
+The bezels themselves are **pure CSS**, with no chrome images to keep in sync. Every phone on the
+page (the hero in the phone layout, the household clip, the offline screen) is ONE frame,
+`.device--iphone`: real iPhone proportions, a drawn Dynamic Island and status bar (9:41, signal,
+Wi-Fi, battery; a browser capture starts below where they would be), a dark titanium edge, and the
+tilt Nate picked in Rotato (x -15, y -20, z -4, 2026-11-25). The old section frame, with small
+fixed corners and a thick border, read as an Android phone. The hero's iPad is the same frame
+re-proportioned at 901px and up. The offline phone's status band is the banner's colour
+(`.device--offline`, white text in dark mode), since that screen opens on the banner. The clip and
+the offline phone stand alone in their columns with `.device--solo`, which brings its own
+perspective; the clip sits LEFT of its words, so `.device--turn-right` mirrors its turn, and it
+paints its band into the video and takes `.device--clip` to drop the CSS one.
 
 Since 2026-11-25 the hero's device sits on a photo (below).
 

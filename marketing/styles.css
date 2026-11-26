@@ -821,91 +821,21 @@ img {
   max-width: none;
 }
 
-/* The bezel is the site's own .device; every size on it is a fraction of the device's width,
-   since it scales with the photo rather than with the viewport. Desktop: an iPad in landscape,
-   like the one on our gym wall, big enough to read.
-
-   A real object in the scene, built the way tilted-device heroes usually are, and measured against
-   the real devices (2026-11-25 reviews: "plopped over the image", then "slightly warped"):
-   - Real proportions. iPad Air 11" in landscape: the black border is ~3.8% of the width a side
-     and the corners ~7.5%; the screenshot is its 1180 x 820 screen. iPhone (phone layout below):
-     the screen is exactly the capture's 440 x 956, with the status bar INSIDE it, as on a real
-     phone -- an extra band above the screenshot made it 4% too tall.
-   - Perspective on the PARENT (.hero__stage--over) at 6x the device's width, about Rotato's
-     camera. 5x with the old proportions read as warped; 12x read flat once the tilt grew.
-   - Tilted on three axes at the angles Nate picked in Rotato (x -15, y -20, z -4; 2026-11-25).
-     Rotato is y-up and CSS is y-down, so x and z flip sign: --rx 15deg tips the top back, --ry
-     -20deg turns the screen toward the words, --rz 4deg leans it clockwise. Same Euler order
-     (X, then Y, then Z on the matrix) as Rotato's.
-   - Thickness as an extrusion: solid shadows stepped toward the edges the tilt shows you (right
-     and bottom), dark titanium with a lit lip, as Rotato renders it. Its depth is the device's
-     thickness x the sine of each tilt. Box-shadows follow the rounded corners, which separate
-     side faces could not (they left gaps at every corner).
-   - Lit like the photo: its light is the windows on the right, so the soft shadows fall down and
-     to the left (tight, mid, and a wide one using the site's --contact-shadow), and the rim
-     catches light on its right and top edges.
-   - Glass: a faint reflection and a light warm tint over the screen (.device__screen::after), so
-     the app's clean white meets the photo's warm grade.
-   Every length is a fraction of --dev-w, so it all scales with the device. */
+/* The hero's device is the page's one iPhone frame (.device--iphone, under "Device frames"),
+   placed in the photo's coordinates; in the desktop layout the same frame becomes an iPad (the
+   min-width: 901px block there). Perspective sits on the PARENT (.hero__stage--over) at 6x the
+   device's width, about Rotato's camera, aimed at the device: 5x with the old proportions read as
+   warped, and 12x read flat once the tilt grew. */
 .hero__stage--over {
   perspective: calc(var(--dev-w) * 6);
   perspective-origin: 78% 35%;
 }
 
 .hero__stage .hero__device {
-  --rx: 15deg;
-  --ry: -20deg;
-  --rz: 4deg;
-  --bezel: calc(var(--dev-w) * 0.038);
-  --radius: calc(var(--dev-w) * 0.075);
-  /* The extrusion: how far the back edge shows, right and down (thickness x the tilt's sines). */
-  /* iPad Air: 6.1mm thick on a 247.6mm width, x sin 20deg and sin 15deg. */
-  --ex: calc(var(--dev-w) * 0.009);
-  --ey: calc(var(--dev-w) * 0.007);
   position: absolute;
   left: 78%;
   top: 14%;
-  width: var(--dev-w);
-  padding: var(--bezel);
-  border-radius: var(--radius);
-  background: linear-gradient(150deg, #3a3732 0%, #1b1916 35%, #0e0d0b 75%, #1f1d1a 100%);
   transform: translateX(-50%) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
-  box-shadow:
-    /* rim light from the windows on the top and right edges */
-    inset calc(var(--dev-w) * -0.0015) calc(var(--dev-w) * 0.0015) 0 rgba(255, 244, 228, 0.3),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    /* the edge band: a lit lip nearest the face, dark titanium behind it */
-    calc(var(--ex) * 0.2) calc(var(--ey) * 0.2) 0 #5e5a54,
-    calc(var(--ex) * 0.45) calc(var(--ey) * 0.45) 0 #34312d,
-    calc(var(--ex) * 0.75) calc(var(--ey) * 0.75) 0 #22201d,
-    var(--ex) var(--ey) 0 #161513,
-    /* tight, mid and wide soft shadows, all falling down and to the left */
-    calc(var(--dev-w) * -0.006) calc(var(--dev-w) * 0.012) calc(var(--dev-w) * 0.016) rgba(0, 0, 0, 0.5),
-    calc(var(--dev-w) * -0.04) calc(var(--dev-w) * 0.06) calc(var(--dev-w) * 0.1) rgba(0, 0, 0, 0.42),
-    calc(var(--dev-w) * -0.1) calc(var(--dev-w) * 0.16) calc(var(--dev-w) * 0.26) var(--contact-shadow);
-}
-
-.hero__stage .hero__device .device__screen {
-  position: relative;
-  border-radius: calc(var(--dev-w) * 0.035);
-}
-
-/* The phone's status bar is drawn only in the phone layout. */
-.device__status {
-  display: none;
-}
-
-/* The glass: a soft reflection from the top right, and a warm tint that matches the photo's grade.
-   Decoration over a picture of a screen; pointer-events none so it never catches a hit-test. */
-.hero__stage .hero__device .device__screen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(225deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 45%),
-    linear-gradient(0deg, rgba(242, 166, 90, 0.07), rgba(242, 166, 90, 0.07));
 }
 
 /* Dark from the left where the words sit, clear over the people; a fade at the top for the header
@@ -1054,72 +984,9 @@ img {
     perspective-origin: 79% 45%;
   }
 
-  /* An iPhone: a thin black border (3% a side), rounded corners, and 8.25mm thick on a 71.5mm
-     width, which the same tilt shows as a much wider edge band than the iPad's. Same angles. */
   .hero__stage .hero__device {
-    --bezel: calc(var(--dev-w) * 0.03);
-    --radius: calc(var(--dev-w) * 0.15);
-    --ex: calc(var(--dev-w) * 0.04);
-    --ey: calc(var(--dev-w) * 0.03);
     left: 79%;
     top: 16%;
-  }
-
-  /* The screen at the capture's own 440 x 956, status bar included: the bar's 62pt sits on top of
-     the screenshot's area, and the screenshot is cropped at the bottom to make room, rather than
-     the bar being added above it (which made the phone too tall). */
-  .hero__stage .hero__device .device__screen {
-    aspect-ratio: 440 / 956;
-    border-radius: calc(var(--dev-w) * 0.125);
-    padding-top: calc(var(--dev-w) * 0.94 * 62 / 440);
-    background: #ffffff;
-  }
-
-  .hero__stage .hero__device .device__screen picture {
-    display: block;
-    height: 100%;
-  }
-
-  .hero__stage .hero__device .device__screen img {
-    height: 100%;
-    object-fit: cover;
-    object-position: top;
-  }
-
-  /* The Dynamic Island: 126 x 37pt, 11pt from the top of a 440pt-wide screen. */
-  .hero__stage .hero__device .device__screen::before {
-    content: '';
-    position: absolute;
-    z-index: 1;
-    top: calc(var(--dev-w) * 0.94 * 11 / 440);
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(var(--dev-w) * 0.94 * 126 / 440);
-    height: calc(var(--dev-w) * 0.94 * 37 / 440);
-    border-radius: var(--radius-full);
-    background: #0b0a09;
-  }
-
-  /* The status bar: the time in the left ear, signal / Wi-Fi / battery in the right. */
-  .device__status {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: calc(var(--dev-w) * 0.94 * 62 / 440);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 calc(var(--dev-w) * 0.09) 0 calc(var(--dev-w) * 0.1);
-    color: #000000;
-    font: 600 calc(var(--dev-w) * 0.94 * 17 / 440) / 1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-    letter-spacing: -0.01em;
-  }
-
-  .device__status svg {
-    width: calc(var(--dev-w) * 0.2);
-    height: auto;
   }
 
   /* Fades into the dark ground at both ends: the lead above, the hanging iPhone below. */
@@ -1242,89 +1109,203 @@ img {
   display: block;
 }
 
-/* The hero's phone standing on its own in a section column, not leaning on the tablet: the
-   household clip and the offline screen. Same bezel, island and status band; only the placement
-   differs. */
-.device--phone.device--solo {
+/* The iPhone: ONE frame for every phone on the page (the hero in the phone layout, the household
+   clip, the offline screen), built the way tilted-device heroes usually are and measured against
+   the real thing (2026-11-25 reviews: "plopped over the image", "slightly warped", and the old
+   section phones "very boxy, almost like Android devices"):
+   - Real proportions. The screen is the capture's own 440 x 956, with the status bar INSIDE it as
+     on a real phone (an extra band above the screenshot made it 4% too tall); a black border 3% of
+     the width a side; corners 15% of the width, which is what reads as an iPhone and not a slab.
+   - Drawn, not captured: the Dynamic Island (126 x 37pt, 11pt down) and the status bar (9:41,
+     signal, Wi-Fi, battery), since a browser screenshot starts below where they would be.
+   - Tilted on three axes at the angles Nate picked in Rotato (x -15, y -20, z -4). Rotato is y-up
+     and CSS is y-down, so x and z flip sign: --rx 15deg tips the top back, --ry -20deg turns the
+     screen to the left, --rz 4deg leans it clockwise. Same Euler order as Rotato's. A phone to the
+     LEFT of its words turns the other way (.device--turn-right).
+   - Thickness as an extrusion: solid shadows stepped toward the edges the tilt shows you, dark
+     titanium with a lit lip, as Rotato renders it. Its depth is the device's thickness x the sine
+     of each tilt (iPhone: 8.25mm on a 71.5mm width). Box-shadows follow the rounded corners,
+     which separate side faces could not (they left gaps at every corner).
+   - Lit from the upper right (the hero photo's windows): the soft shadows fall down and to the
+     left, tight, mid, and a wide one using the site's --contact-shadow; the rim catches the light.
+   - Glass: a faint reflection and a light warm tint over the screen (.device__screen::after).
+   Every length is a fraction of --dev-w, which each placement sets. */
+.device.device--iphone {
+  --rx: 15deg;
+  --ry: -20deg;
+  --rz: 4deg;
+  --bezel: calc(var(--dev-w) * 0.03);
+  --radius: calc(var(--dev-w) * 0.15);
+  --ex: calc(var(--dev-w) * 0.04);
+  --ey: calc(var(--dev-w) * 0.03);
+  /* The status bar and island are placed in the SCREEN's points: its width is 94% of the device. */
+  --pt: calc(var(--dev-w) * 0.94 / 440);
+  /* The tight and mid soft shadows' strength: full over the dark hero photo. */
+  --shade-tight: rgba(0, 0, 0, 0.5);
+  --shade-mid: rgba(0, 0, 0, 0.42);
   position: relative;
-  right: auto;
-  bottom: auto;
-  width: min(300px, 78%);
-  margin: 0 auto;
+  width: var(--dev-w);
+  padding: var(--bezel);
+  border-radius: var(--radius);
+  background: linear-gradient(150deg, #3a3732 0%, #1b1916 35%, #0e0d0b 75%, #1f1d1a 100%);
+  box-shadow:
+    /* rim light on the top and right edges */
+    inset calc(var(--dev-w) * -0.0015) calc(var(--dev-w) * 0.0015) 0 rgba(255, 244, 228, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    /* the edge band: a lit lip nearest the face, dark titanium behind it */
+    calc(var(--ex) * 0.2) calc(var(--ey) * 0.2) 0 #5e5a54,
+    calc(var(--ex) * 0.45) calc(var(--ey) * 0.45) 0 #34312d,
+    calc(var(--ex) * 0.75) calc(var(--ey) * 0.75) 0 #22201d,
+    var(--ex) var(--ey) 0 #161513,
+    /* tight, mid and wide soft shadows, all falling down and to the left */
+    calc(var(--dev-w) * -0.006) calc(var(--dev-w) * 0.012) calc(var(--dev-w) * 0.016) var(--shade-tight),
+    calc(var(--dev-w) * -0.04) calc(var(--dev-w) * 0.06) calc(var(--dev-w) * 0.1) var(--shade-mid),
+    calc(var(--dev-w) * -0.1) calc(var(--dev-w) * 0.16) calc(var(--dev-w) * 0.26) var(--contact-shadow);
 }
 
-/* No CSS status band over the clip: the band is painted into the video itself, in the colour of the
-   app's header in each frame, so it dims with the app when the PR celebration's backdrop comes up.
-   A CSS band stayed white over a dimmed screen. */
-.device--phone.device--clip .device__screen {
+/* The screen at the capture's own 440 x 956, status bar included: the bar's 62pt sits on top of
+   the screenshot's area, and the screenshot is cropped at the bottom to make room. */
+.device--iphone .device__screen {
+  position: relative;
+  aspect-ratio: 440 / 956;
+  border-radius: calc(var(--dev-w) * 0.125);
+  padding-top: calc(var(--pt) * 62);
+  background: #ffffff;
+}
+
+.device--iphone .device__screen picture {
+  display: block;
+  height: 100%;
+}
+
+.device--iphone .device__screen img,
+.device--iphone .device__screen video {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* The Dynamic Island. */
+.device--iphone .device__screen::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--pt) * 11);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--pt) * 126);
+  height: calc(var(--pt) * 37);
+  border-radius: var(--radius-full);
+  background: #0b0a09;
+}
+
+/* The status bar: the time in the left ear, signal / Wi-Fi / battery in the right. Decoration on a
+   picture of a phone (aria-hidden in the markup). */
+.device--iphone .device__status {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--pt) * 62);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(var(--dev-w) * 0.09) 0 calc(var(--dev-w) * 0.1);
+  color: #000000;
+  font: 600 calc(var(--pt) * 17) / 1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.device--iphone .device__status svg {
+  width: calc(var(--dev-w) * 0.2);
+  height: auto;
+}
+
+/* The glass: a soft reflection from the top right, and a warm tint. Decoration over a picture of a
+   screen; pointer-events none so it never catches a hit-test. */
+.device--iphone .device__screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(225deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(0deg, rgba(242, 166, 90, 0.07), rgba(242, 166, 90, 0.07));
+}
+
+/* A phone standing on its own in a section column: the household clip and the offline screen. It
+   takes its own perspective (the hero's sits on its parent), at the same 6x its width. */
+.device--iphone.device--solo {
+  --dev-w: min(300px, 66vw);
+  margin: 0 auto;
+  transform: perspective(calc(var(--dev-w) * 6)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
+}
+
+/* On the light page the hero's shadow strengths read as a grey smudge; in dark mode the page is
+   near-black and they keep their full strength, as --contact-shadow does. */
+@media (prefers-color-scheme: light) {
+  .device--iphone.device--solo {
+    --shade-tight: rgba(0, 0, 0, 0.3);
+    --shade-mid: rgba(0, 0, 0, 0.16);
+  }
+}
+
+/* Mirrored for a phone LEFT of its words, so its screen turns toward them: the edge it shows is
+   now its left one. The light (and so the soft shadows) stays where it is. */
+.device--iphone.device--turn-right {
+  --ry: 20deg;
+  --rz: -4deg;
+  --ex: calc(var(--dev-w) * -0.04);
+}
+
+/* No screen padding under the clip's status bar: its band is painted into the video itself, in
+   the colour of the app's header in each frame, so it dims with the app when the PR celebration's
+   backdrop comes up. A CSS band stayed white over a dimmed screen. The video's band is shorter
+   than the 62pt bar, and the island and the time still clear the app's logo and Go Plus. */
+.device--iphone.device--clip .device__screen {
   padding-top: 0;
 }
 
 /* The offline screen opens on the app's offline banner, not its white header, so the band the
-   island sits in takes the banner's colour. The app's banner is --color-subtle-bg, the same value as
-   this page's in both schemes, and the screenshot swaps light/dark on the same media query. */
-.device--phone.device--offline .device__screen {
+   island sits in takes the banner's colour. The app's banner is --color-subtle-bg, the same value
+   as this page's in both schemes, and the screenshot swaps light/dark on the same media query. */
+.device--iphone.device--offline .device__screen {
   background: var(--color-subtle-bg);
 }
 
-/* The phone bezel for the section columns (.device--solo). The hero's device is its own frame,
-   .hero__device, sized from the photo. (Until 2026-11 the hero was an iPad with this phone leaning
-   on it, placed from here.) */
-.device--phone {
-  position: relative;
-  border-radius: clamp(16px, 2.2vw, 26px);
-  padding: clamp(3px, 0.6vw, 7px);
-  z-index: 2;
+@media (prefers-color-scheme: dark) {
+  .device--iphone.device--offline .device__status {
+    color: #ffffff;
+  }
 }
 
-/* A status-bar band above the screenshot, in the app's own header colour, so the
-   island has somewhere to sit. Without it the island landed on top of the app's
-   logo -- a browser screenshot starts at the page content, not below a status
-   bar, so the space has to be added here. */
-.device--phone .device__screen {
-  border-radius: clamp(14px, 2vw, 23px);
-  padding-top: clamp(11px, 1.6vw, 19px);
-  background: var(--color-surface);
-}
-
-/* The dynamic island. Drawn, not captured -- a browser screenshot can't contain
-   one. Decoration on a picture of a phone, which is honest enough. */
-.device--phone::after {
-  content: '';
-  position: absolute;
-  top: clamp(6px, 0.95vw, 11px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: clamp(26px, 3.6vw, 44px);
-  height: clamp(7px, 0.9vw, 11px);
-  border-radius: var(--radius-full);
-  background: #14130f;
-  z-index: 3;
-}
-
-/* Below this width the pair no longer fits, and the phone is the one to keep: a
-   tablet screenshot scaled to 390px is unreadable, while a phone screenshot at
-   phone size is exactly what a visitor on a phone is being sold. */
-@media (max-width: 700px) {
-  .device--phone {
-    position: relative; /* keep the island anchored once it stops being absolute */
-    right: auto;
-    bottom: auto;
-    width: min(260px, 66%);
-    margin: 0 auto;
-    border-radius: 34px;
-    padding: 8px;
+/* The hero in the desktop layout: the same frame as an iPad in landscape, like the one on our gym
+   wall. iPad Air 11": the black border ~3.8% of the width a side, corners ~7.5%, 6.1mm thick on
+   a 247.6mm width; the screenshot is its whole 1180 x 820 screen, with no island or status bar. */
+@media (min-width: 901px) {
+  .hero__stage .hero__device {
+    --bezel: calc(var(--dev-w) * 0.038);
+    --radius: calc(var(--dev-w) * 0.075);
+    --ex: calc(var(--dev-w) * 0.009);
+    --ey: calc(var(--dev-w) * 0.007);
   }
 
-  .device--phone .device__screen {
-    border-radius: 27px;
-    padding-top: 20px;
+  .hero__stage .hero__device .device__screen {
+    aspect-ratio: auto;
+    border-radius: calc(var(--dev-w) * 0.035);
+    padding-top: 0;
   }
 
-  .device--phone::after {
-    top: 12px;
-    width: 58px;
-    height: 15px;
+  .hero__stage .hero__device .device__screen picture,
+  .hero__stage .hero__device .device__screen img {
+    height: auto;
+  }
+
+  .hero__stage .hero__device .device__screen::before,
+  .hero__stage .hero__device .device__status {
+    display: none;
   }
 }
 
