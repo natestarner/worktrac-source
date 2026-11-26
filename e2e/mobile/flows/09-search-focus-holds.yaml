@@ -61,9 +61,10 @@ name: Tapping the search opens the search screen
 # the screen, INCLUDING behind the keyboard (the first run of this screen passed a
 # scrollUntilVisible with the button still under it, 2026-11-26), so visibility alone proves
 # nothing here. Instead: put the keyboard away with its Search key (the screen blurs the field on
-# Enter, and on iOS hideKeyboard presses that key), scroll to "+ Add your own exercise", and TAP
-# it -- a tap on something not really on screen does not open the dialog.
-- hideKeyboard
+# Enter), scroll to "+ Add your own exercise", and TAP it -- a tap on something not really on
+# screen does not open the dialog. pressKey, never hideKeyboard: on this screen hideKeyboard's own
+# gesture landed on a result row and opened that exercise (run 45909264541).
+- pressKey: Enter
 - scrollUntilVisible:
     element: '\+ Add your own exercise'
     direction: DOWN
