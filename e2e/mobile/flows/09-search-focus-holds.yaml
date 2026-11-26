@@ -47,16 +47,35 @@ name: Tapping the search opens the search screen
     below: 'Cancel'
 - assertVisible: 'Cancel'
 # The results SCROLL, with the page, under the field (on 1.5.0 build 38/39 they could not be
-# scrolled at all in the app). The last control in the results starts below the keyboard; Maestro
-# swipes until it is visible, and fails if the page never moves. Cancel must still be there after.
+# scrolled at all in the app): one swipe with the keyboard up must move them.
+- swipe:
+    direction: UP
+    duration: 800
+- takeScreenshot: mobile-flows-out/09-results-scrolled
+- assertVisible: 'Cancel'
+- assertNotVisible: 'Arnold Press'
+# The END of the results can be reached and used. Maestro calls an element "visible" anywhere on
+# the screen, INCLUDING behind the keyboard (the first run of this screen passed a
+# scrollUntilVisible with the button still under it, 2026-11-26), so visibility alone proves
+# nothing here. Instead: put the keyboard away with its Search key (the screen blurs the field on
+# Enter, and on iOS hideKeyboard presses that key), scroll to "+ Add your own exercise", and TAP
+# it -- a tap on something not really on screen does not open the dialog.
+- hideKeyboard
 - scrollUntilVisible:
     element: '\+ Add your own exercise'
     direction: DOWN
-    # Each swipe-and-look took 9-12s on the runner (2026-11-26), and the list needs three: at 15s
-    # the flow gave up 16px from the end with the list scrolling fine.
+    # Each swipe-and-look took 9-12s on the runner (2026-11-26).
     timeout: 60000
-- takeScreenshot: mobile-flows-out/09-results-scrolled
-- assertVisible: 'Cancel'
+- takeScreenshot: mobile-flows-out/09-results-end
+- tapOn: '\+ Add your own exercise'
+- extendedWaitUntil:
+    visible: 'Add exercise'
+    timeout: 5000
+- takeScreenshot: mobile-flows-out/09-add-dialog
+- tapOn: 'Close'
+- extendedWaitUntil:
+    notVisible: 'Add exercise'
+    timeout: 5000
 # Cancel goes back to the Log page (the typed text stays: it is the person's draft, shown on the
 # search button there).
 - tapOn: 'Cancel'

@@ -673,8 +673,10 @@ opened**. Here nothing moves.
   the field and the page never move from the tap through the keyboard and typing; results scroll
   with the page and end at "+ Add your own exercise"; Back however soon; by touch; by finger drag,
   including the Add dialog opened from the screen) and Maestro flow `09-search-focus-holds.yaml`
-  (types with no tap on the field, so the focus must have held; `scrollUntilVisible` through the
-  results; app evidence `[search] screen open, field focused true`).
+  (types with no tap on the field, so the focus must have held; a swipe with the keyboard up moves
+  the results; with it put away, "+ Add your own exercise" is scrolled to and TAPPED -- Maestro
+  counts a button behind the keyboard as visible, so only a tap proves it was reached; app evidence
+  `[search] screen open, field focused true`).
 
 ## The picker is BOUNDED but never REORDERED
 
