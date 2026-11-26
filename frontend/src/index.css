@@ -784,7 +784,14 @@ button:not(.pressable):active:not(:disabled) {
    tour and every Modal (the preview sheet and "Add your own exercise" open over it). */
 .exercise-search-layer {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* The window's height in pixels (lib/visibleViewport.js), not `bottom: 0`: WKWebView sometimes
+     kept an `inset: 0` layer at its pre-keyboard height after the app's window shrank (956px in a
+     609px window), leaving the end of the list under the keyboard. Without visualViewport (jsdom)
+     nothing is published and it is the whole window. */
+  height: var(--window-height, 100%);
   z-index: var(--z-search-layer);
   display: flex;
   flex-direction: column;

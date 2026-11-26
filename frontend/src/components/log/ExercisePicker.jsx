@@ -404,7 +404,7 @@ function logSearchEvidence(layer, results) {
     // A frame later, so a fling that has already started shows in scrollTop.
     requestAnimationFrame(() =>
       console.info(
-        `[search] touch on ${t.on}: ${t.moves} moves, ${t.cancelled} cancelled, results scrollTop ${round(t.scrollTop)} -> ${round(results.scrollTop)} of ${results.scrollHeight - results.clientHeight}`,
+        `[search] touch on ${t.on}: ${t.moves} moves, ${t.cancelled} cancelled, results scrollTop ${round(t.scrollTop)} -> ${round(results.scrollTop)} of ${results.scrollHeight - results.clientHeight} (layer ${round(layer.getBoundingClientRect().height)} of window ${window.innerHeight})`,
       ),
     );
   };

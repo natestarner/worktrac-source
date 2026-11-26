@@ -92,6 +92,23 @@ describe('trackVisibleViewport', () => {
     expect(root.style.getPropertyValue('--keyboard-inset')).toBe('');
   });
 
+  // The search layer is sized with it: WKWebView left an `inset: 0` layer at its pre-keyboard
+  // height after the app's window shrank. Publishing it on the window's resize, synchronously,
+  // is what forces the layout.
+  it('publishes the window height, and republishes it the moment the window resizes', () => {
+    vi.stubGlobal('visualViewport', fakeVisualViewport({ height: 800 }));
+    stop = trackVisibleViewport();
+    expect(root.style.getPropertyValue('--window-height')).toBe('800px');
+
+    vi.stubGlobal('innerHeight', 453);
+    window.dispatchEvent(new Event('resize'));
+    expect(root.style.getPropertyValue('--window-height')).toBe('453px');
+
+    stop();
+    stop = () => {};
+    expect(root.style.getPropertyValue('--window-height')).toBe('');
+  });
+
   it('follows a pan with no resize', () => {
     const vv = fakeVisualViewport({ height: 420 });
     vi.stubGlobal('visualViewport', vv);
