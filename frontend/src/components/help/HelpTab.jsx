@@ -892,10 +892,11 @@ export default function HelpTab() {
           picking it. On History and PRs, tap an exercise and choose <T>About this exercise</T>.
         </p>
         <p>
-          When you add your own exercise you can pick its muscles too. They are grouped by body area;
-          open one and tap a muscle once to make it primary (dark red), again for secondary (lighter
-          red), and a third time to clear it. Huddle suggests a starting point from the closest exercise in
-          its library, and each body area shows what is picked in it. That part works offline. Changing them later, from <T>Customize</T>, needs a
+          When you add your own exercise you can pick its muscles too. Huddle suggests a starting
+          point from the closest exercise in its library, and the <T>Muscles worked</T> row says what
+          is set; tap it to change them. They are grouped by body area; open one and tap a muscle
+          once to make it primary (dark red), again for secondary (lighter red), and a third time to
+          clear it. Each body area shows what is picked in it. That part works offline. Changing them later, from <T>Customize</T>, needs a
           connection, and only whoever added the exercise or the account owner can. Closing that
           window saves a change you made there.
         </p>

@@ -57,7 +57,7 @@ test.describe('duplicate exercises', () => {
     // is disambiguated rather than left to collide.
     await page.getByRole('button', { name: '+ Add your own exercise' }).click();
     await page.getByPlaceholder('Exercise name').fill('Ring Hold');
-    await page.getByRole('dialog').getByRole('button', { name: 'Time', exact: true }).click();
+    await page.getByRole('dialog').getByRole('radio', { name: 'Time', exact: true }).check();
     await expect(page.getByText('You have a Ring Hold measured in Reps. This one saves as Ring Hold (Time).')).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
 
@@ -84,7 +84,7 @@ test.describe('duplicate exercises', () => {
     // exists. Creating there would produce exactly the duplicate this feature prevents.
     await page.getByRole('button', { name: '+ Add your own exercise' }).click();
     await page.getByPlaceholder('Exercise name').fill('Ring Hold');
-    await page.getByRole('dialog').getByRole('button', { name: 'Time', exact: true }).click();
+    await page.getByRole('dialog').getByRole('radio', { name: 'Time', exact: true }).check();
     await page.getByRole('dialog').getByRole('button', { name: 'Open Ring Hold (Time)', exact: true }).click();
 
     await expect(page.getByText('Ring Hold (Time)', { exact: true })).toBeVisible();

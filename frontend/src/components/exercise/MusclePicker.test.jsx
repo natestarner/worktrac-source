@@ -33,7 +33,7 @@ describe('MusclePicker', () => {
 
   it('cycles a muscle primary -> secondary -> cleared under a hint that never changes', () => {
     render(<Harness />);
-    const hint = 'Tap once for primary, twice for secondary.';
+    const hint = 'Tap once primary · twice secondary';
     expect(screen.getByText(hint)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
 

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
@@ -56,7 +56,7 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Ring Support Hold' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Time' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Time' }));
       fireEvent.click(lastAddButton());
 
       // ⚠️ The optimistic row must carry the real choice, not a hardcoded 'strength'. It is what
@@ -82,9 +82,25 @@ describe('AddEditExerciseModal', () => {
     // machine, and a wrong guess is worse than a predictable default.
     it('defaults to Weight & reps', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
-      expect(screen.getByRole('button', { name: 'Weight & reps' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByRole('button', { name: 'Bodyweight' })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByRole('button', { name: 'Time' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('radio', { name: 'Weight & reps' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Bodyweight' })).not.toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Time' })).not.toBeChecked();
+    });
+
+    // Three separate options, not one wrapped row: each choice is its own radio in one group, and
+    // says what it is for. Structure only -- whether a label FITS is a font question jsdom can't answer.
+    it('offers the three measures as separate radios, each with its examples as a description', () => {
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+      const group = screen.getByRole('radiogroup', { name: 'Measured in' });
+      const radios = within(group).getAllByRole('radio');
+      expect(radios.map((r) => r.closest('label').className)).toEqual([
+        'measure-option pressable is-selected',
+        'measure-option pressable',
+        'measure-option pressable',
+      ]);
+      expect(screen.getByRole('radio', { name: 'Weight & reps' })).toHaveAccessibleDescription('e.g. barbell, dumbbells, a machine');
+      expect(screen.getByRole('radio', { name: 'Bodyweight' })).toHaveAccessibleDescription('e.g. pull-ups, push-ups, dips');
+      expect(screen.getByRole('radio', { name: 'Time' })).toHaveAccessibleDescription('e.g. planks, wall sits, dead hangs');
     });
 
     it('creates a bodyweight exercise when Bodyweight is chosen, on the optimistic row too', async () => {
@@ -92,7 +108,7 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Ring Dip' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Bodyweight' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Bodyweight' }));
       fireEvent.click(lastAddButton());
 
       // The Log screen reads this temp row while the create is queued, offline for the whole outage.
@@ -113,7 +129,8 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(
         <AddEditExerciseModal exercise={{ id: 3, name: 'Plank' }} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />,
       );
-      expect(screen.queryByRole('group', { name: 'Measured in' })).toBeNull();
+      expect(screen.queryByRole('radiogroup', { name: 'Measured in' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Muscles worked' })).toBeNull();
     });
   });
 
@@ -305,7 +322,7 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Plank' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Time' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Time' }));
 
       // Previewed before they commit, so the name they end up with is never a surprise.
       expect(
@@ -449,21 +466,33 @@ describe('AddEditExerciseModal', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Zercher Squat' } });
-      const suggestion = await screen.findByText('Suggested from Barbell Back Squat. Open a body area to change it.');
-      // It carries an exercise name of any length, so it must wrap: the fixed hint's class is
-      // one-line-and-ellipsis, and wearing it cut this line off on every iPhone (2026-11-09).
-      expect(suggestion).toHaveClass('muscle-picker-suggestion');
-      expect(suggestion).not.toHaveClass('muscle-picker-hint');
-      // Folded away, but the Legs row already says what the suggestion picked.
+      // Folded to one row that already says what the suggestion picked, and where it came from.
+      const row = screen.getByRole('button', { name: 'Muscles worked' });
+      await waitFor(() =>
+        expect(row).toHaveAccessibleDescription('Quads and Glutes · helped by Hamstrings Suggested from Barbell Back Squat'),
+      );
+      expect(row).toHaveAttribute('aria-expanded', 'false');
+      // Nothing of the picker is drawn until it is asked for.
+      expect(screen.queryByRole('button', { name: 'Legs' })).toBeNull();
+
+      fireEvent.click(row);
+      expect(row).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByRole('button', { name: 'Legs' })).toHaveAccessibleDescription(
         'Primary: Glutes, Quads. Secondary: Hamstrings.',
       );
       fireEvent.click(screen.getByRole('button', { name: 'Legs' }));
       expect(screen.getByRole('button', { name: 'Quads: primary' })).toBeInTheDocument();
 
-      // Taking hamstrings off: secondary -> not worked. Once touched, the choice is theirs.
+      // Taking hamstrings off: secondary -> not worked. Once touched, the choice is theirs, and the
+      // row stops calling it a suggestion.
       fireEvent.click(screen.getByRole('button', { name: 'Hamstrings: secondary' }));
       expect(screen.queryByText(/Suggested from/)).toBeNull();
+      expect(row).toHaveAccessibleDescription('Glutes and Quads');
+
+      // Folding it again keeps the choice.
+      fireEvent.click(row);
+      expect(row).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByText('Glutes and Quads')).toBeInTheDocument();
       fireEvent.click(lastAddButton());
 
       expect(onSaved).toHaveBeenCalledWith(
@@ -479,11 +508,25 @@ describe('AddEditExerciseModal', () => {
     it('cycles a chip through primary, secondary and back to not worked', () => {
       renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Mystery Move' } });
+      expect(screen.getByRole('button', { name: 'Muscles worked' })).toHaveAccessibleDescription('Not set (optional)');
+      fireEvent.click(screen.getByRole('button', { name: 'Muscles worked' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: not worked' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: primary' }));
       fireEvent.click(screen.getByRole('button', { name: 'Chest: secondary' }));
       expect(screen.getByRole('button', { name: 'Chest: not worked' })).toBeInTheDocument();
+    });
+
+    it('sums up a primary and a secondary pick on the folded row', () => {
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Mystery Move' } });
+      const row = screen.getByRole('button', { name: 'Muscles worked' });
+      fireEvent.click(row);
+      fireEvent.click(screen.getByRole('button', { name: 'Chest and arms' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: not worked' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Triceps: not worked' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Triceps: primary' }));
+      expect(row).toHaveAccessibleDescription('Chest · helped by Triceps');
     });
   });
 });
