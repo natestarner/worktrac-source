@@ -171,22 +171,72 @@ test.describe('the keyboard and scrolling', () => {
     expect(Math.round((await box(search)).y)).toBe(restingTop);
   });
 
-  test("the search layer follows Safari's view when the keyboard pans it", async ({ page, request }) => {
+  // 2026-11-26, on lower: in the App Store app the results could not be scrolled at all, and in
+  // Safari the layer flickered while the page behind it moved. The layer was sized and placed from
+  // visualViewport in JS (`--visible-viewport-*`), so it chased Safari's pans a frame late, and a
+  // stale height (iOS 26 reports stale visualViewport values around the keyboard) left it taller
+  // than the app's window -- the results then fit inside it, had nothing to scroll, and ran on
+  // under the keyboard. It is now pinned to the window with `inset: 0`, which the browser keeps
+  // right on every frame. Both cases make visualViewport itself report what iOS reports, so the
+  // app's own tracker publishes it: red against the old CSS.
+  async function visualViewportReports(page: Page, report: { offsetTop: number; height: number }) {
+    await page.evaluate((r) => {
+      const vv = window.visualViewport!;
+      Object.defineProperty(vv, 'offsetTop', { configurable: true, get: () => r.offsetTop });
+      Object.defineProperty(vv, 'height', { configurable: true, get: () => r.height });
+      vv.dispatchEvent(new Event('resize'));
+    }, report);
+    // The tracker publishes on the next frame.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--visible-viewport-height')))
+      .toBe(`${report.height}px`);
+  }
+
+  test('the search layer is the window, whatever visualViewport says, and its results scroll', async ({ page, request, isMobile }) => {
     await twoPersonHousehold(page, request);
     await page.setViewportSize(PHONE);
-    await page.getByPlaceholder('Search all exercises').click();
+    const search = page.getByPlaceholder('Search all exercises');
+    await search.click();
     const layer = page.getByRole('dialog', { name: 'Exercise search' });
     await expect(layer).toBeVisible();
+    await search.pressSequentially('press');
+    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
 
-    // Safari with the keyboard up: the visible part is 250..610 of a full-height page.
-    await page.evaluate(() => {
-      const root = document.documentElement.style;
-      root.setProperty('--visible-viewport-top', '250px');
-      root.setProperty('--visible-viewport-height', '360px');
+    // The app: the window shrinks above the keyboard, but a stale value still says full height.
+    await page.setViewportSize(KEYBOARD_UP);
+    await visualViewportReports(page, { offsetTop: 0, height: PHONE.height });
+    const appBox = await box(layer);
+    expect(Math.round(appBox.y), 'the layer starts at the top of the window').toBe(0);
+    expect(Math.round(appBox.height), 'the layer ends at the bottom of the window (the keyboard)').toBe(KEYBOARD_UP.height);
+    const results = layer.locator('.exercise-search-results');
+    const overflow = await results.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(overflow.scroll, 'the results overflow their box, so a finger can scroll them').toBeGreaterThan(overflow.client);
+    // Scrolling the results moves them and not the page: a real wheel where there is one (mobile
+    // WebKit has none, e2e-tests.md), else a scroll from inside the page.
+    if (isMobile) {
+      await results.evaluate((el) => el.scrollBy(0, 300));
+    } else {
+      const r = await box(results);
+      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+      await page.mouse.wheel(0, 300);
+    }
+    await expect.poll(() => results.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Safari: a full-height window with the keyboard over its bottom, and the view panned down.
+    // The layer stays put (the pan is what it used to chase), and the end of the results can still
+    // be scrolled above the keyboard because the list pads its end by the keyboard's height.
+    await page.setViewportSize(PHONE);
+    // Visible 250..610 of an 844px window: the keyboard covers the bottom 234px.
+    await visualViewportReports(page, { offsetTop: 250, height: 360 });
+    const safariBox = await box(layer);
+    expect(Math.round(safariBox.y), 'the layer does not chase the pan').toBe(0);
+    expect(Math.round(safariBox.height)).toBe(PHONE.height);
+    await expectWithin(search, 0, 80, 'search field');
+    await results.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
     });
-    await expectWithin(layer, 250, 610, 'search layer');
-    await expectWithin(page.getByPlaceholder('Search all exercises'), 250, 310, 'search field');
-    await expectWithin(layer.getByRole('button', { name: 'Cancel' }), 250, 310, 'Cancel');
+    await expectWithin(layer.getByRole('button', { name: '+ Add your own exercise' }), 0, PHONE.height - 234, 'last control, above the keyboard');
   });
 
   test('searching changes nothing on the page, and keeps "Or pick an exercise"', async ({ page, request }) => {
@@ -223,5 +273,42 @@ test.describe('the keyboard and scrolling', () => {
     }
     await expect(page.getByText('Or pick an exercise', { exact: true })).toBeAttached();
     await expect(page.getByText('Start a routine', { exact: true })).toBeAttached();
+  });
+});
+
+// A finger, not a mouse. On a phone the layer must be up BEFORE the field takes focus: focused at
+// its place mid-page, Safari starts panning toward it and the layer then rides that pan (the
+// 2026-11-26 flicker). So a tap opens the layer, then focuses the field where it now is, and the
+// browser's own focus and click are cancelled -- including the click that would otherwise land on
+// whatever the layer now puts under the finger.
+test.describe('the search, by touch', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
+
+  test('a tap opens the layer and focuses the field at the top, with nothing clicked under the finger', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    const search = page.getByPlaceholder('Search all exercises');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // Record the order: was the layer already up when the field took focus?
+    await search.evaluate((input) => {
+      const w = window as unknown as { __layerAtFocus: boolean | null };
+      w.__layerAtFocus = null;
+      input.addEventListener('focus', () => {
+        w.__layerAtFocus = !!input.closest('.exercise-search-layer');
+      });
+    });
+
+    await search.tap();
+
+    const layer = page.getByRole('dialog', { name: 'Exercise search' });
+    await expect(layer).toBeVisible();
+    await expect(search).toBeFocused();
+    expect(await page.evaluate(() => (window as unknown as { __layerAtFocus: boolean | null }).__layerAtFocus)).toBe(true);
+    expect(Math.round((await box(search)).y), 'the field is pinned at the top of the screen').toBeLessThanOrEqual(24);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Typing works in the field the tap focused.
+    await page.keyboard.type('press');
+    await expect(search).toHaveValue('press');
+    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
   });
 });

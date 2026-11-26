@@ -74,6 +74,24 @@ describe('trackVisibleViewport', () => {
     expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('420px');
   });
 
+  // The search layer pins to the window and pads its list's end by this, instead of moving.
+  it('publishes how much of the window the keyboard covers', () => {
+    const vv = fakeVisualViewport({ height: 800 });
+    vi.stubGlobal('visualViewport', vv);
+    stop = trackVisibleViewport();
+    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('0px');
+
+    // Safari: an 800px window, 420px visible, panned 180px down -> the bottom 200px are covered.
+    vv.height = 420;
+    vv.offsetTop = 180;
+    vv.dispatchEvent(new Event('resize'));
+    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('200px');
+
+    stop();
+    stop = () => {};
+    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('');
+  });
+
   it('follows a pan with no resize', () => {
     const vv = fakeVisualViewport({ height: 420 });
     vi.stubGlobal('visualViewport', vv);

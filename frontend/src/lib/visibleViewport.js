@@ -52,6 +52,11 @@ export function trackVisibleViewport() {
     frame = 0;
     root.style.setProperty('--visible-viewport-top', `${vv.offsetTop}px`);
     root.style.setProperty('--visible-viewport-height', `${vv.height}px`);
+    // How much of the bottom of the window the keyboard covers. Safari only: in the app the window
+    // itself ends at the keyboard, so this is 0. A scroller pinned to the window pads its end by
+    // this much, so its last row can be scrolled above the keyboard without the box itself moving
+    // (the Log picker's search layer). A stale value only adds empty space at the end of a list.
+    root.style.setProperty('--keyboard-inset', `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`);
     // The keyboard opening (or closing) is a height change. A dialog that has just been squeezed
     // into what is left may now hold its focused field below its own fold, so reveal it there.
     // Fields on the page are left to the browser: Safari already reveals those itself, and in the
@@ -79,6 +84,7 @@ export function trackVisibleViewport() {
     if (frame) cancelAnimationFrame(frame);
     root.style.removeProperty('--visible-viewport-top');
     root.style.removeProperty('--visible-viewport-height');
+    root.style.removeProperty('--keyboard-inset');
   };
 }
 
@@ -89,9 +95,9 @@ export function trackVisibleViewport() {
 export function revealFocusedField({ onPage = true } = {}) {
   const el = document.activeElement;
   if (!el?.matches?.(FIELD)) return;
-  // A fixed layer sized to the visible viewport with its field pinned at the top (the Log picker's
-  // full-screen search) has nothing to reveal, and scrolling the page under it would only move the
-  // page the person comes back to.
+  // A full-screen fixed layer with its field pinned at the top (the Log picker's search) has
+  // nothing to reveal, and scrolling the page under it would only move the page the person comes
+  // back to.
   if (el.closest('[data-keyboard-layer]')) return;
   const panel = el.closest('[data-modal-panel]');
   if (panel) {

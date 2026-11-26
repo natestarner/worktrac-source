@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
@@ -18,6 +19,10 @@ import { lockBodyScroll } from '../../lib/bodyScrollLock';
 // rows sitting ABOVE the search field, so this is the number that decides whether the rest of
 // the picker starts below the fold.
 const ROUTINE_PREVIEW_COUNT = 4;
+
+// How far a finger may travel between touchstart and touchend and still be a tap on the search
+// field rather than a scroll of the page that happened to start on it.
+const TAP_SLOP_PX = 10;
 
 // The Log picker. By default it shows only this person's list -- the exercises they've
 // favorited or logged a set for -- split into two headings: "Favorites" and "Other Previously
@@ -72,11 +77,38 @@ export default function ExercisePicker({
   const [slotHeight, setSlotHeight] = useState(null);
   const slotRef = useRef(null);
   const layerRef = useRef(null);
+  const resultsRef = useRef(null);
+  const touchStartRef = useRef(null);
 
   function openSearch() {
     if (searchOpen) return;
     setSlotHeight(slotRef.current?.offsetHeight || null);
     setSearchOpen(true);
+  }
+
+  // A TAP opens the layer BEFORE the field takes focus, then focuses it where it now is, at the top.
+  // Left to the browser, iOS focuses the field at its place mid-page and Safari starts panning the
+  // page to reveal it; a frame later the field is lifted to the top of a fixed layer, and the pan
+  // carries the layer with it (the 2026-11-26 flicker). Cancelling the touchend stops the browser's
+  // own focus and click (which would otherwise land on whatever the layer now puts under the
+  // finger); the focus() here, inside the touch handler, is a user gesture, so iOS still raises
+  // the keyboard. A drag that starts on the field is a scroll of the page and is left alone; so is
+  // a touchend the browser will not let us cancel (it is ending a scroll). Mouse, keyboard and
+  // Playwright's fill() still open it through onFocus.
+  function handleTouchStart(event) {
+    const touch = event.touches[0];
+    touchStartRef.current = searchOpen || !touch ? null : { x: touch.clientX, y: touch.clientY };
+  }
+
+  function handleTouchEnd(event) {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    const touch = event.changedTouches[0];
+    if (searchOpen || !start || !touch || !event.cancelable) return;
+    if (Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TAP_SLOP_PX) return;
+    event.preventDefault();
+    flushSync(openSearch);
+    searchInputRef.current?.focus({ preventScroll: true });
   }
 
   // Cancel (and Escape): close the layer and take the keyboard down (the blur). The typed text is
@@ -95,10 +127,13 @@ export default function ExercisePicker({
   }
 
   // While the layer is up it behaves like a dialog: the page behind can't scroll, Tab stays inside
-  // it, and Escape is the keyboard's Cancel. Same two modules Modal and the tour use.
+  // it, and Escape is the keyboard's Cancel. Same two modules Modal and the tour use; the scroll
+  // lock's touch guard means a finger drag can scroll the results and nothing else -- on iOS,
+  // `overflow: hidden` alone still let a drag pan the page behind the layer.
   useEffect(() => {
     const layer = layerRef.current;
-    if (!searchOpen || !layer) return undefined;
+    const results = resultsRef.current;
+    if (!searchOpen || !layer || !results) return undefined;
     function onKeyDown(event) {
       if (event.key === 'Escape') {
         event.stopPropagation();
@@ -107,7 +142,7 @@ export default function ExercisePicker({
     }
     layer.addEventListener('keydown', onKeyDown);
     const uninstallFocusTrap = installFocusTrap(layer);
-    const unlockBodyScroll = lockBodyScroll();
+    const unlockBodyScroll = lockBodyScroll({ touchScrollOnlyIn: results });
     // One line of evidence for the simulator flow (09-search-focus-holds) and Safari's Web
     // Inspector: where the field landed and whether the layer is the visible viewport.
     const frame = requestAnimationFrame(() => {
@@ -215,9 +250,9 @@ export default function ExercisePicker({
           role={searchOpen ? 'dialog' : undefined}
           aria-modal={searchOpen || undefined}
           aria-label={searchOpen ? 'Exercise search' : undefined}
-          // lib/visibleViewport.js leaves a field in here alone: the layer is sized to the visible
-          // viewport with the field pinned at its top, so there is never anything to reveal, and a
-          // page scroll under a fixed layer would only move the page the person comes back to.
+          // lib/visibleViewport.js leaves a field in here alone: the layer fills the window with the
+          // field pinned at its top, so there is never anything to reveal, and a page scroll under
+          // a fixed layer would only move the page the person comes back to.
           data-keyboard-layer={searchOpen ? '' : undefined}
         >
           <div className={searchOpen ? 'exercise-search-bar' : undefined}>
@@ -229,6 +264,8 @@ export default function ExercisePicker({
               value={exerciseSearch}
               onChange={(e) => setExerciseSearch(e.target.value)}
               onFocus={openSearch}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
               placeholder="Search all exercises"
               enterKeyHint="search"
             />
@@ -240,7 +277,7 @@ export default function ExercisePicker({
           </div>
 
           {searchOpen && (
-            <div className="exercise-search-results">
+            <div ref={resultsRef} className="exercise-search-results">
               <div className="exercise-search-results-inner">
                 {loading ? (
                   <Skeleton width="100%" height={46} radius={16} style={sectionSpacing} />
