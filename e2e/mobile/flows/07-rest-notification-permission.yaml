@@ -45,6 +45,18 @@ name: The first rest timer asks to send notifications
 # no alert left for this flow to see), so the alert is not the check. The check is the symptom
 # from TestFlight: does Settings offer Notifications for Huddle at all? An app that never called
 # requestAuthorization has no such row.
+# A first set raises its "First Barbell Bench Press" card, and the app never asks over a
+# celebration, nor when it is dismissed (TestFlight 1.4 build 34: the alert crowded out a person's
+# very first set). Dismiss it, then log the same set again: it beats nothing, so no card, and THAT
+# rest is the one that asks.
+- tapOn:
+    text: 'Nice'
+    optional: true
+- scrollUntilVisible:
+    element: 'Log set.*'
+    direction: DOWN
+    timeout: 10000
+- tapOn: 'Log set.*'
 - tapOn:
     text: 'Allow'
     optional: true
@@ -60,14 +72,19 @@ name: The first rest timer asks to send notifications
     element: '^Apps$'
     direction: DOWN
     timeout: 20000
-- tapOn: '^Apps$'
-# Below the page title, so this never matches the "◀ Huddle" return-to-app link in the status bar.
-- scrollUntilVisible:
-    element:
-      text: '^Huddle$'
-      below: '^Apps$'
-    direction: DOWN
-    timeout: 20000
+# Retried: a tap on Apps while Settings was still settling from the scroll was dropped once
+# (run 45732972677), leaving Settings on its first page.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: '^Apps$'
+      # Below the page title, so this never matches the "◀ Huddle" return-to-app link.
+      - scrollUntilVisible:
+          element:
+            text: '^Huddle$'
+            below: '^Apps$'
+          direction: DOWN
+          timeout: 15000
 - tapOn:
     text: '^Huddle$'
     below: '^Apps$'
