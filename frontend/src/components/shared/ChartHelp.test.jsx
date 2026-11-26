@@ -104,7 +104,9 @@ describe('ChartHelp', () => {
     renderHelp();
     fireEvent.click(screen.getByRole('button', { name: 'What the test chart shows' }));
 
-    expect(screen.getByRole('dialog').parentElement).toHaveStyle({ alignItems: 'center' });
+    // A centred dialog, not a sheet. Modal centres it once and then holds that spot by anchoring it
+    // to the top at the measured offset, so the scrim reads flex-start, never a sheet's flex-end.
+    expect(screen.getByRole('dialog').parentElement).toHaveStyle({ alignItems: 'flex-start' });
   });
 
   it('offers a link to the rest of the explanation when there is more, and closes as it follows it', () => {

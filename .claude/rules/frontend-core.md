@@ -202,6 +202,16 @@ no undo.
   with the page behind locked — Add exercise and New routine could not be scrolled back
   (2026-11-08). Don't put `inset: 0` back, and don't size a new overlay that holds a text field any
   other way.
+- **A centred dialog is centred ONCE, then HELD.** Re-centring in a scrim that shrinks is what made
+  every dialog jump when the keyboard opened (TestFlight 1.4: the App Store app shrinks the whole
+  WebView, so the centre rose by half the keyboard's height), and when its own content grew (the top
+  rose by half the growth). `Modal` measures the panel's top before the first paint (`restTop`) and
+  switches the scrim to `flex-start` with that exact `padding-top`, so nothing visible changes; the
+  top then moves only when the panel no longer fits above the bottom of the visible viewport, only as
+  far as it must, never above `--safe-top`, as one `padding-top` transition. A width change (a
+  rotation) re-centres. Sheets (`align="bottom"`) are untouched. Don't go back to
+  `alignItems: center` for a dialog that is already open. Pinned by `modal-keyboard-hold.spec.ts`
+  (frame-sampled; red against the old centring) and `Modal.test.jsx`.
 
 ### The keyboard and scrolling: one mechanism (`lib/visibleViewport.js`)
 

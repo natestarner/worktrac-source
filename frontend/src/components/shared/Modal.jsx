@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import IconButton from './IconButton';
 import { IconClose } from './icons';
@@ -113,6 +113,80 @@ export default function Modal({
   }, []);
 
   const isSheet = align === 'bottom';
+
+  // ⚠️ A centred dialog is centred ONCE, when it opens, and then HELD -- never re-centred when the
+  // space around it changes. Re-centring is what made dialogs jump when the keyboard opened on
+  // iPhone and iPad: the scrim follows the visible viewport (below), so when the keyboard took the
+  // bottom of the screen (in the App Store app the whole WebView shrinks, `Keyboard.resize:
+  // "native"`) the centre moved up and the panel leapt by half the keyboard's height, under the
+  // finger that had just tapped a field (New exercise, New routine, ...). Content growing inside a
+  // centred panel (an error line, a list opening) moved its top the same way, by half the growth.
+  //
+  // So the first layout is the ordinary centred one; before it paints, the panel's top is measured
+  // (`restTop`) and the scrim switches to top-anchoring at exactly that offset -- the same pixels, so
+  // nothing visible changes. From then on the top moves only when the panel no longer fits below it
+  // (the keyboard came up over it, or it grew), only as far as it has to, never above the status
+  // bar, and as one transition rather than a jump (`heldPaddingTop`). When the keyboard goes, it
+  // eases back. A sheet (`align="bottom"`) is anchored to the bottom already and is left alone.
+  const [restTop, setRestTop] = useState(null);
+  // The panel's natural (uncapped) height: header + content + its 1px border top and bottom. The
+  // panel itself can't be measured for this, because once capped its box stops growing.
+  const [panelHeight, setPanelHeight] = useState(0);
+  // The transition goes on only after the held position has painted, so the switch from centred
+  // to held (identical pixels) is never itself animated.
+  const [holdSettled, setHoldSettled] = useState(false);
+  const headerRef = useRef(null);
+  const contentRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (isSheet || restTop !== null) return;
+    const panel = dialogRef.current;
+    if (!panel) return;
+    setPanelHeight((headerRef.current?.offsetHeight ?? 0) + (contentRef.current?.offsetHeight ?? 0) + 2);
+    // offsetTop, not getBoundingClientRect: the entrance animation's transform would skew the
+    // latter, and it is the layout box the held padding has to reproduce.
+    setRestTop(panel.offsetTop);
+  }, [isSheet, restTop]);
+
+  useEffect(() => {
+    if (isSheet) return undefined;
+    const measure = () =>
+      setPanelHeight((headerRef.current?.offsetHeight ?? 0) + (contentRef.current?.offsetHeight ?? 0) + 2);
+    let observer;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure);
+      if (headerRef.current) observer.observe(headerRef.current);
+      if (contentRef.current) observer.observe(contentRef.current);
+    }
+    let frame = requestAnimationFrame(() => setHoldSettled(true));
+    // A rotation is a new screen, not a keyboard: centre again for it. The keyboard never changes
+    // the width, so this cannot undo the hold.
+    let lastWidth = window.innerWidth;
+    const onResize = () => {
+      if (window.innerWidth === lastWidth) return;
+      lastWidth = window.innerWidth;
+      setHoldSettled(false);
+      setRestTop(null);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setHoldSettled(true));
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      observer?.disconnect();
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [isSheet]);
+
+  const holding = !isSheet && restTop !== null;
+  // Where a held panel's top sits: at rest, unless the panel would no longer fit between there and
+  // the bottom of what is visible (minus the scrim's bottom inset); then just high enough that it
+  // does; and never above the top inset, which clears the status bar in the App Store app. The
+  // scrim's height IS the visible viewport, so this follows the keyboard with no listener of its own.
+  const heldPaddingTop =
+    `max(var(--space-6), calc(var(--safe-top) + var(--space-3)), ` +
+    `min(${restTop ?? 0}px, calc(var(--visible-viewport-height, 100vh) - ${panelHeight}px - var(--space-6))))`;
+
   // One derivation, used by BOTH the header's own conditional and the content wrapper's top
   // padding below -- those two must never disagree about whether a header is on screen, or a
   // headerless modal gets the shrunken header-gap inset instead of its own.
@@ -135,10 +209,19 @@ export default function Modal({
         height: 'var(--visible-viewport-height, 100%)',
         background: 'rgba(28,27,25,0.45)',
         display: 'flex',
-        alignItems: isSheet ? 'flex-end' : 'center',
+        // Centred for the first layout only; held at that spot from then on (see `restTop` above).
+        alignItems: isSheet ? 'flex-end' : holding ? 'flex-start' : 'center',
         justifyContent: 'center',
         zIndex: 100,
-        padding: isSheet ? 0 : 'var(--space-6)',
+        // Longhands, never the `padding` shorthand: the top is the held position and changes on its
+        // own, and React mishandles a shorthand beside one of its longhands across re-renders.
+        paddingTop: isSheet ? 0 : holding ? heldPaddingTop : 'var(--space-6)',
+        paddingRight: isSheet ? 0 : 'var(--space-6)',
+        paddingBottom: isSheet ? 0 : 'var(--space-6)',
+        paddingLeft: isSheet ? 0 : 'var(--space-6)',
+        // The one movement a held dialog may make (the keyboard covering it, or it outgrowing the
+        // space), as a single glide. Reduced motion collapses it with every other transition.
+        transition: holding && holdSettled ? 'padding-top var(--dur-slow) var(--ease-out)' : undefined,
         animation: 'modalScrimIn var(--dur-base) var(--ease-out)',
       }}
     >
@@ -212,6 +295,7 @@ export default function Modal({
           // the gap lives on the plain, non-positioned wrapper below instead, which the header
           // can never paint over no matter how that rounds.
           <div
+            ref={headerRef}
             data-modal-header=""
             style={{
               position: 'sticky',
@@ -243,6 +327,7 @@ export default function Modal({
           </div>
         )}
         <div
+          ref={contentRef}
           style={{
             // Plain flow content, un-elevated, so it is immune to the stacking-context paintover
             // described above -- which is why the header->content gap is still mostly HERE rather

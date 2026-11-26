@@ -226,3 +226,34 @@ describe('Modal dismissal', () => {
     expect(screen.getByRole('dialog', { name: 'Edit routine' })).toBeInTheDocument();
   });
 });
+
+// A centred dialog is centred once and then HELD there, so the keyboard shrinking the scrim (the
+// App Store app shrinks the whole WebView) or its own content growing never re-centres it with a
+// jump. jsdom lays nothing out, so this pins the structure; modal-keyboard-hold.spec.ts measures it.
+describe('Modal holds its position once open', () => {
+  const scrimOf = () => screen.getByRole('dialog').parentElement;
+
+  it('switches a centred dialog to top-anchoring at its measured spot, before it paints', () => {
+    render(
+      <Modal title="New routine" onClose={() => {}}>
+        <input aria-label="Name" />
+      </Modal>,
+    );
+    const scrim = scrimOf();
+    expect(scrim.style.alignItems).toBe('flex-start');
+    // The held top follows the visible viewport, so the keyboard moves it only when it must.
+    expect(scrim.style.paddingTop).toContain('--visible-viewport-height');
+    expect(scrim.style.paddingTop).toContain('--safe-top');
+  });
+
+  it('leaves a bottom sheet anchored to the bottom', () => {
+    render(
+      <Modal align="bottom" title="Time" onClose={() => {}}>
+        <p>wheel</p>
+      </Modal>,
+    );
+    const scrim = scrimOf();
+    expect(scrim.style.alignItems).toBe('flex-end');
+    expect(scrim.style.transition).toBe('');
+  });
+});
