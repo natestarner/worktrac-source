@@ -124,6 +124,12 @@ test.describe('Routines', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('button', { name: 'Remove: Barbell Bench Press (1 of 3)' })).toBeVisible();
+    // Three rows outgrow the space below where the dialog opened, so Modal glides it up to fit (one
+    // padding-top transition on the scrim). Measure the handles only once that has finished, or the
+    // drag starts from where they were mid-glide.
+    await expect
+      .poll(() => dialog.evaluate((el) => el.parentElement!.getAnimations().length === 0 && el.getAnimations().length === 0))
+      .toBe(true);
 
     // Drag the first row's handle down onto the third row -- past the second row on the way,
     // which is the point: dnd-kit only commits a reorder on drop, so passing over row 2 en route

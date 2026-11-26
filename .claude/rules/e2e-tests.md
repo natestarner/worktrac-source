@@ -541,7 +541,10 @@ the re-seed that write triggers has fired before the next call types anything. *
   it settles), and on a slow runner back-to-back reads both land there. The date-picker header
   spec took that as "settled" and flaked on lower with a ~490px "jump" on its first page. Poll
   `el.getAnimations().length === 0 && getComputedStyle(el).transform === 'none'` on the dialog
-  instead (the transform check also covers an animation that hasn't started yet). To reproduce a
+  instead (the transform check also covers an animation that hasn't started yet). **Also poll the
+  scrim (`dialog.parentElement`) for `getAnimations().length === 0`**: a dialog that outgrows the
+  space below where it opened (rows added, a smaller window) glides up by a `padding-top`
+  transition, and a drag started mid-glide used stale handle positions (`routines.spec.ts`). To reproduce a
   suspected case, hold the clock with CDP `Animation.setPlaybackRate({ playbackRate: 0 })` across
   the open and release it a few hundred ms later.
 - **An in-page frame sampler must read `textContent`, never `innerText`.** `innerText` applies CSS,
