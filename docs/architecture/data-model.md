@@ -149,8 +149,10 @@ in-app how-to videos, which share the same entry point and the same library-cura
   `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first, and so did the CSV
   columns (now `Primary Muscles` / `Secondary Muscles`); they were renamed outright, with no
   fallback for the old names, because nobody had used them yet. The picker's hint is one fixed line
-  ("Tap once for primary, twice for secondary."), not a running commentary on the
-  last tap: the chips' colours already show that, and the line must not wrap at 375pt.
+  ("Tap once ● primary · twice ● secondary", the swatches being the colour key), not a running
+  commentary on the last tap: the chips' colours already show that. It must fit one line inside
+  Add exercise's card at 375pt (251px there); the longer "Tap once for primary, twice for
+  secondary." missed by 2px and wrapped (2026-11-26).
 - **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.
   Same "who may" as rename (the creator or the owner; `EDIT_OWN_SHARED_RESOURCE` + the service
   check, pinned in `MemberPermissionsTest` and verified red), but without rename's "nobody else is

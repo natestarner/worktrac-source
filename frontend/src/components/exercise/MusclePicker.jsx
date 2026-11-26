@@ -19,10 +19,13 @@ import { IconChevronDown } from '../shared/icons';
 // open is plain local state: it lives only as long as the dialog and belongs to nobody's data.
 const NEXT = { off: 'primary', primary: 'secondary', secondary: 'off' };
 const STATE_WORD = { off: 'not worked', primary: 'primary', secondary: 'secondary' };
-// One line on most phones. It carries the colour key too, so its CSS lets it wrap rather than cut
-// off the "secondary" half. Not an e2e: the app uses the system font, so a fit measured on a Linux
-// runner says nothing about an iPhone.
-export const PICKER_HINT = 'Tap once for primary, twice for secondary.';
+// The hint is also the colour key: each swatch sits beside the state it marks. Sized to one line
+// inside Add exercise's card on a 375pt iPhone, the narrowest place it is shown: 217px of 251px
+// there, measured in Chrome's system font (SF Pro runs a few percent wider). The longer
+// "Tap once for primary, twice for secondary." missed by 2px and broke onto a second line. Its CSS
+// wraps rather than cutting off the "secondary" half on a narrower phone. Not an e2e: the app uses
+// the system font, so a fit measured on a Linux runner says nothing about an iPhone.
+export const PICKER_HINT = 'Tap once primary · twice secondary';
 
 export default function MusclePicker({ value, onChange, disabled = false }) {
   const [open, setOpen] = useState(() => new Set());
@@ -58,9 +61,9 @@ export default function MusclePicker({ value, onChange, disabled = false }) {
           PICKER_HINT exactly (the swatches are empty and hidden), so it reads the same to a screen
           reader and to getByText. */}
       <p className="muscle-picker-hint">
-        Tap once for <span className="exercise-about-swatch" aria-hidden="true" />
-        primary, twice for <span className="exercise-about-swatch exercise-about-swatch--secondary" aria-hidden="true" />
-        secondary.
+        Tap once <span className="exercise-about-swatch" aria-hidden="true" />
+        primary · twice <span className="exercise-about-swatch exercise-about-swatch--secondary" aria-hidden="true" />
+        secondary
       </p>
       <div className="muscle-picker-groups" role="group" aria-label="Muscles worked">
         {MUSCLE_GROUPS.map((group, i) => {
