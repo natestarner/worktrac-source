@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
@@ -11,6 +11,8 @@ import { searchExercises } from '../../utils/exerciseSearch';
 import { useChipRowOverflow } from '../../hooks/useChipRowOverflow';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
+import { installFocusTrap } from '../../lib/focusTrap';
+import { lockBodyScroll } from '../../lib/bodyScrollLock';
 
 // How many routines the quick-start block offers before it collapses. Routines are full-width
 // rows sitting ABOVE the search field, so this is the number that decides whether the rest of
@@ -55,34 +57,77 @@ export default function ExercisePicker({
   // The search result being previewed ("Preview exercise": its muscles and video, before choosing
   // it). Local for the same reason as the two above: a person switch remounts this component.
   const [preview, setPreview] = useState(null);
-  // Set on the first tap into the search and kept for the visit: from then on the space below the
-  // field is held a screen tall (`.picker-search-body`), so the focus scroll below can actually
-  // bring the field to the top. Held only while `searching`, a bare tap on a short page had no room
-  // to scroll into, the browser clamped, and the field stayed low (TestFlight, 2026-11-25). Never
-  // reset on blur: dropping the space again would shorten the page under the person, which is the
-  // jump the warning below exists to prevent.
-  const [searchEngaged, setSearchEngaged] = useState(false);
   const term = exerciseSearch.trim().toLowerCase();
   const searching = term.length > 0;
+  // The full-screen search layer (`.exercise-search-layer`, like iOS Mail's and Music's search).
+  // Tapping the field opens it: the field is pinned at the top of what is visible, results scroll
+  // beneath it inside the layer, and Cancel closes it. Nothing about the PAGE scrolls or changes
+  // size, so there is nothing for the keyboard's resize to clamp or race (#626: builds 34-36 each
+  // patched a scroll-the-page-to-the-field approach, and on the simulator the page still refused to
+  // move about half the time). Opened only by a tap (focus), never by itself: a search restored by
+  // a person switch or a reload sits in the field, and one tap brings its results back.
+  const [searchOpen, setSearchOpen] = useState(false);
+  // The height the field occupied in the page, held while it is lifted out into the layer, so
+  // nothing below it moves up behind the layer (and nothing jumps when it comes back down).
+  const [slotHeight, setSlotHeight] = useState(null);
+  const slotRef = useRef(null);
+  const layerRef = useRef(null);
 
-  // On mobile, the keyboard covers roughly the bottom half of the screen -- scrolling the input
-  // to the top of the viewport on focus keeps it visible above the keyboard and leaves the most
-  // possible room below it for search results. `.exercise-search-input`'s scroll-margin-top is
-  // what keeps that landing spot clear of the sticky .app-chrome above it (see index.css).
-  const scrollSearchIntoView = useCallback(() => {
-    // jsdom (unit tests) doesn't implement scrollIntoView -- guard rather than skip this
-    // entirely so real browsers still get it.
-    searchInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  function openSearch() {
+    if (searchOpen) return;
+    setSlotHeight(slotRef.current?.offsetHeight || null);
+    setSearchOpen(true);
+  }
+
+  // Cancel (and Escape): close the layer and take the keyboard down (the blur). The typed text is
+  // KEPT, unlike iOS's own Cancel: it is this person's draft (AppStateContext, per person), which
+  // must survive a person switch (frontend-core.md), and the person bar is under the layer -- so a
+  // Cancel that cleared it would make that impossible. Tapping the field again brings the results
+  // back; clearing is deleting the text.
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    searchInputRef.current?.blur();
   }, []);
 
-  // ⚠️ Nothing ABOVE the field may change when a search starts or ends. The routine quick-start
-  // block and "Or pick an exercise" used to be hidden while searching, which moved the field
-  // up under the person's thumb on the first letter typed: the page shortened, the browser
-  // clamped the scroll to the new end (showing the bottom of the list), and a re-scroll effect
-  // then smooth-scrolled back up to the field -- a visible jump down and back on every first
-  // letter (2026-11-08). With the block left in place the field never moves, so there is nothing
-  // to correct. What changes on a search is all BELOW the field; `.picker-search-body` keeps
-  // that part tall enough that a short result list can't shorten the page under the field either.
+  function selectFromSearch(exerciseId) {
+    setSearchOpen(false);
+    onSelectExercise(exerciseId);
+  }
+
+  // While the layer is up it behaves like a dialog: the page behind can't scroll, Tab stays inside
+  // it, and Escape is the keyboard's Cancel. Same two modules Modal and the tour use.
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!searchOpen || !layer) return undefined;
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeSearch();
+      }
+    }
+    layer.addEventListener('keydown', onKeyDown);
+    const uninstallFocusTrap = installFocusTrap(layer);
+    const unlockBodyScroll = lockBodyScroll();
+    // One line of evidence for the simulator flow (09-search-focus-holds) and Safari's Web
+    // Inspector: where the field landed and whether the layer is the visible viewport.
+    const frame = requestAnimationFrame(() => {
+      const field = searchInputRef.current?.getBoundingClientRect();
+      console.info(
+        `[keyboard] search layer open (field top ${Math.round(field?.top ?? -1)}, layer ${Math.round(layer.getBoundingClientRect().height)} of window ${window.innerHeight})`,
+      );
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      layer.removeEventListener('keydown', onKeyDown);
+      uninstallFocusTrap();
+      unlockBodyScroll();
+    };
+  }, [searchOpen, closeSearch]);
+
+  // ⚠️ Nothing on the PAGE changes when a search starts or ends. The routine quick-start block and
+  // "Or pick an exercise" used to be hidden while searching, which moved the field up under the
+  // person's thumb on the first letter typed (2026-11-08). Results now live in the layer, so the
+  // page under it is exactly what it was before the tap, and is still there when Cancel closes it.
 
   // Default view: favorites first, then everything else the person has logged.
   const favorites = personExercises.filter((e) => e.isFavorite);
@@ -113,6 +158,9 @@ export default function ExercisePicker({
 
   return (
     <div>
+      {/* Above the field: covered by the layer while it is open, so hidden the same way as the
+          page below it. */}
+      <div aria-hidden={searchOpen || undefined} inert={searchOpen || undefined}>
       {showRoutineQuickStart && (
         <div style={sectionSpacing}>
           <SectionLabel style={sectionLabelSpacing}>Start a routine</SectionLabel>
@@ -153,33 +201,77 @@ export default function ExercisePicker({
       )}
 
       {showRoutineQuickStart && <SectionLabel style={sectionLabelSpacing}>Or pick an exercise</SectionLabel>}
+      </div>
 
-      {/* The app's most-used input, and it was the only one not going through the primitive: a
-          hand-rolled copy of the same recipe that had drifted to a 14px radius and 14px/16px
-          padding against `.input`'s --radius-md and --space-3/--space-4. The iOS 16px floor that
-          used to be commented here is `.input`'s --text-md, where two e2e specs already assert it
-          -- so it is now enforced rather than remembered. */}
-      <Input
-        ref={searchInputRef}
-        data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
-        className="exercise-search-input"
-        // Where the app's keyboard reveal (lib/visibleViewport.js) sends this field if it must
-        // move it: the same top-of-screen spot the focus scroll below aims for, never the centre.
-        data-reveal="start"
-        value={exerciseSearch}
-        onChange={(e) => setExerciseSearch(e.target.value)}
-        onFocus={() => {
-          setSearchEngaged(true);
-          // A frame later, once the space below the field (granted just above) is laid out.
-          // Scrolled now, a page only a screen tall has nowhere to go: the scroll clamps at 0 and
-          // the field stays where it was.
-          requestAnimationFrame(scrollSearchIntoView);
-        }}
-        placeholder="Search all exercises"
-        style={sectionSpacing}
-      />
+      {/* The field's place in the page. While the layer is open the field is lifted out of it (the
+          same <input>, so focus and the keyboard stay put) and this holds its height. */}
+      <div ref={slotRef} style={{ ...sectionSpacing, minHeight: searchOpen && slotHeight ? slotHeight : undefined }}>
+        <div
+          ref={layerRef}
+          className={searchOpen ? 'exercise-search-layer' : undefined}
+          // The layer is a dialog while it is open; closed, this is a plain wrapper. The ELEMENT
+          // never changes, only its attributes, so React keeps the same <input> below and the focus
+          // the tap gave it.
+          role={searchOpen ? 'dialog' : undefined}
+          aria-modal={searchOpen || undefined}
+          aria-label={searchOpen ? 'Exercise search' : undefined}
+          // lib/visibleViewport.js leaves a field in here alone: the layer is sized to the visible
+          // viewport with the field pinned at its top, so there is never anything to reveal, and a
+          // page scroll under a fixed layer would only move the page the person comes back to.
+          data-keyboard-layer={searchOpen ? '' : undefined}
+        >
+          <div className={searchOpen ? 'exercise-search-bar' : undefined}>
+            {/* The app's most-used input, through the primitive (`.input` holds the iOS 16px floor
+                that keeps Safari from zooming on focus; two e2e specs assert it). */}
+            <Input
+              ref={searchInputRef}
+              data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              onFocus={openSearch}
+              placeholder="Search all exercises"
+              enterKeyHint="search"
+            />
+            {searchOpen && (
+              <Button variant="ghost" onClick={closeSearch} className="exercise-search-cancel">
+                Cancel
+              </Button>
+            )}
+          </div>
 
-      <div className={searching || searchEngaged ? 'picker-search-body' : undefined}>
+          {searchOpen && (
+            <div className="exercise-search-results">
+              <div className="exercise-search-results-inner">
+                {loading ? (
+                  <Skeleton width="100%" height={46} radius={16} style={sectionSpacing} />
+                ) : searching ? (
+                  <div style={sectionSpacing}>
+                    <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
+                    <ExerciseSearchResults
+                      results={searchResults}
+                      term={exerciseSearch}
+                      onSelect={selectFromSearch}
+                      onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
+                      emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
+                    />
+                  </div>
+                ) : (
+                  <p className="exercise-search-hint">Search by name, another name for it, or a muscle it works.</p>
+                )}
+                {!loading && (
+                  <Button onClick={() => onAddExercise(exerciseSearch)} fullWidth>
+                    + Add your own exercise
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* The page below the field. Hidden from assistive tech (and from taps, via inert) while the
+          layer covers it, so the layer's "+ Add your own exercise" is the only one there is. */}
+      <div aria-hidden={searchOpen || undefined} inert={searchOpen || undefined}>
         {loading && (
           <>
             <Skeleton width={84} height={12} style={sectionLabelSpacing} />
@@ -191,25 +283,11 @@ export default function ExercisePicker({
           </>
         )}
 
-        {/* Search results across the whole catalog */}
-        {!loading && searching && (
-          <div style={sectionSpacing}>
-            <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
-            <ExerciseSearchResults
-              results={searchResults}
-              term={exerciseSearch}
-              onSelect={onSelectExercise}
-              onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
-              emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
-            />
-          </div>
-        )}
-
-        {/* Default view: Favorites + Previously Logged */}
-        {!loading && !searching && (
-          !hasList ? (
-            // The first screen a brand-new person ever sees, and it was the barest empty state in the
-            // app: centred grey text, no icon, no hierarchy. No action button here on purpose -- the
+        {/* Default view: Favorites + Previously Logged. Searching never replaces it: results are
+            in the layer, so this is what is here when Cancel closes it. */}
+        {!loading &&
+          (!hasList ? (
+            // The first screen a brand-new person ever sees. No action button here on purpose -- the
             // search field is directly above and "+ Add your own exercise" directly below, so a third
             // control would just be a duplicate of one of them.
             <EmptyState
@@ -227,12 +305,9 @@ export default function ExercisePicker({
                 onSelectExercise={onSelectExercise}
               />
             ))
-          )
-        )}
+          ))}
 
-        {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. It
-            was a hand-rolled grey fill at off-scale 14px/700 -- the one full-width action in the app
-            still drawn that way once those moved to the primitive. */}
+        {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. */}
         {!loading && (
           <Button onClick={() => onAddExercise(exerciseSearch)} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
             + Add your own exercise

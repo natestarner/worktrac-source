@@ -20,20 +20,30 @@ const personBar = (page: Page) => page.locator('.person-pill-bar');
 const tabs = (page: Page) => page.locator('.tabs-nav-bar');
 
 // A newly-registered person's Log tab is a nearly-empty picker -- roughly half a screen, with
-// nothing to scroll, which would make every assertion below pass vacuously. Searching the seeded
-// catalog fills the page with real app content (the picker renders results in normal flow, with
-// no inner scroller of its own). Must be re-run per person: the search term is per-person state,
-// so a newly-added person starts back at the empty picker.
-async function fillPageWithCatalogResults(page: Page) {
-  await page.getByPlaceholder('Search all exercises').fill('press');
+// nothing to scroll, which would make every assertion below pass vacuously. It used to be filled
+// with search results, until search moved into a full-screen layer (#626) and stopped lengthening
+// the page. The Help handbook is long on any screen and sits under the same chrome. Its height
+// keeps settling after the first paint, so wait for it to hold still before scrolling.
+async function openLongTab(page: Page) {
+  if (!/\/app\/help/.test(page.url())) {
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'Help' }).click();
+    await expect(page).toHaveURL(/\/app\/help/);
+  }
   await expect
-    .poll(() => page.evaluate(() => document.body.scrollHeight - window.innerHeight))
-    .toBeGreaterThan(200);
+    .poll(() =>
+      page.evaluate(async () => {
+        const before = document.documentElement.scrollHeight;
+        await new Promise((r) => setTimeout(r, 300));
+        const after = document.documentElement.scrollHeight;
+        return before === after && after - window.innerHeight > 200;
+      }),
+    )
+    .toBe(true);
 }
 
-// Re-issues the scroll on every poll rather than checking once: focusing the picker's search box
-// kicks off a smooth `scrollIntoView` (see ExercisePicker.jsx), and a one-shot scrollTo can be
-// overtaken by it mid-animation.
+// Re-issues the scroll on every poll rather than checking once: a page still laying out can leave a
+// one-shot scrollTo short of the end.
 async function scrollToBottom(page: Page) {
   await expect
     .poll(
@@ -76,7 +86,7 @@ async function addPerson(page: Page, name: string) {
 test.describe('Sticky chrome by household size', () => {
   test('one person: the tab bar sticks, the logo and the person bar scroll away', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
-    await fillPageWithCatalogResults(page);
+    await openLongTab(page);
 
     await scrollToBottom(page);
 
@@ -92,7 +102,7 @@ test.describe('Sticky chrome by household size', () => {
   }) => {
     await registerHousehold(page, request, 'Alex');
     await addPerson(page, 'Sam');
-    await fillPageWithCatalogResults(page);
+    await openLongTab(page);
 
     await scrollToBottom(page);
 
@@ -129,13 +139,16 @@ test.describe('Sticky chrome by household size', () => {
   // leave the household looking at a switcher that scrolls away the moment they need it.
   test('adding a second person promotes the person bar to sticky without a reload', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
-    await fillPageWithCatalogResults(page);
+    await openLongTab(page);
     await scrollToBottom(page);
     await assertScrolledOffTop(personBar(page), 'the person bar while solo');
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await addPerson(page, 'Sam');
-    await fillPageWithCatalogResults(page);
+    // Adding Sam switches to Sam, on Sam's own last tab (Log for a new person) -- a beat later.
+    // Wait for that, or the long tab is "already open" when checked and gone a moment after.
+    await expect(page).toHaveURL(/\/app\/log/);
+    await openLongTab(page);
 
     await scrollToBottom(page);
 

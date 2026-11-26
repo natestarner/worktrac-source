@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, closeSearch } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -292,6 +292,8 @@ test.describe('Multi-person switching', () => {
 
     await personPill(page, 'Alex').click();
     await page.getByPlaceholder('Search all exercises').fill('bench');
+    // The search layer covers the person bar; its Cancel keeps what was typed.
+    await closeSearch(page);
 
     // Sam's search box starts empty, unaffected by Alex's search.
     await personPill(page, 'Sam').click();
