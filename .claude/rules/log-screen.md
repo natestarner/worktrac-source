@@ -604,86 +604,77 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
-## Search is a full-screen layer; the page under it never moves (#626)
+## Search is its own SCREEN, opened by a tap that focuses its field (2026-11-26)
 
-Tapping "Search all exercises" lifts the field into `.exercise-search-layer` (`ExercisePicker.jsx`,
-index.css), like iOS Mail's and Music's search: the field pinned at the top under the safe area,
-Cancel beside it, results scrolling beneath it inside the layer. **Nothing asks the page to
-scroll.** It replaced four builds (33-36, #621/#624/#627) of scrolling the PAGE to put the field at
-the top, which the App Store app's keyboard kept defeating: `Keyboard.resize: "native"` shrinks the
-WebView (and `100vh`) as it opens, so the scroll clamped or was dropped about half the time.
-Don't bring back a focus scroll, a space-holding `min-height`, or a reveal that aims the search
-somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-reveal="start"`,
-`jumpAndSettle`'s `arrived`) was deleted with it.
+On the Log page the search "field" is a **button** drawn as the field (`ExercisePicker`'s
+`SearchTrigger`, `.input.search-trigger`, named "Search all exercises", showing the typed draft or
+the placeholder). Tapping it switches the Log tab to `ExerciseSearchScreen`: the field at the top
+with Cancel beside it, and the results below in **normal document flow, scrolled by the page**.
+**Read `docs/architecture/exercise-search-history.md` before changing any of this.** Three designs
+before this one (scroll the page to the field; a full-screen fixed layer, with four rounds of fixes)
+broke on the iPhone keyboard, all because the field the person tapped **moved while the keyboard
+opened**. Here nothing moves.
 
-- **The SAME `<input>` moves into the layer.** The wrapper element only changes class and
-  attributes (`role="dialog"` while open), so React keeps the input, and with it the focus and the
-  keyboard. Playwright's `getByPlaceholder('Search all exercises').fill(...)` works unchanged
-  because of it (fill focuses, and `onFocus` opens the layer).
-- **A finger TAP opens the layer BEFORE the field takes focus** (`handleTouchEnd`): it cancels the
-  touchend, `flushSync`s the layer open, then calls `focus({ preventScroll: true })` on the field,
-  now at the top. Left to the browser, iOS focuses the field at its place mid-page, Safari starts
-  panning toward it, and the lifted layer rides that pan (the 2026-11-26 flicker). Cancelling the
-  touchend also stops the synthetic click landing on whatever the layer puts under the finger;
-  the `focus()` inside the touch handler is a user gesture, so iOS still raises the keyboard. A
-  drag that starts on the field (moved > `TAP_SLOP_PX`, or a non-cancelable touchend) is a page
-  scroll and is left alone. Mouse, keyboard and Playwright still open it through `onFocus`.
-- **The slot holds the field's height while it is lifted out**, and everything else on the page
-  (routine block, "Or pick an exercise", chips, the page's "+ Add your own exercise") stays
-  rendered, `aria-hidden` + `inert`. So the page is exactly what it was when Cancel closes the
-  layer, and the layer's own "+ Add your own exercise" is the only one a test or a screen reader
-  finds. Searching never hides or replaces anything on the page (the 2026-11-08 first-letter jump
-  came from hiding the routine block above the field).
-- **Sized to the WINDOW in pixels: `top: 0; height: var(--window-height)`** (window.innerHeight,
-  published by `trackVisibleViewport` at once on every window resize). Two shapes were tried and
-  each broke (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`):
-  - *From visualViewport* (`--visible-viewport-top` / `-height`, like Modal's scrim): in Safari it
-    chased every pan a frame late -- the flicker.
-  - *`inset: 0`*: after the App Store app's window shrank above the keyboard, WKWebView sometimes
-    kept the layer at its pre-keyboard height (956px in a 609px window, from the `[search]` lines on
-    the simulator) while `window.innerHeight` was right. The end of the list sat under the keyboard,
-    and a short list had nothing to scroll -- "it scrolls for some searches and not others".
-  A changed pixel value is a style change, which forces the layout. In Safari the window does not
-  shrink, so the results pad their end by `--keyboard-inset` **only while the field has focus**
-  (`:has(input:focus)`; iOS blurs it when the keyboard goes) -- applied always, a leftover value let
-  Brave scroll well past "+ Add your own exercise". Don't "unify" this with Modal's scrim: a
-  dialog's field can be anywhere in it, this one is always at the top. `--z-search-layer` (30): over
-  the chrome and the SessionBar, under toasts, the PR celebration, the tour and every Modal (the
-  preview sheet and Add exercise open over it).
-- **While it is open, a finger drag can scroll only a scrollable box, never the page.**
-  `lockBodyScroll({ guardTouch: true })` cancels a touchmove whose target has no `auto`/`scroll`
-  box with something to scroll between it and the body (the search bar, a short list).
-  `overflow: hidden` on the body does not stop iOS: with the keyboard up a drag still panned the
-  page behind the layer. ⚠️ **ANY scrollable box, never one named element**: the first guard allowed
-  drags only in the results, and "+ Add your own exercise" opens its dialog OVER the still-open
-  layer, so that dialog could not be scrolled at all, on the web or in the app.
-  `overscroll-behavior: contain` stops the fling at the list's ends. No
-  `-webkit-overflow-scrolling` (a no-op since iOS 13 that only carries old WebKit bugs).
-- **`[search]` lines are the app's evidence** (`logSearchEvidence`): geometry (window, visible
-  part, layer, results' scroll size) on every resize, and per touch the moves, how many were
-  cancelled, the scroll before/after and the layer against the window. Read them from flow 09's
-  `console-09-*.log` before theorising about the app; two theories here were wrong until they did.
-- **`lib/visibleViewport.js` never reveals a field inside `[data-keyboard-layer]`.** The field is
-  pinned at the top by construction; a page reveal would only scroll the page behind the layer.
-- **Cancel and Escape close it and KEEP the typed text** (unlike iOS's own Cancel); choosing a
-  result closes it. The text is the person's draft, which must survive a person switch
-  (`frontend-core.md`), and the person bar is under the layer, so a clearing Cancel would make that
-  impossible. It opens **only on a tap** (focus), never by itself: a restored search waits in the
-  field and one tap brings its results back. Focus trap and body scroll lock are the shared
-  `lib/focusTrap.js` / `lib/bodyScrollLock.js`.
-- **It covers the tab bar, person bar and header**, so a spec that types a search and then goes
-  anywhere else closes it first: `support/exercises.ts`'s `closeSearch` (Cancel) or `clearSearch`
-  (empty it, then Cancel). Specs used to clear with a bare `fill('')`, which now leaves the layer up.
-- The dialog is named "Exercise search", never "Search all exercises": Maestro matches labels, and
-  `tapOn: 'Search all exercises'` would otherwise tap the middle of the whole layer.
-- Pinned by `ExercisePicker.test.jsx` (tap order, the touch guard incl. a dialog over the layer),
-  `visibleViewport.test.js` (`--window-height`, `--keyboard-inset`), `e2e/tests/keyboard-scroll.spec.ts`
-  (frame-sampled: the page's `scrollY` and the field never move; "whatever visualViewport says"
-  fails the visualViewport sizing; "by touch" fails when the field takes focus before the layer is
-  up; "by finger drag" sends real touch drags through CDP and fails the results-only guard on the
-  Add exercise dialog -- all red-first) and Maestro flow `09-search-focus-holds.yaml`, which
-  `scrollUntilVisible`s through the results (it passed through the first 2026-11-26 bug because it
-  never scrolled them; its 60s timeout is for a runner that takes 9-12s per swipe).
+- **The ORDER inside the tap is the whole design** (`LogTab#openSearch`, a click handler):
+  1. `flushSync` the screen open (UIContext `exerciseSearchOpen`), with the chrome hidden in the
+     same render, so the field is at the top;
+  2. `window.scrollTo(0, 0)`;
+  3. `focus({ preventScroll: true })` the screen's field. Inside a click handler that is a user
+     gesture, so iOS raises the keyboard, and the field is already where it stays.
+  Only then is the route pushed. **A click, never a touch handler:** `click` is the tap's last
+  event, so no synthetic "ghost" click follows it onto the new screen. The layer's touchend handler
+  had exactly that: WKWebView's ghost mousedown took the focus back (TestFlight 1.5.0 build 40).
+- **The trigger is not an `<input>`.** A real field mid-page takes the focus (and starts the keyboard
+  and Safari's scroll toward it) where it is, and then has to move -- the failure every earlier design
+  shared. Its accessible name stays "Search all exercises" whatever it shows, so tests, Maestro and
+  the tour find it the same way with or without a draft.
+- **`exerciseSearchOpen` lives in UIContext, not LogTab**, because `AppShell` hides the chrome off
+  it (`.app-shell--searching`: header, person bar, tab bar, SessionBar, plus the SessionBar's
+  reserved bottom padding). Hiding is by CSS class, never by unmounting or wrapping: the chrome keeps
+  its state, and a wrapper would become the sticky tab bar's containing block. Not per person (the
+  person bar is hidden while it is open); not persisted (only a tap can raise the keyboard).
+- **The route `/app/log/search` (`searchRoute.js`) FOLLOWS the state, only for Back.** React Router
+  v7 renders navigation as a transition, so the tap cannot wait for it. Both routes render the same
+  `LogTab`, so switching between them does not remount it (`LogTab.test.jsx` would lose its open
+  state if it did). Closing paths:
+  - **Cancel / Escape** = `navigate(-1)` when the entry was pushed (`searchEntryPushedRef`), else
+    close directly. Back's handling below then closes it, and the Log page comes back **where it
+    was** (`pageScrollRef`, restored in a layout effect). The typed text is **kept** (the person's
+    draft, AppStateContext).
+  - **Browser Back** closes it two ways, both needed: the route leaving the search path (works in
+    `MemoryRouter`), and a **`popstate` listener** while open. A Back pressed before the search route
+    has rendered never "leaves" anything, so only popstate sees it -- red in WebKit e2e without it.
+  - **Choosing an exercise** (a result, or one created or opened from "+ Add your own exercise")
+    leaves for it, **replacing** the search entry, so Back from the exercise does not reopen search.
+  - **Arriving on the search route closed** (a reload, a restored `lastTab`, a deep link) goes to
+    `/app/log`. `AppShell` also records the search route as `/app/log` in `lastTab`.
+- **The Log page stays MOUNTED, hidden (`hidden` attribute), while the screen is up.** Expanded
+  lists stay expanded, and the past-session frame keeps its tree position (below). The Add exercise
+  dialog renders outside it, so "+ Add your own exercise" on the screen opens it over the screen.
+- **Nothing on the screen is fixed, sized from JS, scroll-locked or moved.** The bar is
+  `position: sticky` in flow at `top: var(--safe-top)`; the results are ordinary content. In the app
+  the window shrinking above the keyboard just shortens the page. **Don't add a scroll lock, a touch
+  guard, keyboard padding or a visualViewport-sized box here** -- each was a fix for the layer, each
+  produced its own bug, and the history doc lists them.
+- Enter (the keyboard's Search key) blurs the field so every result can be seen; scrolling does not
+  (the person may still be typing).
+- Searching never hides or replaces anything on the Log page (the 2026-11-08 first-letter jump came
+  from hiding the routine block above the field). The page is exactly what it was when Cancel
+  brings it back.
+- The screen is a region named "Exercise search", never "Search all exercises": Maestro matches
+  labels, and `tapOn: 'Search all exercises'` must find the Log page's button.
+- **e2e: use `support/exercises.ts`'s `searchTrigger` / `searchFor` / `searchField` / `searchScreen` /
+  `closeSearch` / `clearSearch`**, never a bare `getByPlaceholder('Search all exercises').fill()` on
+  the Log page -- there is no such field until the screen is open. (The routine dialog's search is a
+  real input with the same placeholder; scope it to that dialog.)
+- Pinned by `ExercisePicker.test.jsx` (the trigger), `ExerciseSearchScreen.test.jsx`,
+  `LogTab.test.jsx`'s "exercise search screen" block (the order inside the tap, Cancel, Back, the
+  closed-route redirect, Add over the screen), `e2e/tests/keyboard-scroll.spec.ts` (frame-sampled:
+  the field and the page never move from the tap through the keyboard and typing; results scroll
+  with the page and end at "+ Add your own exercise"; Back however soon; by touch; by finger drag,
+  including the Add dialog opened from the screen) and Maestro flow `09-search-focus-holds.yaml`
+  (types with no tap on the field, so the focus must have held; `scrollUntilVisible` through the
+  results; app evidence `[search] screen open, field focused true`).
 
 ## The picker is BOUNDED but never REORDERED
 

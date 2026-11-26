@@ -114,6 +114,9 @@ export default function LogTab() {
   // Set once the route has reached the search path after an open: from then on, leaving that path
   // (Back) is what closes the screen.
   const searchRouteReachedRef = useRef(false);
+  // Set when openSearch pushed the search entry onto the history: Cancel then pops it. Not the same
+  // as "reached": the push happens at once, the route renders later (a transition).
+  const searchEntryPushedRef = useRef(false);
 
   // The tap. Everything that matters happens synchronously, inside the click, in this order:
   //   1. the screen renders (flushSync) -- with the chrome hidden, so the field is at the top;
@@ -128,8 +131,12 @@ export default function LogTab() {
     flushSync(() => setExerciseSearchOpen(true));
     window.scrollTo(0, 0);
     searchFieldRef.current?.focus({ preventScroll: true });
+    // One line of evidence for Maestro flow 09 and Safari's Web Inspector: the field must have the
+    // focus at the end of the tap, or iOS raises no keyboard.
+    console.info(`[search] screen open, field focused ${document.activeElement === searchFieldRef.current}`);
     searchRouteReachedRef.current = false;
     navigate(EXERCISE_SEARCH_PATH);
+    searchEntryPushedRef.current = true;
   }
 
   // Close without navigating (the route is handled by the caller). `restoreScroll`: put the Log
@@ -137,23 +144,27 @@ export default function LogTab() {
   function closeSearch({ restoreScroll }) {
     restoreScrollRef.current = restoreScroll;
     searchRouteReachedRef.current = false;
+    searchEntryPushedRef.current = false;
     setExerciseSearchOpen(false);
   }
 
-  // Cancel (and Escape) = Back: the search entry is popped, and the effect below closes the screen.
-  // Before the route has caught up there is nothing to pop yet, so it closes directly. The typed
-  // text is KEPT -- it is this person's draft (AppStateContext, per person).
+  // Cancel (and Escape) = Back: the search entry is popped, and Back's own handling (below) closes
+  // the screen. With no entry pushed there is nothing to pop, so it closes directly. The typed text
+  // is KEPT -- it is this person's draft (AppStateContext, per person).
   function cancelSearch() {
     searchFieldRef.current?.blur();
-    if (searchRouteReachedRef.current) navigate(-1);
+    if (searchEntryPushedRef.current) navigate(-1);
     else closeSearch({ restoreScroll: true });
   }
 
   // Choosing an exercise (or creating one) leaves the search for that exercise's screen. The search
   // entry is REPLACED by the Log route, so Back from the exercise does not reopen the search.
   function leaveSearchForExercise() {
+    // Read before closeSearch clears it: the entry exists from the push, whether or not the route
+    // has rendered yet.
+    const onSearchEntry = searchEntryPushedRef.current || onSearchRoute;
     closeSearch({ restoreScroll: false });
-    if (onSearchRoute) navigate(LOG_PATH, { replace: true });
+    if (onSearchEntry) navigate(LOG_PATH, { replace: true });
   }
 
   // The route following the state, both ways:
@@ -170,6 +181,21 @@ export default function LogTab() {
     if (searchOpen && searchRouteReachedRef.current) closeSearch({ restoreScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only the route's moves matter here
   }, [onSearchRoute]);
+
+  // Back in a browser, straight from the history. The route above can miss it: React Router renders
+  // a navigation as a transition, so a Back pressed before the search route has rendered leaves the
+  // route at /app/log throughout -- it never "left" anything, and the screen stayed up with the URL
+  // already back on the Log page (WebKit e2e, 2026-11-26). popstate fires for every Back, whatever
+  // has rendered. (MemoryRouter has no popstate; the route effect covers it there.)
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    function onPopState() {
+      if (window.location.pathname !== EXERCISE_SEARCH_PATH) closeSearch({ restoreScroll: true });
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeSearch only touches refs and a setter
+  }, [searchOpen]);
 
   // An exercise selected while the screen is up -- a result, or one created or opened from
   // "+ Add your own exercise" -- leaves it.

@@ -5,23 +5,46 @@ import { Page, expect } from '@playwright/test';
 // means searching the catalog, then tapping the result chip. Works whether or not the exercise
 // is already in the person's list.
 export async function pickExercise(page: Page, name: string) {
-  await page.getByPlaceholder('Search all exercises').fill(name);
+  await searchFor(page, name);
   await page.getByRole('button', { name, exact: true }).click();
 }
 
-// The Log picker's search is a full-screen layer once tapped (#626): it covers the tab bar, the
-// person bar and the page. Close it with its Cancel, which keeps whatever was typed (that is the
-// person's draft). A no-op when it isn't open.
-export async function closeSearch(page: Page) {
-  const layer = page.getByRole('dialog', { name: 'Exercise search' });
-  if ((await layer.count()) === 0) return;
-  await layer.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(layer).toHaveCount(0);
+// The Log tab's exercise search is its own SCREEN (ExerciseSearchScreen): on the Log page the
+// search "field" is a BUTTON named "Search all exercises" (it shows the typed draft, or the
+// placeholder), and tapping it opens the screen with the real field focused. So "is the picker
+// showing?" is searchTrigger, and typing a search is searchFor -- never a bare
+// getByPlaceholder('Search all exercises').fill(), which finds nothing until the screen is open.
+// docs/architecture/exercise-search-history.md has why.
+export function searchTrigger(page: Page) {
+  return page.getByRole('button', { name: 'Search all exercises', exact: true });
 }
 
-// Clear the Log picker's search and close its layer: the picker as a fresh visit finds it.
+// The open search screen (a region), and its field.
+export function searchScreen(page: Page) {
+  return page.getByRole('region', { name: 'Exercise search' });
+}
+export function searchField(page: Page) {
+  return searchScreen(page).getByPlaceholder('Search all exercises');
+}
+
+// Open the search screen if it isn't already, and type `term` into its field.
+export async function searchFor(page: Page, term: string) {
+  if ((await searchScreen(page).count()) === 0) await searchTrigger(page).click();
+  await searchField(page).fill(term);
+}
+
+// Close the search screen with its Cancel, which keeps whatever was typed (the person's draft) and
+// brings the Log page back. A no-op when it isn't open.
+export async function closeSearch(page: Page) {
+  const screen = searchScreen(page);
+  if ((await screen.count()) === 0) return;
+  await screen.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(screen).toHaveCount(0);
+}
+
+// Empty the search and close the screen: the picker as a fresh visit finds it.
 export async function clearSearch(page: Page) {
-  await page.getByPlaceholder('Search all exercises').fill('');
+  await searchFor(page, '');
   await closeSearch(page);
 }
 

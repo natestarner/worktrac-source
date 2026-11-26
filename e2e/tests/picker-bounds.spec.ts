@@ -1,5 +1,5 @@
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
-import { logSetButton } from './support/exercises';
+import { logSetButton, searchTrigger } from './support/exercises';
 import { registerHousehold } from './support/auth';
 
 // The Log picker's exercise groups are bounded by ROWS of chips, not by a count of items, and the
@@ -148,7 +148,7 @@ test.describe('Log picker bounds', () => {
     await page.getByPlaceholder('Name', { exact: true }).fill('Bo');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     // The new person becomes active and starts on their own (empty) picker.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
 
     await page.locator('.person-pill-bar').getByRole('button', { name: /Ash/ }).click();
 

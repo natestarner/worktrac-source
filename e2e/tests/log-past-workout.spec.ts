@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, searchTrigger } from './support/exercises';
 
 // Full "Log a past workout" round trip: create a retroactive session, add and remove
 // sets into it without triggering the live rest timer, edit its date from the "Adding/editing
@@ -79,7 +79,7 @@ test.describe('Log a past workout', () => {
     // else. Wait for the tab's own content first, or the zero count passes before it renders.
     await page.getByRole('link', { name: 'Log', exact: true }).click();
     await expect(
-      page.getByRole('button', { name: 'Log set' }).or(page.getByPlaceholder('Search all exercises')),
+      page.getByRole('button', { name: 'Log set' }).or(searchTrigger(page)),
     ).toBeVisible();
     await expect(page.locator('.past-session-frame')).toHaveCount(0);
   });

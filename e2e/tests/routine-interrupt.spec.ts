@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, dismissPrCelebration, pickExercise, tapLogSet, logSetButton } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, pickExercise, tapLogSet, logSetButton, searchTrigger } from './support/exercises';
 
 // Following a routine doesn't lock you into it: you can back out to the exercise picker,
 // log something not on the routine, and then resume the routine at the same position --
@@ -60,7 +60,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
 
     // Back out to the picker, then advance the routine from there -- no exercise open.
     await page.getByRole('button', { name: /All exercises/ }).click();
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible(); // on the picker
+    await expect(searchTrigger(page)).toBeVisible(); // on the picker
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
 

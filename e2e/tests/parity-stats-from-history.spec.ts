@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise, logSetButton } from './support/exercises';
+import { logSetAt, pickExercise, logSetButton, searchTrigger } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -33,7 +33,7 @@ forEachConnectivityMode<void>('a record logged in any mode is on the PRs board a
   // The Log tab remembers the exercise setup opened, so it is usually already on screen; pick it
   // only if the tab came back to the picker instead.
   async navigate(page) {
-    const picker = page.getByPlaceholder('Search all exercises');
+    const picker = searchTrigger(page);
     await expect(picker.or(page.getByRole('button', { name: 'Log set' })).first()).toBeVisible();
     if (await picker.isVisible()) await pickExercise(page, EXERCISE);
     await expect(logSetButton(page)).toBeVisible();

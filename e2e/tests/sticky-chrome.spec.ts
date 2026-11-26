@@ -1,5 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { searchTrigger } from './support/exercises';
 
 // What survives a scroll at the top of the screen, and what doesn't.
 //
@@ -213,7 +214,7 @@ test.describe('Tab bar: full padding when there is room, a CSS lock when there i
     await registerHousehold(page, request, 'Alex');
 
     const segRight = (await page.locator('.tabs-nav-bar .seg').boundingBox())!;
-    const searchRight = (await page.getByPlaceholder('Search all exercises').boundingBox())!;
+    const searchRight = (await searchTrigger(page).boundingBox())!;
     const gap = searchRight.x + searchRight.width - (segRight.x + segRight.width);
 
     expect(gap, `the tab bar's right edge is ${-gap}px PAST the content column's`).toBeGreaterThanOrEqual(-1);

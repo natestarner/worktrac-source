@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, logSetAt, pickExercise, clearSearch } from './support/exercises';
+import { addExerciseToRoutine, logSetAt, pickExercise, clearSearch, searchFor, searchScreen, searchField } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // "Preview exercise": an exercise's muscles (and how-to video, where it has one) BEFORE choosing
@@ -30,14 +30,13 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Kenmare');
     // Warm the catalog while online, as any device that has opened the picker has.
-    const search = page.getByPlaceholder('Search all exercises');
-    await search.fill(EXERCISE);
+    await searchFor(page, EXERCISE);
     await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
     await clearSearch(page);
   },
   navigate: async () => {},
   act: async (page) => {
-    await page.getByPlaceholder('Search all exercises').fill(EXERCISE);
+    await searchFor(page, EXERCISE);
     await previewButtonFor(page, EXERCISE).click();
   },
   assert: async (page) => {
@@ -49,10 +48,10 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
 
     await sheet.getByRole('button', { name: 'Close' }).click();
     await expect(sheet).toHaveCount(0);
-    // Still on the picker, still searching (back in the search layer it opened from): previewing
-    // did not choose the exercise.
-    await expect(page.getByRole('dialog', { name: 'Exercise search' })).toBeVisible();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue(EXERCISE);
+    // Still searching (back on the search screen it opened from): previewing did not choose the
+    // exercise.
+    await expect(searchScreen(page)).toBeVisible();
+    await expect(searchField(page)).toHaveValue(EXERCISE);
     await expect(page.getByRole('button', { name: 'Log set' })).toHaveCount(0);
     // Leave the picker as found: the harness ends on the tab bar.
     await clearSearch(page);
@@ -98,7 +97,9 @@ test.describe('previewing an exercise from elsewhere', () => {
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Overhead Press');
 
-    await page.getByPlaceholder('Search all exercises').fill(EXERCISE);
+    // The routine dialog's OWN search field (a real input), not the Log tab's search screen.
+    const routineSearch = page.getByRole('dialog', { name: 'New routine' }).getByPlaceholder('Search all exercises');
+    await routineSearch.fill(EXERCISE);
     await previewButtonFor(page, EXERCISE).click();
 
     // Inside the same dialog, never a second one on top.
@@ -110,7 +111,7 @@ test.describe('previewing an exercise from elsewhere', () => {
     await expect(page.getByRole('dialog', { name: 'New routine' })).toBeVisible();
     await expect(page.getByPlaceholder('Routine name (e.g. Push Day)')).toHaveValue('Push Day');
     await expect(page.getByText('In this routine')).toBeVisible();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue(EXERCISE);
+    await expect(routineSearch).toHaveValue(EXERCISE);
 
     // And previewing did not add it.
     await page.getByRole('button', { name: 'Save routine' }).click();

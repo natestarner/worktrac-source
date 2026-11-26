@@ -1,14 +1,15 @@
-# Tapping the Log search opens the full-screen search layer (#626): the field pinned at the top,
-# Cancel beside it, results scrolling beneath it above the keyboard. It replaced scrolling the PAGE
-# to bring the field up, which the app's keyboard defeated about half the time (builds 33-36: the
-# WebView shrinks as the keyboard opens, and the scroll clamped). Only the app can show that
-# resize, so this flow is the gate; Playwright's keyboard-scroll.spec.ts pins the layout.
-# The screenshots are taken at intervals after the tap, so anything that arrives and then moves
+# Tapping the Log search opens the exercise search SCREEN: the field at the top, focused by the tap
+# (so the keyboard comes up), Cancel beside it, and the results below it, scrolled by the page.
+# The search went through three designs before this one; each broke on the app's keyboard
+# (docs/architecture/exercise-search-history.md): scrolling the page to the field (builds 33-36),
+# then a full-screen layer (1.5.0 builds 38-40: no scroll, then no keyboard). Only the app shows
+# its keyboard's resize, so this flow is the gate; Playwright's keyboard-scroll.spec.ts pins the
+# layout. Screenshots are taken at intervals after the tap, so anything that arrives and then moves
 # shows in the later ones.
 #
-# app-evidence: the search layer opened = \[keyboard\] search layer open
+# app-evidence: the field had the focus = \[search\] screen open, field focused true
 appId: fitness.huddle.app
-name: Tapping the search opens the full-screen search
+name: Tapping the search opens the search screen
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
@@ -18,17 +19,20 @@ name: Tapping the search opens the full-screen search
     visible: 'Search all exercises'
     timeout: 30000
 - takeScreenshot: mobile-flows-out/09-before
+# The Log page's search "field" is a button with this label; the screen's own field takes the focus.
 - tapOn: 'Search all exercises'
 - takeScreenshot: mobile-flows-out/09-just-after
-# The layer's Cancel is the sign it opened.
+# The screen's Cancel is the sign it opened.
 - extendedWaitUntil:
     visible: 'Cancel'
     timeout: 5000
 - waitForAnimationToEnd:
     timeout: 2000
 - takeScreenshot: mobile-flows-out/09-after-settle
-# 'press' matches more of the library than fits above the keyboard, so the scroll below has
-# something to do.
+# Typed straight in, with no tap on the field first: this only works if the tap's focus held and
+# the keyboard came up (TestFlight 1.5.0 build 40 failed exactly here -- no focus, typing went
+# nowhere). 'press' matches more of the library than fits above the keyboard, so the scroll below
+# has something to do.
 - inputText: 'press'
 - extendedWaitUntil:
     visible: '(?i)search results'
@@ -42,11 +46,9 @@ name: Tapping the search opens the full-screen search
     text: '(?i)search results'
     below: 'Cancel'
 - assertVisible: 'Cancel'
-# The results SCROLL, under the pinned field (2026-11-26: on lower they could not be scrolled at
-# all in the app -- the layer was sized from a stale visualViewport height, taller than the
-# window, so the list fit inside it and ran on under the keyboard). The last control in the
-# results starts below the keyboard; Maestro swipes until it is visible, and fails if the list
-# never moves. The field and Cancel must still be there after it.
+# The results SCROLL, with the page, under the field (on 1.5.0 build 38/39 they could not be
+# scrolled at all in the app). The last control in the results starts below the keyboard; Maestro
+# swipes until it is visible, and fails if the page never moves. Cancel must still be there after.
 - scrollUntilVisible:
     element: '\+ Add your own exercise'
     direction: DOWN
@@ -55,8 +57,8 @@ name: Tapping the search opens the full-screen search
     timeout: 60000
 - takeScreenshot: mobile-flows-out/09-results-scrolled
 - assertVisible: 'Cancel'
-# Cancel closes it and the picker is back (the typed text stays in the field: it is the person's
-# draft, so the field's label may now read "press" rather than its placeholder).
+# Cancel goes back to the Log page (the typed text stays: it is the person's draft, shown on the
+# search button there).
 - tapOn: 'Cancel'
 - extendedWaitUntil:
     notVisible: '(?i)search results'

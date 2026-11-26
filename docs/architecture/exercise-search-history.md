@@ -216,7 +216,23 @@ All of this is on `main` at `39ac5398`, and in `fix/search-tap-focus`, if it is 
 
 ## Final runs of the abandoned fix
 
-(Filled in when runs 45897081538 and 45897084565 finished.)
+Both simulator runs of `fix/search-tap-focus` (`4a89ae71`) passed every flow, flow 09 included, on
+the **first** attempt. The app's own lines prove the ghost-click diagnosis rather than just
+passing:
+
+- **Run 45897081538:**
+  - `[search] tap: layer open, field focused true`, then `ghost mousedown swallowed`,
+    `ghost mouseup swallowed`, `ghost click swallowed`.
+  - So WKWebView **did** send the synthetic mouse events after the touchend had been cancelled,
+    and swallowing them kept the focus.
+  - The layer then followed the window (609 of 609), and drags scrolled the list (0 → 356, none
+    cancelled).
+- **Run 45897084565:** the field was focused at the tap, and no ghost arrived that time (the
+  timing varies). The layer was 546 of 546, and the list scrolled to its end (996/996).
+
+So the layer, with all four fixes, did work on the simulator. It was abandoned for its complexity,
+not because it could not be made to work. If it is ever revived, start from `fix/search-tap-focus`,
+not from `main` at `39ac5398`, which lacks the ghost-click fix.
 
 ## What is where
 

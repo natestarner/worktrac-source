@@ -1,6 +1,6 @@
 import { APIRequestContext, Page, expect, test } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold } from './support/auth';
-import { logSetAt, pickExercise } from './support/exercises';
+import { logSetAt, pickExercise, searchTrigger } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 import { closePersonSheet, openPersonSheet, personTag } from './support/peopleList';
 
@@ -133,7 +133,7 @@ forEachConnectivityMode<void>('a trusted login logs a set for a kid', {
     await loginAs(page, jess.email, jess.password);
     // Leo's picker and History warmed online, before the mode cuts the network.
     await switchTo(page, 'Leo');
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
     await page.waitForLoadState('networkidle');
   },
 

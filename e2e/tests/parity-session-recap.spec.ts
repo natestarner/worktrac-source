@@ -1,6 +1,6 @@
 import { APIRequestContext, Locator, Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, logSetAt, pickExercise, tapLogSet } from './support/exercises';
+import { dismissPrCelebration, endWorkout, logSetAt, pickExercise, tapLogSet, searchTrigger } from './support/exercises';
 import { delayNetwork, holdNetwork } from './support/faults';
 import { expectHistoryMatchesServer } from './support/historyConvergence';
 import { pinOfflineViaSettings, unpinOfflineViaSettings, waitForOutboxDrain } from './support/offline';
@@ -45,7 +45,7 @@ async function endAndExpectTheCard(page: Page) {
   await expectTwoExercisesThreeSets(done);
   await done.getByRole('button', { name: 'Close' }).click();
   await expect(done).toBeHidden();
-  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  await expect(searchTrigger(page)).toBeVisible();
 }
 
 forEachConnectivityMode<{ personName: string }>('ending a workout reports what was logged', {

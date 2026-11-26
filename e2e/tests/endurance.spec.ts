@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, prCelebration, setHoldSeconds, tapLogSet } from './support/exercises';
+import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, prCelebration, setHoldSeconds, tapLogSet, searchFor } from './support/exercises';
 import { goHardOffline, goOnline, waitForOutboxDrain } from './support/offline';
 
 // The "This session" list. Scoping to it matters: the Best card above renders the SAME string
@@ -101,7 +101,7 @@ test.describe('endurance exercises', () => {
   test('a household can add its own timed exercise', async ({ page, request }) => {
     await registerHousehold(page, request, 'Sable');
 
-    await page.getByPlaceholder('Search all exercises').fill('Ring Support Hold');
+    await searchFor(page, 'Ring Support Hold');
     await addOwnTimedExercise(page, 'Ring Support Hold');
 
     await expect(page.getByLabel('Time')).toBeVisible();
@@ -130,7 +130,7 @@ test.describe('endurance exercises', () => {
       createSettled();
     });
 
-    await page.getByPlaceholder('Search all exercises').fill('Ring Support Hold');
+    await searchFor(page, 'Ring Support Hold');
     await addOwnTimedExercise(page, 'Ring Support Hold');
     await expect(page.getByLabel('Time')).toBeVisible();
 

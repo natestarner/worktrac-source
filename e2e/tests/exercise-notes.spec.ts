@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, searchTrigger } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Exercise notes are two independent, coexisting features (see CLAUDE.md's Data Model
@@ -46,7 +46,7 @@ test.describe('Exercise notes', () => {
     await endWorkout(page);
 
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
 
     // --- A brand new session should show the standing note (always) but not the old
     // session note, and the "Last time" card should surface the PREVIOUS session's note. ---
