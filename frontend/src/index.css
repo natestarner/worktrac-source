@@ -768,18 +768,23 @@ button:not(.pressable):active:not(:disabled) {
    kept defeating (#626: the WebView shrinks as the keyboard opens, and the scroll clamped or was
    dropped about half the time). Nothing here asks the page to move.
 
-   Sized to the VISIBLE viewport, like Modal's scrim (lib/visibleViewport.js): in the app the
-   WebView already ends at the keyboard, and in Safari the visible part is what is above it, so the
-   last result is always reachable above the keyboard. Without visualViewport (jsdom) it is the
-   whole screen. It sits above the sticky chrome and the SessionBar (which rides on the keyboard in
-   the app) and below toasts, the PR celebration, the tour and every Modal (the preview sheet and
-   "Add your own exercise" open over it). */
+   Pinned to the WINDOW with plain `inset: 0`, never sized from visualViewport in JS. It was
+   (`--visible-viewport-top` / `-height`), and that is what broke on lower (2026-11-26): in Safari
+   the layer chased every pan of the visual viewport a frame late (the flicker), and in the app a
+   stale height left it taller than the window above the keyboard, so the results never overflowed
+   and could not be scrolled (iOS 26 also reports stale visualViewport values after the keyboard).
+   In the app the window already ends at the keyboard (`Keyboard.resize: "native"`), so `inset: 0`
+   IS the space above it, kept by the browser on every frame. In Safari the keyboard covers the
+   bottom of the window instead, so the results pad their end by `--keyboard-inset`: the last
+   result scrolls above the keyboard and nothing visible moves. Safari is kept from panning in the
+   first place: the tap opens the layer before the field takes focus (ExercisePicker.jsx), and
+   lockBodyScroll's touch guard cancels every drag that would not scroll the results.
+
+   It sits above the sticky chrome and the SessionBar and below toasts, the PR celebration, the
+   tour and every Modal (the preview sheet and "Add your own exercise" open over it). */
 .exercise-search-layer {
   position: fixed;
-  left: 0;
-  right: 0;
-  top: var(--visible-viewport-top, 0px);
-  height: var(--visible-viewport-height, 100%);
+  inset: 0;
   z-index: var(--z-search-layer);
   display: flex;
   flex-direction: column;
@@ -808,20 +813,21 @@ button:not(.pressable):active:not(:disabled) {
   flex-shrink: 0;
 }
 
-/* The only part of the layer that scrolls. `contain` keeps a fling at either end from carrying
-   on into the page behind. */
+/* The only part of the layer that scrolls (lockBodyScroll's touch guard allows drags here and
+   nowhere else). `contain` keeps a fling at either end from carrying on into the page behind. No
+   -webkit-overflow-scrolling: it has done nothing since iOS 13 except carry old WebKit bugs. */
 .exercise-search-results {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 .exercise-search-results-inner {
   max-width: 840px;
   margin: 0 auto;
-  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+  padding: var(--space-4) var(--space-4)
+    calc(var(--space-6) + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px));
 }
 
 .exercise-search-hint {

@@ -617,20 +617,40 @@ somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-revea
 `jumpAndSettle`'s `arrived`) was deleted with it.
 
 - **The SAME `<input>` moves into the layer.** The wrapper element only changes class and
-  attributes (`role="dialog"` while open), so React keeps the input, and with it the focus the tap
-  gave it and the keyboard. Rendering a second input in a portal would need a programmatic focus,
-  which iOS refuses to raise the keyboard for outside the tap. Playwright's
-  `getByPlaceholder('Search all exercises').fill(...)` works unchanged for the same reason.
+  attributes (`role="dialog"` while open), so React keeps the input, and with it the focus and the
+  keyboard. Playwright's `getByPlaceholder('Search all exercises').fill(...)` works unchanged
+  because of it (fill focuses, and `onFocus` opens the layer).
+- **A finger TAP opens the layer BEFORE the field takes focus** (`handleTouchEnd`): it cancels the
+  touchend, `flushSync`s the layer open, then calls `focus({ preventScroll: true })` on the field,
+  now at the top. Left to the browser, iOS focuses the field at its place mid-page, Safari starts
+  panning toward it, and the lifted layer rides that pan (the 2026-11-26 flicker). Cancelling the
+  touchend also stops the synthetic click landing on whatever the layer puts under the finger;
+  the `focus()` inside the touch handler is a user gesture, so iOS still raises the keyboard. A
+  drag that starts on the field (moved > `TAP_SLOP_PX`, or a non-cancelable touchend) is a page
+  scroll and is left alone. Mouse, keyboard and Playwright still open it through `onFocus`.
 - **The slot holds the field's height while it is lifted out**, and everything else on the page
   (routine block, "Or pick an exercise", chips, the page's "+ Add your own exercise") stays
   rendered, `aria-hidden` + `inert`. So the page is exactly what it was when Cancel closes the
   layer, and the layer's own "+ Add your own exercise" is the only one a test or a screen reader
   finds. Searching never hides or replaces anything on the page (the 2026-11-08 first-letter jump
   came from hiding the routine block above the field).
-- **Sized to the VISIBLE viewport** (`--visible-viewport-top` / `-height`, like Modal's scrim), so
-  the last result ends above the keyboard in the app and in Safari. `--z-search-layer` (30): over
-  the chrome and the SessionBar, under toasts, the PR celebration, the tour and every Modal (the
-  preview sheet and Add exercise open over it).
+- **Pinned to the WINDOW with `inset: 0` -- never sized or placed from visualViewport in JS.** It
+  was sized like Modal's scrim (`--visible-viewport-top` / `-height`) and that shipped both
+  2026-11-26 bugs (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`): in
+  Safari it chased every pan a frame late (flicker), and in the app a stale height left it taller
+  than the window, so the results fit inside it and could not be scrolled. In the app the window
+  ends at the keyboard, so `inset: 0` IS the space above it; in Safari the results pad their end by
+  `--keyboard-inset` (published by `trackVisibleViewport`), so the last result scrolls above the
+  keyboard while nothing visible moves. A stale inset only adds blank space at the end. Don't
+  "unify" this with Modal's scrim: a dialog's field can be anywhere in it, this one is always at
+  the top. `--z-search-layer` (30): over the chrome and the SessionBar, under toasts, the PR
+  celebration, the tour and every Modal (the preview sheet and Add exercise open over it).
+- **Only the results scroll, and only a finger drag on them can scroll anything.**
+  `lockBodyScroll({ touchScrollOnlyIn: results })` cancels every touchmove that would not scroll
+  the results (one on the search bar, below a short list, or anywhere else). `overflow: hidden` on
+  the body does not stop iOS: with the keyboard up a drag still panned the page behind the layer.
+  `overscroll-behavior: contain` stops the fling at the list's ends. No
+  `-webkit-overflow-scrolling` (a no-op since iOS 13 that only carries old WebKit bugs).
 - **`lib/visibleViewport.js` never reveals a field inside `[data-keyboard-layer]`.** The field is
   pinned at the top by construction; a page reveal would only scroll the page behind the layer.
 - **Cancel and Escape close it and KEEP the typed text** (unlike iOS's own Cancel); choosing a
@@ -644,9 +664,13 @@ somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-revea
   (empty it, then Cancel). Specs used to clear with a bare `fill('')`, which now leaves the layer up.
 - The dialog is named "Exercise search", never "Search all exercises": Maestro matches labels, and
   `tapOn: 'Search all exercises'` would otherwise tap the middle of the whole layer.
-- Pinned by `ExercisePicker.test.jsx`, `e2e/tests/keyboard-scroll.spec.ts` (frame-sampled: the
-  page's `scrollY` and the field never move; red against the old code) and Maestro flow
-  `09-search-focus-holds.yaml` (the app's resize; logs `[keyboard] search layer open (...)`).
+- Pinned by `ExercisePicker.test.jsx` (tap order, the touch guard), `e2e/tests/keyboard-scroll.spec.ts`
+  (frame-sampled: the page's `scrollY` and the field never move; "whatever visualViewport says"
+  makes visualViewport report stale values and fails the old CSS with an 844px layer in a 420px
+  window; "by touch" fails the old code because the field took focus before the layer was up --
+  all red-first, Chromium and WebKit) and Maestro flow `09-search-focus-holds.yaml` (the app's
+  resize, and a `scrollUntilVisible` through the results: the flow passed through the 2026-11-26
+  bug because it never scrolled them; logs `[keyboard] search layer open (...)`).
 
 ## The picker is BOUNDED but never REORDERED
 

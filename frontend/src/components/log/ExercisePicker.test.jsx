@@ -152,6 +152,78 @@ describe('ExercisePicker full-screen search', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
+  // A touch at (x, y): the start and end of a tap, or of a drag when the two differ.
+  function touchSearch(input, from, to = from) {
+    fireEvent.touchStart(input, { touches: [{ clientX: from.x, clientY: from.y }] });
+    return fireEvent.touchEnd(input, { changedTouches: [{ clientX: to.x, clientY: to.y }] });
+  }
+
+  // On a phone the layer must be up BEFORE the field takes focus: focused mid-page, Safari starts
+  // panning toward it, and the layer then rides that pan (the 2026-11-26 flicker).
+  it('a TAP opens the layer first, then focuses the field in it, and cancels the browser’s own focus', () => {
+    withSearch('');
+    renderPicker({ catalog, routines: routines(1) });
+    const input = screen.getByPlaceholderText('Search all exercises');
+    let layerWhenFocused = null;
+    input.addEventListener('focus', () => {
+      layerWhenFocused = screen.queryByRole('dialog', { name: 'Exercise search' });
+    });
+    const focusSpy = vi.spyOn(input, 'focus');
+
+    let notCancelled;
+    act(() => {
+      notCancelled = touchSearch(input, { x: 100, y: 400 }, { x: 103, y: 402 });
+    });
+
+    expect(notCancelled, 'the touchend must be cancelled so the browser does not focus or click').toBe(false);
+    expect(layerWhenFocused, 'the layer was already up when the field took focus').not.toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Exercise search' })).toContainElement(input);
+    expect(document.activeElement).toBe(input);
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it('a DRAG that starts on the field scrolls the page and opens nothing', () => {
+    withSearch('');
+    renderPicker({ catalog, routines: routines(1) });
+    const input = screen.getByPlaceholderText('Search all exercises');
+
+    let notCancelled;
+    act(() => {
+      notCancelled = touchSearch(input, { x: 100, y: 400 }, { x: 100, y: 300 });
+    });
+
+    expect(notCancelled).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  // `overflow: hidden` does not stop iOS: a drag on the layer still panned the page behind it.
+  it('while open, a drag can scroll the results and nothing else', () => {
+    withSearch('squ');
+    renderPicker({ catalog, routines: routines(1) });
+    tapSearch();
+    const layer = screen.getByRole('dialog', { name: 'Exercise search' });
+    const results = layer.querySelector('.exercise-search-results');
+    const bar = screen.getByRole('button', { name: 'Cancel' });
+    // jsdom lays nothing out: give the results something to scroll.
+    Object.defineProperty(results, 'scrollHeight', { configurable: true, value: 900 });
+    Object.defineProperty(results, 'clientHeight', { configurable: true, value: 300 });
+
+    const drag = (target) =>
+      fireEvent.touchMove(target, { cancelable: true, touches: [{ clientX: 0, clientY: 0 }] });
+    expect(drag(results.firstChild), 'a drag on the results scrolls them').toBe(true);
+    expect(drag(bar), 'a drag on the search bar must not move anything').toBe(false);
+    expect(drag(document.body), 'a drag anywhere else must not move the page').toBe(false);
+
+    // A short list has nothing to scroll, so a drag on it would only carry on into the page.
+    Object.defineProperty(results, 'scrollHeight', { configurable: true, value: 300 });
+    expect(drag(results.firstChild)).toBe(false);
+
+    // Closed, the page scrolls normally again.
+    fireEvent.click(bar);
+    expect(drag(document.body)).toBe(true);
+  });
+
   it('shows the results inside the layer and hides the page behind it', () => {
     withSearch('squ');
     renderPicker({ catalog, routines: routines(2) });

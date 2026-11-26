@@ -27,7 +27,9 @@ name: Tapping the search opens the full-screen search
 - waitForAnimationToEnd:
     timeout: 2000
 - takeScreenshot: mobile-flows-out/09-after-settle
-- inputText: 'squat'
+# 'press' matches more of the library than fits above the keyboard, so the scroll below has
+# something to do.
+- inputText: 'press'
 - extendedWaitUntil:
     visible: '(?i)search results'
     timeout: 10000
@@ -40,8 +42,19 @@ name: Tapping the search opens the full-screen search
     text: '(?i)search results'
     below: 'Cancel'
 - assertVisible: 'Cancel'
+# The results SCROLL, under the pinned field (2026-11-26: on lower they could not be scrolled at
+# all in the app -- the layer was sized from a stale visualViewport height, taller than the
+# window, so the list fit inside it and ran on under the keyboard). The last control in the
+# results starts below the keyboard; Maestro swipes until it is visible, and fails if the list
+# never moves. The field and Cancel must still be there after it.
+- scrollUntilVisible:
+    element: '\+ Add your own exercise'
+    direction: DOWN
+    timeout: 15000
+- takeScreenshot: mobile-flows-out/09-results-scrolled
+- assertVisible: 'Cancel'
 # Cancel closes it and the picker is back (the typed text stays in the field: it is the person's
-# draft, so the field's label may now read "squat" rather than its placeholder).
+# draft, so the field's label may now read "press" rather than its placeholder).
 - tapOn: 'Cancel'
 - extendedWaitUntil:
     notVisible: '(?i)search results'

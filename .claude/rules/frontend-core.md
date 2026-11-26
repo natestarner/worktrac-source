@@ -228,7 +228,14 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On
   the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
   A field inside `[data-keyboard-layer]` (the Log picker's full-screen search, `log-screen.md`) is
-  never revealed: the layer pins it at the top of the visible viewport by construction.
+  never revealed: the layer pins it at the top of the window by construction.
+- **`--keyboard-inset`** (also from `trackVisibleViewport`) is how much of the window's bottom the
+  keyboard covers: Safari only, 0 in the app. A full-screen layer pinned with `inset: 0` pads its
+  scroller's end by it instead of resizing or moving (the search layer). **Don't size or place a
+  full-screen layer from `--visible-viewport-*`**: it chases Safari's pans a frame late, and a stale
+  value (iOS 26 reports them around the keyboard) leaves it the wrong size
+  (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`). Dialogs keep the
+  visible-viewport scrim for the reason in "Modals" above.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
   `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
