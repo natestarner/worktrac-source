@@ -142,7 +142,7 @@ export default function ExercisePicker({
     }
     layer.addEventListener('keydown', onKeyDown);
     const uninstallFocusTrap = installFocusTrap(layer);
-    const unlockBodyScroll = lockBodyScroll({ touchScrollOnlyIn: results });
+    const unlockBodyScroll = lockBodyScroll({ guardTouch: true });
     // One line of evidence for the simulator flow (09-search-focus-holds) and Safari's Web
     // Inspector: where the field landed and whether the layer is the visible viewport.
     const frame = requestAnimationFrame(() => {

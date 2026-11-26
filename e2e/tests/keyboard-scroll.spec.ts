@@ -312,3 +312,53 @@ test.describe('the search, by touch', () => {
     await expect(page.getByText('Search results', { exact: true })).toBeVisible();
   });
 });
+
+// Real finger DRAGS (CDP touch events, Chromium only), because the touch guard only ever sees
+// touchmove -- a mouse wheel goes straight past it. 2026-11-26 on lower: "+ Add your own exercise"
+// from the search opens its dialog over the still-open search layer, and the first guard (drags
+// allowed only in the results) cancelled every drag inside that dialog, on the web and in the app.
+test.describe('the search, by finger drag', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: KEYBOARD_UP });
+
+  async function drag(page: Page, at: { x: number; y: number }, dy: number) {
+    const cdp = await page.context().newCDPSession(page);
+    const point = (y: number) => [{ x: Math.round(at.x), y: Math.round(y), id: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(at.y) });
+    for (let i = 1; i <= 10; i += 1) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(at.y - (dy * i) / 10) });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+
+  test('a drag scrolls the results, and scrolls the Add exercise dialog opened from them', async ({ page, request, browserName }) => {
+    test.skip(browserName !== 'chromium', 'touch drags are sent through CDP');
+    await twoPersonHousehold(page, request);
+    await page.getByPlaceholder('Search all exercises').tap();
+    const layer = page.getByRole('dialog', { name: 'Exercise search' });
+    await expect(layer).toBeVisible();
+    await page.keyboard.type('press');
+    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
+
+    const results = layer.locator('.exercise-search-results');
+    const r = await box(results);
+    // Playwright's tap() scrolls the field into view before tapping (it starts below the fold at
+    // this height), so the page's own position is read here, not assumed to be 0.
+    const pageBefore = await page.evaluate(() => window.scrollY);
+    await drag(page, { x: r.x + r.width / 2, y: r.y + r.height - 20 }, 200);
+    await expect.poll(() => results.evaluate((el) => el.scrollTop), 'a drag on the results scrolls them').toBeGreaterThan(0);
+    // A drag on the search bar has nothing to scroll and must not move the page behind.
+    const bar = await box(page.getByRole('button', { name: 'Cancel' }));
+    await drag(page, { x: bar.x + bar.width / 2, y: bar.y + bar.height / 2 }, -150);
+    expect(await page.evaluate(() => window.scrollY), 'the page behind never moves').toBe(pageBefore);
+
+    await layer.getByRole('button', { name: '+ Add your own exercise' }).tap();
+    const panel = page.locator('[data-modal-panel]').last();
+    await dialogSettled(panel);
+    const overflow = await panel.evaluate((el) => el.scrollHeight - el.clientHeight);
+    expect(overflow, 'the dialog is taller than the space above the keyboard').toBeGreaterThan(0);
+    const p = await box(panel);
+    await drag(page, { x: p.x + p.width / 2, y: p.y + p.height - 30 }, 200);
+    await expect.poll(() => panel.evaluate((el) => el.scrollTop), 'a drag inside the dialog scrolls it').toBeGreaterThan(0);
+  });
+});

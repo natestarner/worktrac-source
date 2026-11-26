@@ -826,8 +826,15 @@ button:not(.pressable):active:not(:disabled) {
 .exercise-search-results-inner {
   max-width: 840px;
   margin: 0 auto;
-  padding: var(--space-4) var(--space-4)
-    calc(var(--space-6) + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px));
+  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+/* Room for Safari's keyboard only while the field has focus, which is when the keyboard is up
+   (iOS blurs the field when the keyboard is dismissed). Applied always, a value left behind after
+   the keyboard went (or Brave's toolbars counted as keyboard) let the list scroll well past
+   "+ Add your own exercise" into blank space (2026-11-26). */
+.exercise-search-layer:has(.exercise-search-bar input:focus) .exercise-search-results-inner {
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px));
 }
 
 .exercise-search-hint {
