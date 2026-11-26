@@ -9,6 +9,22 @@ export async function pickExercise(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
 }
 
+// The Log picker's search is a full-screen layer once tapped (#626): it covers the tab bar, the
+// person bar and the page. Close it with its Cancel, which keeps whatever was typed (that is the
+// person's draft). A no-op when it isn't open.
+export async function closeSearch(page: Page) {
+  const layer = page.getByRole('dialog', { name: 'Exercise search' });
+  if ((await layer.count()) === 0) return;
+  await layer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(layer).toHaveCount(0);
+}
+
+// Clear the Log picker's search and close its layer: the picker as a fresh visit finds it.
+export async function clearSearch(page: Page) {
+  await page.getByPlaceholder('Search all exercises').fill('');
+  await closeSearch(page);
+}
+
 // The routine builder's "Add exercise to routine" pool likewise defaults to favorites/logged,
 // so search the catalog, then tap the result row (search results render as a plain-name list,
 // same as the Log picker -- the "+ Name" chip styling only applies to the default

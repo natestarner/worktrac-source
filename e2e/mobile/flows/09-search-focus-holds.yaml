@@ -1,12 +1,14 @@
-# Tapping the Log search brings the field up under the tab bar, and it STAYS there (TestFlight 1.4
-# build 34, 2026-11-25: it scrolled to the top, then jumped back down to the middle of the page).
-# Only the app can show this: the jump comes from keyboard.js's reveal, which runs only in the app,
-# when the keyboard finishes opening. The screenshots are taken at intervals after the tap, so a
-# field that arrives and then leaves shows in the later ones.
+# Tapping the Log search opens the full-screen search layer (#626): the field pinned at the top,
+# Cancel beside it, results scrolling beneath it above the keyboard. It replaced scrolling the PAGE
+# to bring the field up, which the app's keyboard defeated about half the time (builds 33-36: the
+# WebView shrinks as the keyboard opens, and the scroll clamped). Only the app can show that
+# resize, so this flow is the gate; Playwright's keyboard-scroll.spec.ts pins the layout.
+# The screenshots are taken at intervals after the tap, so anything that arrives and then moves
+# shows in the later ones.
 #
-# app-evidence: the keyboard helper put it at the top = \[keyboard\] reveal Search all exercises to its start
+# app-evidence: the search layer opened = \[keyboard\] search layer open
 appId: fitness.huddle.app
-name: The search field stays at the top once tapped
+name: Tapping the search opens the full-screen search
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
@@ -18,15 +20,31 @@ name: The search field stays at the top once tapped
 - takeScreenshot: mobile-flows-out/09-before
 - tapOn: 'Search all exercises'
 - takeScreenshot: mobile-flows-out/09-just-after
+# The layer's Cancel is the sign it opened.
+- extendedWaitUntil:
+    visible: 'Cancel'
+    timeout: 5000
 - waitForAnimationToEnd:
     timeout: 2000
 - takeScreenshot: mobile-flows-out/09-after-settle
+- inputText: 'squat'
+- extendedWaitUntil:
+    visible: '(?i)search results'
+    timeout: 10000
 - waitForAnimationToEnd:
     timeout: 4000
-- takeScreenshot: mobile-flows-out/09-later
-# The gate. Maestro has no coordinates, so it checks what reaching the top implies: the field is on
-# screen, and the Huddle header ABOVE the sticky tab bar (its "Go Plus" pill) has scrolled away. A
-# field left mid-screen keeps the header in view -- the second simulator run (45737970725) passed
-# the old visibility-only check with the page never having moved.
-- assertVisible: 'Search all exercises'
-- assertNotVisible: '.*Go Plus.*'
+- takeScreenshot: mobile-flows-out/09-results
+# The field (now holding the text) sits ABOVE the results, and Cancel is still there: the field
+# stayed at the top while the keyboard opened and results drew under it.
+- assertVisible:
+    text: '(?i)search results'
+    below: 'Cancel'
+- assertVisible: 'Cancel'
+# Cancel closes it and the picker is back (the typed text stays in the field: it is the person's
+# draft, so the field's label may now read "squat" rather than its placeholder).
+- tapOn: 'Cancel'
+- extendedWaitUntil:
+    notVisible: '(?i)search results'
+    timeout: 5000
+- assertNotVisible: 'Cancel'
+- takeScreenshot: mobile-flows-out/09-after-cancel

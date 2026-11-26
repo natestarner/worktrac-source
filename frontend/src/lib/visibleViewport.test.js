@@ -179,74 +179,19 @@ describe('revealFocusedField on the page', () => {
     expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
   });
 
-  // The Log search scrolls itself to the top on focus. A reveal that centred it undid that: up,
-  // then back down to the middle once the keyboard finished opening (TestFlight 1.4 build 34).
-  // ...and puts it there even when it is already in view: its own smooth scroll can be cut short by
-  // the keyboard's resize, leaving it mid-screen (simulator, 2026-11-25).
-  it('puts a field that asks for the top at the top even when it is already in view', () => {
+  // The Log picker's full-screen search pins its field at the top of a fixed layer sized to the
+  // visible viewport. A page reveal there would scroll the page behind the layer for nothing (#626).
+  it('leaves a field inside a keyboard layer alone, wherever it is', () => {
+    const layer = document.createElement('div');
+    layer.dataset.keyboardLayer = '';
     const input = document.createElement('input');
-    input.dataset.reveal = 'start';
-    input.style.scrollMarginTop = '150px';
-    box(input, 400, 446);
+    box(input, 900, 940);
     input.scrollIntoView = vi.fn();
-    document.body.appendChild(input);
-    input.focus();
-    revealFocusedField();
-    expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
-  });
-
-  // One simulator run in two dropped the single scroll (issued mid-resize) and the search stayed
-  // mid-screen, holding still -- so it is re-aimed every frame until it is AT its start.
-  it('re-aims a field that asks for the top until it gets there, then stops', () => {
-    const frames = [];
-    vi.stubGlobal('requestAnimationFrame', (cb) => frames.push(cb));
-    vi.stubGlobal('cancelAnimationFrame', () => {
-      frames.length = 0;
-    });
-    const input = document.createElement('input');
-    input.dataset.reveal = 'start';
-    input.style.scrollMarginTop = '150px';
-    let top = 400;
-    let dropped = 4;
-    input.getBoundingClientRect = () => ({ top, bottom: top + 46, left: 0, right: 100, width: 100, height: 46 });
-    input.scrollIntoView = vi.fn(() => {
-      if (dropped > 0) dropped -= 1;
-      else top = 150;
-    });
-    document.body.appendChild(input);
-    input.focus();
-    revealFocusedField();
-    for (let i = 0; i < 100 && frames.length; i += 1) frames.shift()();
-
-    expect(top).toBe(150);
-    expect(frames).toHaveLength(0);
-  });
-
-  it('leaves a field that asks for the top alone once it is there', () => {
-    const input = document.createElement('input');
-    input.dataset.reveal = 'start';
-    input.style.scrollMarginTop = '150px';
-    box(input, 151, 197);
-    input.scrollIntoView = vi.fn();
-    document.body.appendChild(input);
+    layer.appendChild(input);
+    document.body.appendChild(layer);
     input.focus();
     revealFocusedField();
     expect(input.scrollIntoView).not.toHaveBeenCalled();
-  });
-
-  it('sends a field that asks for it to the top, not the centre', () => {
-    const chrome = document.createElement('div');
-    chrome.className = 'app-chrome';
-    box(chrome, 0, 141);
-    document.body.appendChild(chrome);
-    const input = document.createElement('input');
-    input.dataset.reveal = 'start';
-    box(input, 820, 860);
-    input.scrollIntoView = vi.fn();
-    document.body.appendChild(input);
-    input.focus();
-    revealFocusedField();
-    expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
   });
 
   it('does nothing on the page when asked to leave the page alone', () => {

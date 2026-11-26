@@ -250,7 +250,9 @@ export default function HelpTab() {
         <p>
           Type in the search box to reach the full library. Search is forgiving about word order, so
           &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
-          to guess the exact name.
+          to guess the exact name. Tapping the search box opens search full screen, with the results
+          right under it. <strong>Cancel</strong> takes you back to your list and keeps what you typed,
+          so one more tap brings the results back.
         </p>
         <p>
           It knows other names too: &ldquo;OHP&rdquo; or &ldquo;military press&rdquo; finds{' '}

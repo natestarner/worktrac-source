@@ -276,6 +276,8 @@
      scrolling up beneath it, and stay under every scrim so a modal still dims it. */
   --z-status-bar: 15;
   --z-bottom-bar: 20;
+  /* The Log picker's full-screen search: over the chrome and the SessionBar, under toasts (40). */
+  --z-search-layer: 30;
 
   /* --- Top safe area ------------------------------------------------------
      The App Store app draws edge to edge, so the page starts BEHIND the iOS status bar (the clock,
@@ -759,13 +761,73 @@ button:not(.pressable):active:not(:disabled) {
   color: var(--color-faint);
 }
 
-/* The Log picker's search field scrolls itself to the top of the viewport on focus (see
-   ExercisePicker.jsx), aiming to stay clear of a mobile keyboard. Without this, "the top of the
-   viewport" is also exactly where the sticky .app-chrome paints, at a higher z-index -- so the
-   field lands right BEHIND the chrome instead of below it: hidden on a phone, "sliding under the
-   log banner" on a desktop click. See --sticky-chrome-clearance. */
-.exercise-search-input {
-  scroll-margin-top: var(--sticky-chrome-clearance);
+/* The Log picker's full-screen search (ExercisePicker.jsx), like iOS Mail's and Music's: tapping
+   the field lifts it, unchanged, into a fixed layer over the whole screen. The field is pinned at
+   the top, under the status bar; results scroll beneath it, inside the layer; Cancel closes it.
+   It replaced scrolling the PAGE to put the field at the top, which the App Store app's keyboard
+   kept defeating (#626: the WebView shrinks as the keyboard opens, and the scroll clamped or was
+   dropped about half the time). Nothing here asks the page to move.
+
+   Sized to the VISIBLE viewport, like Modal's scrim (lib/visibleViewport.js): in the app the
+   WebView already ends at the keyboard, and in Safari the visible part is what is above it, so the
+   last result is always reachable above the keyboard. Without visualViewport (jsdom) it is the
+   whole screen. It sits above the sticky chrome and the SessionBar (which rides on the keyboard in
+   the app) and below toasts, the PR celebration, the tour and every Modal (the preview sheet and
+   "Add your own exercise" open over it). */
+.exercise-search-layer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--visible-viewport-top, 0px);
+  height: var(--visible-viewport-height, 100%);
+  z-index: var(--z-search-layer);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  animation: fadeIn var(--dur-fast) var(--ease-out);
+}
+
+.exercise-search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  /* --safe-top is the status bar in the app (0 on the web): the layer starts behind it. */
+  padding: calc(var(--safe-top) + var(--space-3)) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.exercise-search-bar .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.exercise-search-cancel {
+  flex-shrink: 0;
+}
+
+/* The only part of the layer that scrolls. `contain` keeps a fling at either end from carrying
+   on into the page behind. */
+.exercise-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.exercise-search-results-inner {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.exercise-search-hint {
+  margin: 0 0 var(--space-5);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 /* The two screens where a 6-digit emailed code is typed (Confirm email, Reset password).
@@ -782,15 +844,6 @@ button:not(.pressable):active:not(:disabled) {
   .code-screen {
     align-items: center;
   }
-}
-
-/* Everything below the Log picker's search field while a search is running (results + "Add your
-   own exercise"). At least a screen tall, so a short result list -- one match, or none -- cannot
-   shorten the page under the field: the browser would clamp the scroll to the new end of the page
-   and the field would drop down the screen mid-typing. Whitespace at the end of the page costs
-   nothing; content stays at the top of this box. See ExercisePicker.jsx. */
-.picker-search-body {
-  min-height: calc(var(--viewport-min-height) - var(--sticky-chrome-clearance));
 }
 
 /* The Log picker's exercise chips -- the big tappable ones, not `.chip` (which is the small

@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
+import { backToPicker, dismissPrCelebration, pickExercise, tapLogSet, clearSearch } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: how a person's FIRST set of an exercise asks for its weight, across online /
@@ -22,7 +22,7 @@ async function warmCatalog(page: Page) {
     await search.fill(name);
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   }
-  await search.fill('');
+  await clearSearch(page);
 }
 
 const setRow = (page: Page, n: number) => page.getByText(`Set ${n}`, { exact: true });

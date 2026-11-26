@@ -1,5 +1,5 @@
 import { Page, expect } from '@playwright/test';
-import { logSetButton } from './support/exercises';
+import { logSetButton, clearSearch } from './support/exercises';
 import { registerHousehold } from './support/auth';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -11,7 +11,7 @@ async function warmCatalog(page: Page) {
   const search = page.getByPlaceholder('Search all exercises');
   await search.fill('Barbell Overhead Press');
   await expect(page.getByRole('button', { name: 'Barbell Overhead Press', exact: true })).toBeVisible();
-  await search.fill('');
+  await clearSearch(page);
 }
 
 forEachConnectivityMode<void>('the exercise search finds other names and muscles in any mode', {

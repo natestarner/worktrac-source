@@ -84,24 +84,4 @@ describe('jumpAndSettle', () => {
 
     expect(t.el.scrollIntoView).toHaveBeenCalledTimes(1);
   });
-
-  // The keyboard reveal's case: WebKit drops a scroll issued while the WebView resizes for the
-  // keyboard, and a dropped scroll HOLDS STILL where it started. Without `arrived`, that read as
-  // settled after three frames and the Log search stayed mid-screen (simulator, 2026-11-26).
-  it('with `arrived`, keeps re-aiming a scroll that was dropped until it lands', () => {
-    let top = 374;
-    let dropped = 5;
-    const el = {
-      scrollIntoView: vi.fn(() => {
-        if (dropped > 0) dropped -= 1;
-        else top = 146;
-      }),
-      getBoundingClientRect: () => ({ top }),
-    };
-    jumpAndSettle(el, { arrived: () => Math.abs(top - 146) <= 2, maxFrames: 60 });
-    for (let i = 0; i < 100 && frames.length; i += 1) frames.shift()();
-
-    expect(top).toBe(146);
-    expect(frames).toHaveLength(0);
-  });
 });

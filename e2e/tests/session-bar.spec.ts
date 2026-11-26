@@ -34,16 +34,27 @@ import { addExerciseToRoutine, pickExercise, prCelebration, tapLogSet } from './
 
 const sessionBar = (page: Page) => page.locator('.session-bar');
 const tabPanel = (page: Page) => page.locator('.tab-panel');
-const logSet = (page: Page) => page.getByRole('button', { name: /^(Log set|Enter a weight)/ });
 
-// A newly-registered person's Log tab is a nearly-empty picker with nothing to scroll. Searching
-// the seeded catalog fills the page with real content in normal flow -- the same technique
-// sticky-chrome.spec.ts uses for the opposite edge of the screen.
-async function fillPageWithCatalogResults(page: Page) {
-  await page.getByPlaceholder('Search all exercises').fill('press');
+// A newly-registered person's Log tab is a nearly-empty picker with nothing to scroll.
+// A tab far longer than the screen. It was the Log picker with a search typed, until search moved
+// into a full-screen layer (#626) and stopped lengthening the page; the Help handbook is long on
+// any screen.
+async function openLongTab(page: Page) {
+  await page.locator('.header-bar').getByRole('button').click();
+  await page.getByRole('menuitem', { name: 'Help' }).click();
+  await expect(page).toHaveURL(/\/app\/help/);
+  // The handbook keeps laying out after its first paint, so wait until its height holds still:
+  // measuring the bottom of a page that is still growing measures nothing.
   await expect
-    .poll(() => page.evaluate(() => document.body.scrollHeight - window.innerHeight))
-    .toBeGreaterThan(200);
+    .poll(() =>
+      page.evaluate(async () => {
+        const before = document.documentElement.scrollHeight;
+        await new Promise((r) => setTimeout(r, 300));
+        const after = document.documentElement.scrollHeight;
+        return before === after && after - window.innerHeight > 200;
+      }),
+    )
+    .toBe(true);
 }
 
 async function scrollToBottom(page: Page) {
@@ -89,15 +100,14 @@ test.describe('Session bar never covers the end of a tab', () => {
     test('leaves the end of a full-length tab above the bar', async ({ page, request }) => {
       await startASession(page, request, 'Portrait');
 
-      await page.getByRole('button', { name: '← All exercises' }).click();
-      await fillPageWithCatalogResults(page);
+      await openLongTab(page);
       await scrollToBottom(page);
 
       await expectTabContentClearsBar(page);
 
-      // And the last row is genuinely reachable, not merely un-overlapped by a rounding margin.
-      await page.getByRole('button', { name: /press/i }).last().click();
-      await expect(logSet(page)).toBeVisible();
+      // And the last control on the tab is genuinely reachable, not merely un-overlapped by a
+      // rounding margin: a trial click fails if the bar would receive it.
+      await tabPanel(page).locator('a, button').last().click({ trial: true });
     });
   });
 
@@ -109,8 +119,7 @@ test.describe('Session bar never covers the end of a tab', () => {
     test('leaves the end of a full-length tab above the bar in landscape too', async ({ page, request }) => {
       await startASession(page, request, 'Landscape');
 
-      await page.getByRole('button', { name: '← All exercises' }).click();
-      await fillPageWithCatalogResults(page);
+      await openLongTab(page);
       await scrollToBottom(page);
 
       await expectTabContentClearsBar(page);

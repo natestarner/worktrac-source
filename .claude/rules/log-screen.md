@@ -604,36 +604,49 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
-## Nothing ABOVE the picker's search field changes when a search starts
+## Search is a full-screen layer; the page under it never moves (#626)
 
-The routine quick-start block and "Or pick an exercise" stay on screen while searching. Hiding them
-(as it once did) moved the field up on the first letter typed: the page clamped to its new end and a
-re-scroll pulled it back, a visible jump down and back (2026-11-08). Everything a search changes is
-BELOW the field, inside `.picker-search-body`, whose min-height keeps a short or empty result list
-from shortening the page under the field. Pinned by `ExercisePicker.test.jsx` and
-`keyboard-scroll.spec.ts` (frame-sampled; red against the old code).
+Tapping "Search all exercises" lifts the field into `.exercise-search-layer` (`ExercisePicker.jsx`,
+index.css), like iOS Mail's and Music's search: the field pinned at the top under the safe area,
+Cancel beside it, results scrolling beneath it inside the layer. **Nothing asks the page to
+scroll.** It replaced four builds (33-36, #621/#624/#627) of scrolling the PAGE to put the field at
+the top, which the App Store app's keyboard kept defeating: `Keyboard.resize: "native"` shrinks the
+WebView (and `100vh`) as it opens, so the scroll clamped or was dropped about half the time.
+Don't bring back a focus scroll, a space-holding `min-height`, or a reveal that aims the search
+somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-reveal="start"`,
+`jumpAndSettle`'s `arrived`) was deleted with it.
 
-**The same space is held from the first TAP, and the focus scroll waits a frame for it.** Tapping
-the empty search is meant to bring the field to the top, but the space was held only while
-searching, and on a page about one screen tall the scroll clamped at 0: the field stayed where it
-was (TestFlight 1.4, 2026-11-25). `searchEngaged` holds `.picker-search-body` from the first focus
-for the rest of the visit (never dropped on blur, which would shorten the page under the person),
-and the scroll runs in `requestAnimationFrame` so that space is laid out first. Pinned by
-`keyboard-scroll.spec.ts`'s "tapping the empty search on a short page" (taps at full phone height,
-THEN shrinks the window, as the keyboard does; red against the old code by 102px).
-
-**…and the app's keyboard reveal sends it to the SAME place (`data-reveal="start"`).** In the App
-Store app, `lib/native/keyboard.js` re-checks the focused field when the keyboard finishes opening
-and centres any field not fully in view. Opening mid-way through the search's smooth scroll, it
-centred the search: up to the top, then back down to the middle (TestFlight 1.4 build 34). The
-search carries `data-reveal="start"`, and `revealOnPage` PUTS such a field at its start once the
-keyboard has settled, even when it is already in view: the search's own smooth scroll can be cut
-short by the keyboard's resize and left mid-screen (seen on the simulator), and the reveal runs
-after the keyboard's last event. Even then a single scroll was DROPPED on one simulator run in
-two (issued while the WebView was still resizing), so it is re-aimed every frame until the field is
-AT its start (`lib/jumpAndSettle.js` with `arrived`, History's mechanism; a dropped scroll holds
-still, so plain stillness is not enough). `09-search-focus-holds.yaml` gates it
-(the header above the tab bar must have scrolled away); every reveal logs `[keyboard] reveal …`.
+- **The SAME `<input>` moves into the layer.** The wrapper element only changes class and
+  attributes (`role="dialog"` while open), so React keeps the input, and with it the focus the tap
+  gave it and the keyboard. Rendering a second input in a portal would need a programmatic focus,
+  which iOS refuses to raise the keyboard for outside the tap. Playwright's
+  `getByPlaceholder('Search all exercises').fill(...)` works unchanged for the same reason.
+- **The slot holds the field's height while it is lifted out**, and everything else on the page
+  (routine block, "Or pick an exercise", chips, the page's "+ Add your own exercise") stays
+  rendered, `aria-hidden` + `inert`. So the page is exactly what it was when Cancel closes the
+  layer, and the layer's own "+ Add your own exercise" is the only one a test or a screen reader
+  finds. Searching never hides or replaces anything on the page (the 2026-11-08 first-letter jump
+  came from hiding the routine block above the field).
+- **Sized to the VISIBLE viewport** (`--visible-viewport-top` / `-height`, like Modal's scrim), so
+  the last result ends above the keyboard in the app and in Safari. `--z-search-layer` (30): over
+  the chrome and the SessionBar, under toasts, the PR celebration, the tour and every Modal (the
+  preview sheet and Add exercise open over it).
+- **`lib/visibleViewport.js` never reveals a field inside `[data-keyboard-layer]`.** The field is
+  pinned at the top by construction; a page reveal would only scroll the page behind the layer.
+- **Cancel and Escape close it and KEEP the typed text** (unlike iOS's own Cancel); choosing a
+  result closes it. The text is the person's draft, which must survive a person switch
+  (`frontend-core.md`), and the person bar is under the layer, so a clearing Cancel would make that
+  impossible. It opens **only on a tap** (focus), never by itself: a restored search waits in the
+  field and one tap brings its results back. Focus trap and body scroll lock are the shared
+  `lib/focusTrap.js` / `lib/bodyScrollLock.js`.
+- **It covers the tab bar, person bar and header**, so a spec that types a search and then goes
+  anywhere else closes it first: `support/exercises.ts`'s `closeSearch` (Cancel) or `clearSearch`
+  (empty it, then Cancel). Specs used to clear with a bare `fill('')`, which now leaves the layer up.
+- The dialog is named "Exercise search", never "Search all exercises": Maestro matches labels, and
+  `tapOn: 'Search all exercises'` would otherwise tap the middle of the whole layer.
+- Pinned by `ExercisePicker.test.jsx`, `e2e/tests/keyboard-scroll.spec.ts` (frame-sampled: the
+  page's `scrollY` and the field never move; red against the old code) and Maestro flow
+  `09-search-focus-holds.yaml` (the app's resize; logs `[keyboard] search layer open (...)`).
 
 ## The picker is BOUNDED but never REORDERED
 
