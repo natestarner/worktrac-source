@@ -48,8 +48,11 @@ name: Tapping the search opens the search screen
 - assertVisible: 'Cancel'
 # The results SCROLL, with the page, under the field (on 1.5.0 build 38/39 they could not be
 # scrolled at all in the app): one swipe with the keyboard up must move them.
+# From the middle of the screen, which is the list: `direction: UP` starts low enough to land on the
+# keyboard, where a swipe scrolls nothing (2026-11-26, run 45906414924).
 - swipe:
-    direction: UP
+    start: 50%, 50%
+    end: 50%, 15%
     duration: 800
 - takeScreenshot: mobile-flows-out/09-results-scrolled
 - assertVisible: 'Cancel'
