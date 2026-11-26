@@ -768,17 +768,18 @@ button:not(.pressable):active:not(:disabled) {
    kept defeating (#626: the WebView shrinks as the keyboard opens, and the scroll clamped or was
    dropped about half the time). Nothing here asks the page to move.
 
-   Pinned to the WINDOW with plain `inset: 0`, never sized from visualViewport in JS. It was
-   (`--visible-viewport-top` / `-height`), and that is what broke on lower (2026-11-26): in Safari
-   the layer chased every pan of the visual viewport a frame late (the flicker), and in the app a
-   stale height left it taller than the window above the keyboard, so the results never overflowed
-   and could not be scrolled (iOS 26 also reports stale visualViewport values after the keyboard).
-   In the app the window already ends at the keyboard (`Keyboard.resize: "native"`), so `inset: 0`
-   IS the space above it, kept by the browser on every frame. In Safari the keyboard covers the
-   bottom of the window instead, so the results pad their end by `--keyboard-inset`: the last
-   result scrolls above the keyboard and nothing visible moves. Safari is kept from panning in the
-   first place: the tap opens the layer before the field takes focus (ExercisePicker.jsx), and
-   lockBodyScroll's touch guard cancels every drag that would not scroll the results.
+   Sized to the WINDOW: `top: 0` and `height: var(--window-height)`, window.innerHeight in pixels
+   (lib/visibleViewport.js). Never placed from visualViewport: it was (`--visible-viewport-top` /
+   `-height`), and in Safari it chased every pan of the visual viewport a frame late (the flicker,
+   2026-11-26). Not `inset: 0` either: in the App Store app the window shrinks above the keyboard
+   (`Keyboard.resize: "native"`), and WKWebView sometimes left an `inset: 0` layer at its
+   pre-keyboard height (956px in a 609px window, on the simulator), with the end of the list under
+   the keyboard and a short list unable to scroll. A pixel value republished on every resize is a
+   style change, which forces the layout. In Safari the keyboard covers the bottom of the window
+   instead, so the results pad their end by `--keyboard-inset` while the field has focus. Safari
+   is kept from panning in the first place: the tap opens the layer before the field takes focus
+   (ExercisePicker.jsx), and lockBodyScroll's touch guard cancels every drag with nothing to
+   scroll.
 
    It sits above the sticky chrome and the SessionBar and below toasts, the PR celebration, the
    tour and every Modal (the preview sheet and "Add your own exercise" open over it). */

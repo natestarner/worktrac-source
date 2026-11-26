@@ -634,23 +634,35 @@ somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-revea
   layer, and the layer's own "+ Add your own exercise" is the only one a test or a screen reader
   finds. Searching never hides or replaces anything on the page (the 2026-11-08 first-letter jump
   came from hiding the routine block above the field).
-- **Pinned to the WINDOW with `inset: 0` -- never sized or placed from visualViewport in JS.** It
-  was sized like Modal's scrim (`--visible-viewport-top` / `-height`) and that shipped both
-  2026-11-26 bugs (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`): in
-  Safari it chased every pan a frame late (flicker), and in the app a stale height left it taller
-  than the window, so the results fit inside it and could not be scrolled. In the app the window
-  ends at the keyboard, so `inset: 0` IS the space above it; in Safari the results pad their end by
-  `--keyboard-inset` (published by `trackVisibleViewport`), so the last result scrolls above the
-  keyboard while nothing visible moves. A stale inset only adds blank space at the end. Don't
-  "unify" this with Modal's scrim: a dialog's field can be anywhere in it, this one is always at
-  the top. `--z-search-layer` (30): over the chrome and the SessionBar, under toasts, the PR
-  celebration, the tour and every Modal (the preview sheet and Add exercise open over it).
-- **Only the results scroll, and only a finger drag on them can scroll anything.**
-  `lockBodyScroll({ touchScrollOnlyIn: results })` cancels every touchmove that would not scroll
-  the results (one on the search bar, below a short list, or anywhere else). `overflow: hidden` on
-  the body does not stop iOS: with the keyboard up a drag still panned the page behind the layer.
+- **Sized to the WINDOW in pixels: `top: 0; height: var(--window-height)`** (window.innerHeight,
+  published by `trackVisibleViewport` at once on every window resize). Two shapes were tried and
+  each broke (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`):
+  - *From visualViewport* (`--visible-viewport-top` / `-height`, like Modal's scrim): in Safari it
+    chased every pan a frame late -- the flicker.
+  - *`inset: 0`*: after the App Store app's window shrank above the keyboard, WKWebView sometimes
+    kept the layer at its pre-keyboard height (956px in a 609px window, from the `[search]` lines on
+    the simulator) while `window.innerHeight` was right. The end of the list sat under the keyboard,
+    and a short list had nothing to scroll -- "it scrolls for some searches and not others".
+  A changed pixel value is a style change, which forces the layout. In Safari the window does not
+  shrink, so the results pad their end by `--keyboard-inset` **only while the field has focus**
+  (`:has(input:focus)`; iOS blurs it when the keyboard goes) -- applied always, a leftover value let
+  Brave scroll well past "+ Add your own exercise". Don't "unify" this with Modal's scrim: a
+  dialog's field can be anywhere in it, this one is always at the top. `--z-search-layer` (30): over
+  the chrome and the SessionBar, under toasts, the PR celebration, the tour and every Modal (the
+  preview sheet and Add exercise open over it).
+- **While it is open, a finger drag can scroll only a scrollable box, never the page.**
+  `lockBodyScroll({ guardTouch: true })` cancels a touchmove whose target has no `auto`/`scroll`
+  box with something to scroll between it and the body (the search bar, a short list).
+  `overflow: hidden` on the body does not stop iOS: with the keyboard up a drag still panned the
+  page behind the layer. ⚠️ **ANY scrollable box, never one named element**: the first guard allowed
+  drags only in the results, and "+ Add your own exercise" opens its dialog OVER the still-open
+  layer, so that dialog could not be scrolled at all, on the web or in the app.
   `overscroll-behavior: contain` stops the fling at the list's ends. No
   `-webkit-overflow-scrolling` (a no-op since iOS 13 that only carries old WebKit bugs).
+- **`[search]` lines are the app's evidence** (`logSearchEvidence`): geometry (window, visible
+  part, layer, results' scroll size) on every resize, and per touch the moves, how many were
+  cancelled, the scroll before/after and the layer against the window. Read them from flow 09's
+  `console-09-*.log` before theorising about the app; two theories here were wrong until they did.
 - **`lib/visibleViewport.js` never reveals a field inside `[data-keyboard-layer]`.** The field is
   pinned at the top by construction; a page reveal would only scroll the page behind the layer.
 - **Cancel and Escape close it and KEEP the typed text** (unlike iOS's own Cancel); choosing a
@@ -664,13 +676,14 @@ somewhere -- that machinery (`searchEngaged`, `.picker-search-body`, `data-revea
   (empty it, then Cancel). Specs used to clear with a bare `fill('')`, which now leaves the layer up.
 - The dialog is named "Exercise search", never "Search all exercises": Maestro matches labels, and
   `tapOn: 'Search all exercises'` would otherwise tap the middle of the whole layer.
-- Pinned by `ExercisePicker.test.jsx` (tap order, the touch guard), `e2e/tests/keyboard-scroll.spec.ts`
+- Pinned by `ExercisePicker.test.jsx` (tap order, the touch guard incl. a dialog over the layer),
+  `visibleViewport.test.js` (`--window-height`, `--keyboard-inset`), `e2e/tests/keyboard-scroll.spec.ts`
   (frame-sampled: the page's `scrollY` and the field never move; "whatever visualViewport says"
-  makes visualViewport report stale values and fails the old CSS with an 844px layer in a 420px
-  window; "by touch" fails the old code because the field took focus before the layer was up --
-  all red-first, Chromium and WebKit) and Maestro flow `09-search-focus-holds.yaml` (the app's
-  resize, and a `scrollUntilVisible` through the results: the flow passed through the 2026-11-26
-  bug because it never scrolled them; logs `[keyboard] search layer open (...)`).
+  fails the visualViewport sizing; "by touch" fails when the field takes focus before the layer is
+  up; "by finger drag" sends real touch drags through CDP and fails the results-only guard on the
+  Add exercise dialog -- all red-first) and Maestro flow `09-search-focus-holds.yaml`, which
+  `scrollUntilVisible`s through the results (it passed through the first 2026-11-26 bug because it
+  never scrolled them; its 60s timeout is for a runner that takes 9-12s per swipe).
 
 ## The picker is BOUNDED but never REORDERED
 
