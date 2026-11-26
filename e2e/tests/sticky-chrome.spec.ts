@@ -145,6 +145,9 @@ test.describe('Sticky chrome by household size', () => {
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await addPerson(page, 'Sam');
+    // Adding Sam switches to Sam, on Sam's own last tab (Log for a new person) -- a beat later.
+    // Wait for that, or the long tab is "already open" when checked and gone a moment after.
+    await expect(page).toHaveURL(/\/app\/log/);
     await openLongTab(page);
 
     await scrollToBottom(page);
