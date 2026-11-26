@@ -97,8 +97,9 @@ seconds, one day distance); `load_type` is whether a weight is expected. `'exter
   name; `ExerciseLoadTypeTest` pins the bodyweight count. V108 also made every household TIMED
   exercise `'bodyweight'` (Time always meant "added weight"); household rep exercises stayed
   `'external'`, the safe reading of "never asked".
-- **The Add exercise screen asks it in the SAME row as the measure** ("Measured in: Weight & reps ·
-  Bodyweight · Time", `EXERCISE_KIND_OPTIONS`), defaulting to Weight & reps with no guessing from
+- **The Add exercise screen asks it in the SAME question as the measure** ("Measured in: Weight &
+  reps / Bodyweight / Time", `EXERCISE_KIND_OPTIONS`, a radio row each with its examples since
+  2026-11-26: as one segmented row the three wrapped and ran together on an iPhone), defaulting to Weight & reps with no guessing from
   the name. That list is deliberately separate from `MEASURE_OPTIONS`, which also writes the
   `(Reps)`/`(Time)` duplicate suffix: Weight & reps and Bodyweight are one movement family.
 

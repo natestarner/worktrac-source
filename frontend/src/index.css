@@ -1463,7 +1463,7 @@ button.person-row {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   color: var(--color-accent-text);
@@ -2277,36 +2277,156 @@ button.person-row {
    -> secondary. The chips wear the body diagram's colour, so what is tapped here is what the About
    sheet draws: primary solid, secondary at the key's strength. Primary is also bold on a dark fill,
    so the state reads without relying on hue alone. */
-.muscle-picker-key {
-  display: flex;
-  gap: var(--space-5);
-  margin: 0 0 var(--space-1);
+/* Fixed copy, and since 2026-11-26 also the picker's colour key, so it WRAPS rather than ending in
+   an ellipsis: cut short it lost "secondary" and its swatch, the half of the key that explains the
+   lighter chips. One line on most phones; two inside the Add exercise card on a narrow one. */
+.muscle-picker-hint {
+  margin: 0 0 var(--space-2);
   color: var(--color-muted);
   font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
-.muscle-picker-key > span {
+/* The key, inline: each state's swatch sits just before the word it is the colour of. */
+.muscle-picker-hint .exercise-about-swatch {
+  display: inline-block;
+  margin-right: var(--space-1);
+  vertical-align: -1px;
+}
+
+/* AddEditExerciseModal's "Muscles worked" row: the picker folded down to one tappable summary, so
+   the form asks nothing of someone who doesn't care and shows a suggestion without its machinery.
+   The summary carries an exercise name of any length and a list of muscles, so it wraps; the
+   fixed hint's nowrap cut a long line off on every iPhone once (found 2026-11-09). */
+.muscles-field {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.muscles-field-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.muscles-field-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The small muted heading over each of the form's fields ("Measured in", "Muscles worked"). */
+.exercise-form-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-muted);
+}
+
+.muscles-field-summary {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-normal);
+}
+
+.muscles-field-summary--empty {
+  color: var(--color-muted);
+  font-weight: var(--weight-normal);
+}
+
+.muscles-field-source {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.muscles-field-action {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
+  gap: var(--space-1);
+  align-self: center;
+  color: var(--color-accent-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+/* Opened, the picker sits INSIDE the same card as the row that opened it, under a hairline, so it
+   reads as that row's contents rather than as the rest of the form. Its horizontal padding is
+   tighter than the row's so the one-line hint still fits a 320pt iPhone. */
+.muscles-field-panel {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Between "Measured in" and "Muscles worked": two separate questions, so a hairline says so. */
+.exercise-form-divider {
+  margin: 0 0 var(--space-5);
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+/* AddEditExerciseModal's "Measured in": three choices as three separate rows, each a real radio.
+   It was one segmented row, and at iPhone width "Weight & reps" could not fit a third of it, so the
+   row wrapped and the three labels ran together on the track. A row each always fits, and leaves
+   room to say what each one is for. */
+.measure-options {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-/* Fixed copy that fits one line at 375pt; if a larger text setting ever pushes it over, it ends in
-   an ellipsis rather than growing the dialog by a line. */
-.muscle-picker-hint {
-  margin: 0 0 var(--space-2);
-  overflow: hidden;
-  color: var(--color-muted);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.measure-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
 }
 
-/* "Suggested from <exercise>. Open a body area to change it." (AddEditExerciseModal) looks like the
-   hint but is NOT fixed copy: it carries an exercise name of any length, so it can never be sized to
-   one line. It wraps. Sharing the hint's nowrap cut it off on every iPhone (found 2026-11-09). */
-.muscle-picker-suggestion {
-  margin: 0 0 var(--space-2);
+.measure-option.is-selected {
+  border-color: var(--color-accent);
+  background: var(--color-subtle-bg);
+}
+
+.measure-option input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.measure-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.measure-option-title {
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.measure-option-hint {
   color: var(--color-muted);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);

@@ -313,7 +313,7 @@ export async function logHoldAt(page: Page, seconds: number, { expectPr = true }
 export async function addOwnTimedExercise(page: Page, name: string) {
   await page.getByRole('button', { name: '+ Add your own exercise' }).click();
   await page.getByPlaceholder('Exercise name').fill(name);
-  await page.getByRole('dialog').getByRole('button', { name: 'Time', exact: true }).click();
+  await page.getByRole('dialog').getByRole('radio', { name: 'Time', exact: true }).check();
   await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
 }
 
@@ -327,6 +327,6 @@ export async function openExistingViaAddOwn(page: Page, name: string, measure: '
   // "Measured in" offers Weight & reps / Bodyweight / Time; a rep exercise is the first (the
   // default, and the same movement family as Bodyweight for the duplicate check).
   const option = measure === 'Time' ? 'Time' : 'Weight & reps';
-  await page.getByRole('dialog').getByRole('button', { name: option, exact: true }).click();
+  await page.getByRole('dialog').getByRole('radio', { name: option, exact: true }).check();
   await page.getByRole('dialog').getByRole('button', { name: `Open ${name}`, exact: true }).click();
 }
