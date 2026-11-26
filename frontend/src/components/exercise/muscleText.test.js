@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aboutLabel, primaryLine } from './muscleText';
+import { aboutLabel, pickedSummary, primaryLine } from './muscleText';
 
 describe('aboutLabel', () => {
   it('names the main and helping muscles', () => {
@@ -27,5 +27,17 @@ describe('aboutLabel', () => {
 describe('primaryLine', () => {
   it('lists main muscles only, dropping codes this build does not know', () => {
     expect(primaryLine({ primary: ['quads', 'glutes', 'serratus'], secondary: ['hamstrings'] })).toBe('Quads, Glutes');
+  });
+});
+
+describe('pickedSummary', () => {
+  it('names the primary muscles, then the helpers, in the About sheet words', () => {
+    expect(pickedSummary({ primary: ['chest'], secondary: ['shoulders', 'triceps'] })).toBe('Chest · helped by Shoulders and Triceps');
+    expect(pickedSummary({ primary: ['glutes', 'quads'], secondary: [] })).toBe('Glutes and Quads');
+  });
+
+  it('reads sensibly with only helpers, and is empty with nothing picked', () => {
+    expect(pickedSummary({ primary: [], secondary: ['abs'] })).toBe('Helped by Abs');
+    expect(pickedSummary({ primary: [], secondary: [] })).toBe('');
   });
 });

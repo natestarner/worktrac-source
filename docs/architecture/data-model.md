@@ -136,12 +136,23 @@ in-app how-to videos, which share the same entry point and the same library-cura
   colour: primary is solid `--color-muscle`, secondary is that colour at `--muscle-helping-opacity`, the
   same token the About sheet's key reads, so a muscle tapped here looks the same in the About sheet
   afterwards (it was the one place muscles still showed in the orange accent).
+- **On Add exercise the picker starts folded to one row** (`AddEditExerciseModal`'s
+  `MusclesField`, 2026-11-26): "Muscles worked" over a summary in the About sheet's words
+  (`muscleText.js#pickedSummary`: "Chest · helped by Triceps"), "Not set (optional)", or the
+  suggestion with "Suggested from <exercise>". Tapping it opens the picker inside the same card,
+  under a hairline, so it reads as that row's contents (a first cut opened it below the card and it
+  read as the rest of the form); the chips and their taps are unchanged. A divider separates it from
+  "Measured in" above. The row's accessible name is just "Muscles worked" and the summary is
+  its description. The picker's key is folded into its hint line (a swatch beside "primary" and
+  "secondary"), in Customize too.
 - **The app says "primary" and "secondary"** (2026-11-08), matching the data model's own
   `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first, and so did the CSV
   columns (now `Primary Muscles` / `Secondary Muscles`); they were renamed outright, with no
   fallback for the old names, because nobody had used them yet. The picker's hint is one fixed line
-  ("Tap once for primary, twice for secondary."), not a running commentary on the
-  last tap: the chips' colours already show that, and the line must not wrap at 375pt.
+  ("Tap once ● primary · twice ● secondary", the swatches being the colour key), not a running
+  commentary on the last tap: the chips' colours already show that. It must fit one line inside
+  Add exercise's card at 375pt (251px there); the longer "Tap once for primary, twice for
+  secondary." missed by 2px and wrapped (2026-11-26).
 - **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.
   Same "who may" as rename (the creator or the owner; `EDIT_OWN_SHARED_RESOURCE` + the service
   check, pinned in `MemberPermissionsTest` and verified red), but without rename's "nobody else is
