@@ -22,6 +22,8 @@
 // the keyboard (`Keyboard.resize: "native"`), so the visual viewport simply equals the window and
 // the properties describe the same box `inset: 0` already did.
 
+import { jumpAndSettle } from './jumpAndSettle';
+
 const FIELD = 'input, textarea, select, [contenteditable="true"]';
 // Breathing room kept between a revealed field and whatever edge it was revealed past, so its
 // focus ring (drawn outside the border) is not clipped by that edge.
@@ -110,6 +112,9 @@ function revealInPanel(panel, el) {
   else if (rect.bottom > bottom) panel.scrollTop += rect.bottom - bottom;
 }
 
+// The settle loop a `data-reveal="start"` reveal is running, if any (see revealOnPage).
+let cancelPageSettle = null;
+
 function revealOnPage(el) {
   const rect = el.getBoundingClientRect();
   const band = visibleBand();
@@ -132,10 +137,16 @@ function revealOnPage(el) {
   // does nothing visible.
   if (el.dataset?.reveal === 'start') {
     const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-    const target = band.top + margin;
-    if (Math.abs(rect.top - target) <= 2) return;
-    console.info(`[keyboard] reveal ${el.getAttribute('placeholder') ?? el.id ?? el.tagName} to its start (field ${Math.round(rect.top)}, target ${Math.round(target)})`);
-    el.scrollIntoView({ block: 'start' });
+    const targetTop = () => visibleBand().top + margin;
+    const arrived = () => Math.abs(el.getBoundingClientRect().top - targetTop()) <= 2;
+    if (arrived()) return;
+    console.info(`[keyboard] reveal ${el.getAttribute('placeholder') ?? el.id ?? el.tagName} to its start (field ${Math.round(rect.top)}, target ${Math.round(targetTop())})`);
+    // Re-aimed every frame until it is AT its start (lib/jumpAndSettle.js, History's mechanism): a
+    // single scrollIntoView here was simply dropped on one simulator run in two -- issued while the
+    // WebView was still resizing for the keyboard -- and the search stayed mid-screen. ~1s budget,
+    // and it stops the moment the person scrolls, taps or types. A newer reveal replaces it.
+    cancelPageSettle?.();
+    cancelPageSettle = jumpAndSettle(el, { arrived, maxFrames: 60 });
     return;
   }
 

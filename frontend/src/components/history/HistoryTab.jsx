@@ -17,7 +17,7 @@ import { eachDay, formatDateRangeLabel, normalizeRange, startOfMonth, todayStr }
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
 import PullToRefresh from './PullToRefresh';
-import { jumpAndSettle } from './jumpAndSettle';
+import { jumpAndSettle } from '../../lib/jumpAndSettle';
 import { useGrowingList } from './useGrowingList';
 import { DEFAULT_ROW_WIDTH, estimatedSessionBlockHeight } from './blockHeightEstimate';
 import BackLink from '../shared/BackLink';

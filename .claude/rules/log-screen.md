@@ -629,7 +629,10 @@ centred the search: up to the top, then back down to the middle (TestFlight 1.4 
 search carries `data-reveal="start"`, and `revealOnPage` PUTS such a field at its start once the
 keyboard has settled, even when it is already in view: the search's own smooth scroll can be cut
 short by the keyboard's resize and left mid-screen (seen on the simulator), and the reveal runs
-after the keyboard's last event, so nothing cuts it short. `09-search-focus-holds.yaml` gates it
+after the keyboard's last event. Even then a single scroll was DROPPED on one simulator run in
+two (issued while the WebView was still resizing), so it is re-aimed every frame until the field is
+AT its start (`lib/jumpAndSettle.js` with `arrived`, History's mechanism; a dropped scroll holds
+still, so plain stillness is not enough). `09-search-focus-holds.yaml` gates it
 (the header above the tab bar must have scrolled away); every reveal logs `[keyboard] reveal …`.
 
 ## The picker is BOUNDED but never REORDERED
