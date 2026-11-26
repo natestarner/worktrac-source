@@ -2261,11 +2261,6 @@ button.person-row {
   cursor: pointer;
 }
 
-.muscles-field-toggle[aria-expanded='true'] {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
 .muscles-field-text {
   display: flex;
   flex: 1;
@@ -2309,11 +2304,10 @@ button.person-row {
   font-weight: var(--weight-semibold);
 }
 
+/* Unboxed, at the form's full width: the picker's one-line hint is sized to that width, and a
+   box's padding cut it short on a 375pt iPhone. */
 .muscles-field-panel {
-  padding: var(--space-3) var(--space-4) var(--space-1);
-  border: 1px solid var(--color-border);
-  border-top: none;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding-top: var(--space-3);
 }
 
 /* AddEditExerciseModal's "Measured in": three choices as three separate rows, each a real radio.
