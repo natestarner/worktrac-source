@@ -99,7 +99,7 @@ export async function tapLogSet(page: Page) {
 // `selectedExerciseId` is null -- so the tab link leaves you on the exercise you were already on.
 export async function backToPicker(page: Page) {
   await page.getByRole('button', { name: /All exercises/ }).click();
-  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  await expect(searchTrigger(page)).toBeVisible();
 }
 
 // Create a custom exercise via the always-present "+ Add your own exercise" button (on the Log
