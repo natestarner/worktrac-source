@@ -255,7 +255,7 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
       expect(screen.getByText(/sign in to that account\. To subscribe here, use a different Apple ID/)).toBeInTheDocument();
     });
 
-    it('also when the store hands back the other household's purchase, instead of "Purchase received"', async () => {
+    it(`also when the store hands back the other household's purchase, instead of "Purchase received"`, async () => {
       prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.month', accountToken: 'token-new' });
       purchase.mockResolvedValue(PURCHASED);
       syncStorePurchases.mockResolvedValue({ plan: 'FREE' });
