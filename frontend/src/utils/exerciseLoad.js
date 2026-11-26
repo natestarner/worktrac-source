@@ -35,8 +35,9 @@ export function weightLabel(loadType, unit) {
   return isBodyweightLoad(loadType) ? `Added (${unit})` : `Weight (${unit})`;
 }
 
-// "Measured in" on Add exercise and in Customize: ONE row of three choices standing for the two
-// axes together, so the form gains no second question. Defaults to Weight & reps, with no guessing
+// "Measured in" on Add exercise and in Customize: ONE choice of three standing for the two axes
+// together, so the form gains no second question. `hint` is the examples line under each option on
+// Add exercise (a row each there); Customize's two-way toggle shows labels only. Defaults to Weight & reps, with no guessing
 // from the name (decided 2026-11-24: a wrong guess is worse than a predictable default, and most
 // custom exercises are the gym's odd machine).
 //
@@ -44,9 +45,9 @@ export function weightLabel(loadType, unit) {
 // "(Reps)" / "(Time)" suffix that tells two same-named exercises apart, and Weight & reps vs
 // Bodyweight are the SAME movement family, never a reason for a second exercise.
 export const EXERCISE_KIND_OPTIONS = [
-  { label: 'Weight & reps', value: 'weight' },
-  { label: 'Bodyweight', value: 'bodyweight' },
-  { label: 'Time', value: 'time' },
+  { label: 'Weight & reps', value: 'weight', hint: 'Barbell, dumbbells, a machine' },
+  { label: 'Bodyweight', value: 'bodyweight', hint: 'Pull-ups, push-ups, dips' },
+  { label: 'Time', value: 'time', hint: 'Planks, wall sits, dead hangs' },
 ];
 
 export const DEFAULT_EXERCISE_KIND = 'weight';

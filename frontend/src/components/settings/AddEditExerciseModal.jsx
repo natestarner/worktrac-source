@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { addExercise, updateExercise, favoriteExercise } from '../../api/exercises';
 import { queryKeys } from '../../api/queryKeys';
@@ -14,14 +14,107 @@ import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
 import Modal from '../shared/Modal';
-import SegmentedToggle from '../shared/SegmentedToggle';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
-import SectionLabel from '../shared/SectionLabel';
 import MusclePicker from '../exercise/MusclePicker';
+import { pickedSummary } from '../exercise/muscleText';
+import { IconChevronDown } from '../shared/icons';
 import { suggestMuscles } from '../../utils/muscles';
 
 const NO_MUSCLES = { primary: [], secondary: [] };
+
+// "Measured in": a row per choice, each a native radio, so the three read as three separate options
+// at any phone width (as one segmented row they wrapped and ran together on an iPhone). The radio's
+// name is just the label ("Time"); the examples line is its description, so a selector by name and a
+// screen reader both get the short word, and the hint is still read after it.
+function MeasureChooser({ value, onChange }) {
+  const idBase = useId();
+  return (
+    <div role="radiogroup" aria-labelledby={`${idBase}-label`} style={{ marginBottom: 'var(--space-5)' }}>
+      <div id={`${idBase}-label`} className="exercise-form-label" style={{ marginBottom: 'var(--space-2)' }}>
+        Measured in
+      </div>
+      <div className="measure-options">
+        {EXERCISE_KIND_OPTIONS.map((opt) => {
+          const selected = opt.value === value;
+          const titleId = `${idBase}-${opt.value}-title`;
+          const hintId = `${idBase}-${opt.value}-hint`;
+          return (
+            <label key={opt.value} className={`measure-option pressable${selected ? ' is-selected' : ''}`}>
+              <input
+                type="radio"
+                name={`${idBase}-measure`}
+                value={opt.value}
+                checked={selected}
+                onChange={() => onChange(opt.value)}
+                aria-labelledby={titleId}
+                aria-describedby={hintId}
+              />
+              <span className="measure-option-text">
+                <span id={titleId} className="measure-option-title">
+                  {opt.label}
+                </span>
+                <span id={hintId} className="measure-option-hint">
+                  {opt.hint}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// "Muscles worked", folded to one row that says what is set; tapping it opens the picker beneath.
+// Most people take the suggestion or skip the question, so the 22 chips, the key and the body areas
+// stay out of the way until somebody asks for them. The row's NAME is just "Muscles worked" (a stable
+// handle, and the visible heading); what is set is its description, so a screen reader hears both.
+function MusclesField({ value, onChange, suggestedFrom }) {
+  const [open, setOpen] = useState(false);
+  const idBase = useId();
+  const summary = pickedSummary(value);
+  const panelId = `${idBase}-panel`;
+  return (
+    <div style={{ marginBottom: 'var(--space-5)' }}>
+      <button
+        type="button"
+        className="muscles-field-toggle pressable"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        aria-labelledby={`${idBase}-title`}
+        aria-describedby={`${idBase}-summary${suggestedFrom ? ` ${idBase}-source` : ''}`}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <span className="muscles-field-text">
+          <span id={`${idBase}-title`} className="exercise-form-label">
+            Muscles worked
+          </span>
+          <span
+            id={`${idBase}-summary`}
+            className={`muscles-field-summary${summary ? '' : ' muscles-field-summary--empty'}`}
+          >
+            {summary || 'Not set (optional)'}
+          </span>
+          {suggestedFrom && (
+            <span id={`${idBase}-source`} className="muscles-field-source">
+              Suggested from {suggestedFrom}
+            </span>
+          )}
+        </span>
+        <span className="muscles-field-action" aria-hidden="true">
+          {open ? 'Done' : 'Edit'}
+          <IconChevronDown size={16} className={`muscle-group-chevron${open ? ' muscle-group-chevron--open' : ''}`} />
+        </span>
+      </button>
+      {open && (
+        <div id={panelId} className="muscles-field-panel">
+          <MusclePicker value={value} onChange={onChange} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Optimistically drop a just-created (offline) exercise into the shared catalog and this person's
 // picker list, so it's selectable and loggable immediately -- before its create has synced. Keyed by
@@ -304,33 +397,18 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       )}
 
       {/* Create-only here; Customize changes Weight & reps <-> Bodyweight later, but never to or
-          from Time (an exercise's measure is fixed once sets exist). Three options, one line -- the
-          same row that used to offer Reps / Time, so the form asks nothing new. */}
-      {!isEditing && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-muted)', marginBottom: 8 }}>
-            Measured in
-          </div>
-          <SegmentedToggle
-            ariaLabel="Measured in"
-            fill
-            value={kind}
-            onChange={setKind}
-            options={EXERCISE_KIND_OPTIONS}
-          />
-        </div>
-      )}
+          from Time (an exercise's measure is fixed once sets exist). */}
+      {!isEditing && <MeasureChooser value={kind} onChange={setKind} />}
 
       {/* Optional, and only for a genuinely new exercise: one that already exists opens instead,
-          and keeps the muscles it has. */}
+          and keeps the muscles it has. "Suggested from" shows only while the suggestion is what is
+          set; once a chip is tapped the choice is theirs. */}
       {!isEditing && !openTarget && (
-        <div style={{ marginBottom: 'var(--space-5)' }}>
-          <SectionLabel>Muscles worked (optional)</SectionLabel>
-          {chosenMuscles === null && suggestion && (
-            <p className="muscle-picker-suggestion">Suggested from {suggestion.from}. Open a body area to change it.</p>
-          )}
-          <MusclePicker value={muscles} onChange={setChosenMuscles} />
-        </div>
+        <MusclesField
+          value={muscles}
+          onChange={setChosenMuscles}
+          suggestedFrom={chosenMuscles === null && suggestion ? suggestion.from : null}
+        />
       )}
 
       {isEditing && (

@@ -11,7 +11,7 @@ import { IconChevronDown } from '../shared/icons';
 //
 // Colours are the body diagram's own (--color-muscle): primary is solid, secondary is that colour at
 // the About sheet key's strength, so a muscle tapped here looks the same in the About sheet afterwards.
-// The key above the rows is that sheet's swatches. Not colour alone: each chip's accessible name says
+// The hint line above the rows carries that sheet's swatches as its key. Not colour alone: each chip's accessible name says
 // its state ("Chest: primary") and primary is bold on a dark fill. The hint under the key is fixed:
 // it says how tapping works once, and the chips themselves show what each tap did.
 //
@@ -53,17 +53,15 @@ export default function MusclePicker({ value, onChange, disabled = false }) {
 
   return (
     <div className="muscle-picker">
-      <div className="muscle-picker-key" aria-hidden="true">
-        <span>
-          <span className="exercise-about-swatch" />
-          Primary
-        </span>
-        <span>
-          <span className="exercise-about-swatch exercise-about-swatch--secondary" />
-          Secondary
-        </span>
-      </div>
-      <p className="muscle-picker-hint">{PICKER_HINT}</p>
+      {/* The key and the hint are one line: each state's swatch sits beside the word for it, so the
+          picker says how it works once instead of as a key row plus a sentence. The text nodes are
+          PICKER_HINT exactly (the swatches are empty and hidden), so it reads the same to a screen
+          reader and to getByText. */}
+      <p className="muscle-picker-hint">
+        Tap once for <span className="exercise-about-swatch" aria-hidden="true" />
+        primary, twice for <span className="exercise-about-swatch exercise-about-swatch--secondary" aria-hidden="true" />
+        secondary.
+      </p>
       <div className="muscle-picker-groups" role="group" aria-label="Muscles worked">
         {MUSCLE_GROUPS.map((group, i) => {
           const isOpen = open.has(group.name);

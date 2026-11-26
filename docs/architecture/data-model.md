@@ -136,6 +136,13 @@ in-app how-to videos, which share the same entry point and the same library-cura
   colour: primary is solid `--color-muscle`, secondary is that colour at `--muscle-helping-opacity`, the
   same token the About sheet's key reads, so a muscle tapped here looks the same in the About sheet
   afterwards (it was the one place muscles still showed in the orange accent).
+- **On Add exercise the picker starts folded to one row** (`AddEditExerciseModal`'s
+  `MusclesField`, 2026-11-26): "Muscles worked" over a summary in the About sheet's words
+  (`muscleText.js#pickedSummary`: "Chest · helped by Triceps"), "Not set (optional)", or the
+  suggestion with "Suggested from <exercise>". Tapping it opens the picker beneath; the chips and
+  their taps are unchanged. The row's accessible name is just "Muscles worked" and the summary is
+  its description. The picker's key is folded into its hint line (a swatch beside "primary" and
+  "secondary"), in Customize too.
 - **The app says "primary" and "secondary"** (2026-11-08), matching the data model's own
   `primaryMuscles` / `secondaryMuscles`. It said "main" and "helping" at first, and so did the CSV
   columns (now `Primary Muscles` / `Secondary Muscles`); they were renamed outright, with no

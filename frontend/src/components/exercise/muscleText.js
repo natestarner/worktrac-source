@@ -25,3 +25,15 @@ export function aboutLabel({ primary, secondary }) {
   const helperPart = helpers.length > 0 ? `, helped by ${sentenceList(helpers)}` : '';
   return `About this exercise: works ${sentenceList(main)}${helperPart}`;
 }
+
+// The Add exercise form's one-line summary of what is picked, so the picker can stay folded:
+// "Chest and Triceps · helped by Shoulders". The About sheet's own words ("works", "helped by"),
+// so the form and the sheet describe one exercise the same way. Empty when nothing is picked.
+export function pickedSummary({ primary, secondary }) {
+  const main = joinNames(primary);
+  const helpers = joinNames(secondary);
+  if (main.length === 0 && helpers.length === 0) return '';
+  if (main.length === 0) return `Helped by ${sentenceList(helpers)}`;
+  const helperPart = helpers.length > 0 ? ` · helped by ${sentenceList(helpers)}` : '';
+  return `${sentenceList(main)}${helperPart}`;
+}
