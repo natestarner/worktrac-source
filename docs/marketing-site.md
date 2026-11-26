@@ -362,17 +362,52 @@ markup declares, so nothing is resampled. The app's layout genuinely differs at 
 log screen goes two-column on the tablet), and the CSS bezel takes its shape from the image, so a
 crop of some other screen would show as the wrong device (`.claude/rules/marketing.md`).
 
-The bezels themselves are **pure CSS** (`.device` in `styles.css`), with no chrome images to keep
-in sync. The phone frame adds a **status-bar band** above the screenshot, in the app's own header
-colour, for the dynamic island to sit in: a browser capture starts at the page content. The offline
-phone's band is the banner's colour instead (`.device--offline`), since that screen opens on the
-banner. The household clip and the offline phone stand alone in their columns with
-`.device--solo`; the clip paints its band into the video and takes `.device--clip` to drop the CSS
-one.
+The bezels themselves are **pure CSS**, with no chrome images to keep in sync. Every phone on the
+page (the hero in the phone layout, the household clip, the offline screen) is ONE frame,
+`.device--iphone`: real iPhone proportions, a drawn Dynamic Island and status bar (9:41, signal,
+Wi-Fi, battery; a browser capture starts below where they would be), a dark titanium edge, and the
+tilt Nate picked in Rotato (x -15, y -20, z -4, 2026-11-25). The old section frame, with small
+fixed corners and a thick border, read as an Android phone. The hero's iPad is the same frame
+re-proportioned at 901px and up. The offline phone's status band is the banner's colour
+(`.device--offline`, white text in dark mode), since that screen opens on the banner. The clip and
+the offline phone stand alone in their columns with `.device--solo`, which brings its own
+perspective; the clip sits LEFT of its words, so `.device--turn-right` mirrors its turn, and it
+paints its band into the video and takes `.device--clip` to drop the CSS one.
 
-Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px is
-unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being
-sold.
+Since 2026-11-25 the hero's device sits on a photo (below).
+
+## The photo hero and the stock photos
+
+Since 2026-11-25 the homepage carries three licensed Adobe Stock photos (`marketing/assets/photos/`):
+the hero, a household photo leading into "Everyone's in the huddle", and the closing band's
+background. They are the one exception to "every image comes from the demo household", and they
+are photos of people, not of the app: no app screen is ever composited into them except the hero
+device, which is the real capture in its CSS bezel (not Apple's bezels: their license covers the
+App Store listing only).
+
+**The hero device covers the dad's face, at every screen size.** That is the design: the boy is the
+hero, and the app stands where the parent would. It cannot be done with `background-size: cover`
+or `object-fit: cover`, because those crop the photo by the viewport's shape while the phone is
+placed by the page's, so the two drift apart (the first mockup covered his face at 1440px only).
+Instead `.hero__photo` is a size container and `.hero__stage` is the photo at its own 3:2 shape,
+scaled to cover it and slid to a focal point. The device sits in an unclipped twin of that stage
+(`.hero__stage--over`), so it is placed in percentages of the photo but is a layer on top of it,
+never cut off by its edges. Desktop shows the iPad capture in a tablet frame, big (from just past
+the boy's face to the photo's right edge), with the words on the left over a scrim; at 900px and
+below it becomes the iPhone capture in a phone frame (one `<picture>`, so only one is downloaded), and
+the order is headline and lead, then the photo with the iPhone hanging below its bottom edge, then
+the buttons (Nate picked this on 2026-11-25 over photo-first, which left the headline at the bottom
+of the first screen, and words-first).
+
+Two layouts were tried and dropped on 2026-11-25: the device clipped inside the photo (read as
+pasted into the scene, and too small), and the photo as an inset card beside the words (Nate:
+"the previous version was way better"; the hero photo stays full screen).
+The hero's two ways in are Start free and the App Store; Plus is asked for on its pricing card.
+
+`landing.spec.ts` ("the hero device covers the dad's face") hit-tests his face (covered), the boy's
+face and the headline (both clear) at 18 real viewport sizes, 320 x 568 to 3440 x 1440. If
+`hero-row.jpg` is ever replaced, re-measure both face boxes there and the device's `left`/`top` in
+`styles.css` together.
 
 ## The shop section (merch)
 
