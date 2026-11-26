@@ -195,6 +195,33 @@ describe('revealFocusedField on the page', () => {
     expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
   });
 
+  // One simulator run in two dropped the single scroll (issued mid-resize) and the search stayed
+  // mid-screen, holding still -- so it is re-aimed every frame until it is AT its start.
+  it('re-aims a field that asks for the top until it gets there, then stops', () => {
+    const frames = [];
+    vi.stubGlobal('requestAnimationFrame', (cb) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      frames.length = 0;
+    });
+    const input = document.createElement('input');
+    input.dataset.reveal = 'start';
+    input.style.scrollMarginTop = '150px';
+    let top = 400;
+    let dropped = 4;
+    input.getBoundingClientRect = () => ({ top, bottom: top + 46, left: 0, right: 100, width: 100, height: 46 });
+    input.scrollIntoView = vi.fn(() => {
+      if (dropped > 0) dropped -= 1;
+      else top = 150;
+    });
+    document.body.appendChild(input);
+    input.focus();
+    revealFocusedField();
+    for (let i = 0; i < 100 && frames.length; i += 1) frames.shift()();
+
+    expect(top).toBe(150);
+    expect(frames).toHaveLength(0);
+  });
+
   it('leaves a field that asks for the top alone once it is there', () => {
     const input = document.createElement('input');
     input.dataset.reveal = 'start';
