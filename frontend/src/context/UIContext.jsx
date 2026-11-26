@@ -27,6 +27,14 @@ export function UIProvider({ children }) {
   // { stepIndex }. See ProductTour.jsx for the overlay this drives and tourSteps.js for what a
   // stepIndex resolves to.
   const [tour, setTour] = useState(null);
+  // Whether the Log tab's exercise search screen is up (ExerciseSearchScreen.jsx). Here, not in
+  // LogTab, because AppShell reads it too: the chrome (header, person bar, tab bar, SessionBar) is
+  // hidden while searching, and that must happen in the SAME render as the screen appearing -- the
+  // tap focuses the field straight after, and nothing may move once it has focus (see
+  // docs/architecture/exercise-search-history.md). Not per person: the person bar is hidden while
+  // it is open, so nobody can switch away mid-search. Not persisted: a reload lands on the Log page,
+  // because only a tap can raise the keyboard.
+  const [exerciseSearchOpen, setExerciseSearchOpen] = useState(false);
 
   // Suppresses the first-run welcome modal while a brand-new household is parked on the billing
   // screen, having arrived from marketing's "Go Plus". A modal interrupting someone who came here
@@ -341,6 +349,8 @@ export function UIProvider({ children }) {
       nextTourStep,
       prevTourStep,
       endTour,
+      exerciseSearchOpen,
+      setExerciseSearchOpen,
       onboardingDeferred,
       deferOnboarding,
       releaseOnboarding,
@@ -356,6 +366,7 @@ export function UIProvider({ children }) {
       confirmDialog,
       celebration,
       tour,
+      exerciseSearchOpen,
       onboardingDeferred,
       restTimers,
       holdTimers,

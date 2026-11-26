@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LogTab from './LogTab';
 import { renderWithQuery } from '../../test/queryWrapper';
@@ -22,6 +23,8 @@ import { endWorkout } from '../../api/sessions';
 // own behavior is covered elsewhere -- this test only exercises LogTab's routine card.
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
+// The search screen's UIContext pair (LogTab opens and closes it); closed unless a test says so.
+const SEARCH_UI = { exerciseSearchOpen: false, setExerciseSearchOpen: vi.fn() };
 vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
 vi.mock('../../hooks/usePersonExercises', () => ({ usePersonExercises: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
@@ -39,10 +42,11 @@ vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
 vi.mock('../../hooks/useSessionEntries', () => ({ useSessionEntries: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('./ExercisePicker', () => ({
-  default: ({ onAddExercise }) => (
+  default: ({ onAddExercise, onOpenSearch }) => (
     <div>
       exercise-picker
       <button onClick={() => onAddExercise('Zercher Squat')}>mock-add-own</button>
+      <button onClick={onOpenSearch}>mock-open-search</button>
     </div>
   ),
 }));
@@ -96,6 +100,7 @@ function baseAppState(overrides = {}) {
     forgetRoutineStepsLogged: vi.fn(),
     doneEditingSession: vi.fn(),
     updateEditingSession: vi.fn(),
+    exerciseSearch: '',
     setExerciseSearch: vi.fn(),
     // Passed down to SessionSummary's onChanged: removing an entry lowers that exercise's
     // session-volume record, so the latch holding the last celebrated value has to be re-armed.
@@ -107,7 +112,7 @@ function baseAppState(overrides = {}) {
 describe('LogTab routine nav button placement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useUI.mockReturnValue({ showToast: vi.fn() });
+    useUI.mockReturnValue({ ...SEARCH_UI, showToast: vi.fn() });
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -192,7 +197,7 @@ describe('LogTab routine nav button placement', () => {
       useAppState.mockReturnValue(appState);
       useSessionEntries.mockReturnValue([pressSet]);
       const showToast = vi.fn();
-      useUI.mockReturnValue({ showToast });
+      useUI.mockReturnValue({ ...SEARCH_UI, showToast });
       render(<MemoryRouter><LogTab /></MemoryRouter>);
 
       fireEvent.click(screen.getByRole('button', { name: 'Finish routine' }));
@@ -205,7 +210,7 @@ describe('LogTab routine nav button placement', () => {
       useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 2, routineIndex: 1, routineLoggedSteps: [0, 1] }));
       useSessionEntries.mockReturnValue([benchSet, pressSet]);
       const showToast = vi.fn();
-      useUI.mockReturnValue({ showToast });
+      useUI.mockReturnValue({ ...SEARCH_UI, showToast });
       render(<MemoryRouter><LogTab /></MemoryRouter>);
 
       fireEvent.click(screen.getByRole('button', { name: 'Finish routine' }));
@@ -257,7 +262,7 @@ describe('LogTab routine nav button placement', () => {
       const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
       useAppState.mockReturnValue(appState);
       const showToast = vi.fn();
-      useUI.mockReturnValue({ showToast });
+      useUI.mockReturnValue({ ...SEARCH_UI, showToast });
       render(<MemoryRouter><LogTab /></MemoryRouter>);
 
       fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
@@ -430,7 +435,7 @@ describe('LogTab exercise-screen links', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useUI.mockReturnValue({ showToast: vi.fn() });
+    useUI.mockReturnValue({ ...SEARCH_UI, showToast: vi.fn() });
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -495,7 +500,7 @@ describe('LogTab "create a routine" banner', () => {
     vi.clearAllMocks();
     localStorage.clear();
     useAppState.mockReturnValue(baseAppState({ selectedExerciseId: null, activeRoutineId: null }));
-    useUI.mockReturnValue({ showToast: vi.fn() });
+    useUI.mockReturnValue({ ...SEARCH_UI, showToast: vi.fn() });
     useExercises.mockReturnValue({ exercises: [], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -558,7 +563,7 @@ describe('opening a newly created exercise', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearExerciseIdMap();
-    useUI.mockReturnValue({ showToast: vi.fn() });
+    useUI.mockReturnValue({ ...SEARCH_UI, showToast: vi.fn() });
     useExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: neverSettles() });
@@ -607,5 +612,146 @@ describe('opening a newly created exercise', () => {
     renderWithQuery(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.selectExercise).not.toHaveBeenCalled();
+  });
+});
+
+// The search is its own SCREEN (ExerciseSearchScreen), opened from the Log page's search "field".
+// What makes it hold on an iPhone is the ORDER inside the tap: the screen renders, the page goes
+// to the top, and the screen's field is focused -- all before the click handler returns, so iOS
+// raises the keyboard for a field that never moves. docs/architecture/exercise-search-history.md.
+describe('LogTab exercise search screen', () => {
+  let scrollY;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // The real thing is UIContext state; a hook-backed stand-in keeps it in LogTab, which also
+    // proves LogTab is NOT remounted when the route switches between /app/log and /app/log/search
+    // (a remount would drop this state and the test would see the screen vanish).
+    useUI.mockImplementation(function useSearchUI() {
+      const [open, setOpen] = useState(false);
+      return { showToast: vi.fn(), exerciseSearchOpen: open, setExerciseSearchOpen: setOpen };
+    });
+    useAppState.mockReturnValue(baseAppState({ activeRoutineId: null, exerciseSearch: 'bench' }));
+    useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }], loading: false });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false, fetchedAfterMount: true });
+    useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
+    useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
+    useSessionEntries.mockReturnValue([]);
+    scrollY = 640;
+    vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => scrollY);
+    vi.spyOn(window, 'scrollTo').mockImplementation((x, y) => {
+      scrollY = y;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Both routes render LogTab, as App.jsx does; the probe reports where the router is.
+  function renderLog(path = '/app/log') {
+    const where = { pathname: null, navigate: null };
+    function Probe() {
+      where.pathname = useLocation().pathname;
+      where.navigate = useNavigate();
+      return null;
+    }
+    const element = (
+      <>
+        <LogTab />
+        <Probe />
+      </>
+    );
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/app/log" element={element} />
+          <Route path="/app/log/search" element={element} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    return where;
+  }
+
+  function searchScreen() {
+    return screen.queryByRole('region', { name: 'Exercise search' });
+  }
+
+  it('a tap renders the screen, scrolls to the top and focuses its field, all inside the click', async () => {
+    const where = renderLog();
+    const page = screen.getByText('exercise-picker').closest('[hidden], div');
+
+    let duringClick;
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    // fireEvent.click returns after the handler: nothing has been allowed to render since.
+    duringClick = {
+      screen: searchScreen(),
+      focused: document.activeElement,
+      scrolledTo: scrollY,
+    };
+
+    expect(duringClick.screen, 'the screen rendered inside the click').not.toBeNull();
+    expect(duringClick.focused).toBe(within(duringClick.screen).getByPlaceholderText('Search all exercises'));
+    expect(duringClick.focused).toHaveValue('bench');
+    expect(duringClick.scrolledTo, 'the page is at the top, where the screen is').toBe(0);
+    // The Log page is still there, hidden: lists keep their state for the way back.
+    expect(screen.getByText('exercise-picker')).not.toBeVisible();
+    expect(page).toBeInTheDocument();
+    // The route follows, so Back can close it.
+    await waitFor(() => expect(where.pathname).toBe('/app/log/search'));
+    expect(searchScreen(), 'switching route did not remount LogTab').not.toBeNull();
+  });
+
+  it('Cancel goes back: the Log page is shown again where it was, with the draft kept', async () => {
+    const where = renderLog();
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    await waitFor(() => expect(where.pathname).toBe('/app/log/search'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(where.pathname).toBe('/app/log'));
+    await waitFor(() => expect(searchScreen()).toBeNull());
+    expect(screen.getByText('exercise-picker')).toBeVisible();
+    expect(scrollY, 'back where the Log page was').toBe(640);
+    expect(useAppState().setExerciseSearch).not.toHaveBeenCalledWith('');
+  });
+
+  it('the browser’s Back closes it the same way', async () => {
+    const where = renderLog();
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    await waitFor(() => expect(where.pathname).toBe('/app/log/search'));
+
+    act(() => where.navigate(-1));
+
+    await waitFor(() => expect(searchScreen()).toBeNull());
+    expect(where.pathname).toBe('/app/log');
+    expect(screen.getByText('exercise-picker')).toBeVisible();
+  });
+
+  // Only a tap can raise the keyboard, so the screen never opens by itself: a reload or a restored
+  // lastTab on the search route lands on the Log page.
+  it('arriving on the search route without a tap lands on the Log page', async () => {
+    const where = renderLog('/app/log/search');
+    await waitFor(() => expect(where.pathname).toBe('/app/log'));
+    expect(searchScreen()).toBeNull();
+    expect(screen.getByText('exercise-picker')).toBeVisible();
+  });
+
+  it('"+ Add your own exercise" on the screen opens the Add dialog over it, from what was typed', async () => {
+    renderWithQuery(
+      <MemoryRouter initialEntries={['/app/log']}>
+        <Routes>
+          <Route path="/app/log" element={<LogTab />} />
+          <Route path="/app/log/search" element={<LogTab />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    fireEvent.click(within(searchScreen()).getByRole('button', { name: '+ Add your own exercise' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByDisplayValue('bench')).toBeInTheDocument();
+    expect(searchScreen(), 'the search stays underneath').not.toBeNull();
   });
 });
