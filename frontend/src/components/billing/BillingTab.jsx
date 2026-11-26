@@ -34,6 +34,7 @@ import { useGoBack } from '../../hooks/useGoBack';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
 import {
   billingSourceName,
+  currentStoreSubscription,
   manageSubscriptions,
   openExternal,
   purchase,
@@ -85,6 +86,9 @@ export default function BillingTab() {
   // the reconcile applies the purchase, /me can still answer FREE here, and a celebration is about
   // the payment that just happened rather than about the account's current steady state.
   const [celebratedPlan, setCelebratedPlan] = useState(null);
+  // True once the store said this store account already pays for Huddle on ANOTHER household
+  // (buyInStore's explainIfHeldElsewhere). Shown on the Free screen until the next attempt.
+  const [heldElsewhere, setHeldElsewhere] = useState(false);
 
   // `online` is deliberately not destructured: OfflineDisabledWrap reads useOnlineStatus
   // itself, and a second copy of that answer here is the kind of duplicate the
@@ -317,7 +321,19 @@ export default function BillingTab() {
   // writes the plan; only then is the transaction finished (lib/storeSync).
   async function buyInStore({ plan, band, interval: chosen }) {
     const store = storeSource();
+    setHeldElsewhere(false);
     const { productId, accountToken } = await prepareStorePurchase(store, { plan, band, interval: chosen });
+    // A subscription belongs to the store ACCOUNT, one per group. When this Apple ID already pays for
+    // Huddle on another household, Apple's sheet says only "already subscribed" and hands back a
+    // cancel (or that household's purchase), and this screen used to say nothing at all -- or
+    // "Purchase received" -- while the household stayed on Free (TestFlight 1.4 build 34). Ask the
+    // store which household the subscription it holds was bought for, and say so.
+    const explainIfHeldElsewhere = async () => {
+      const current = await currentStoreSubscription();
+      const held = current?.held && String(current.accountToken ?? '').toLowerCase() !== String(accountToken).toLowerCase();
+      if (held) setHeldElsewhere(true);
+      return held;
+    };
     let outcome;
     try {
       outcome = await purchase({ productId, accountToken });
@@ -328,6 +344,7 @@ export default function BillingTab() {
     if (outcome?.result === 'cancelled') {
       // Let another device start one now rather than in ten minutes.
       releaseStorePurchase(store).catch(() => {});
+      await explainIfHeldElsewhere();
       return;
     }
     if (outcome?.result === 'pending') {
@@ -348,7 +365,7 @@ export default function BillingTab() {
     if (isPaidPlan(confirmed?.plan)) {
       setCelebratedPlan(confirmed.plan);
       setShowCelebration(true);
-    } else {
+    } else if (!(await explainIfHeldElsewhere())) {
       showToast('Purchase received. Your plan will update shortly.', { tone: 'info' });
     }
   }
@@ -491,6 +508,11 @@ export default function BillingTab() {
         <FreeSummary
           canBuy={channel === 'embedded' || storeCanSell}
           unavailableLine={channel === 'store' && !storeCanSell ? catalogUnavailableLine(catalogQuery) : null}
+          notice={
+            heldElsewhere
+              ? `This ${storeAccountName()} already pays for Huddle on another Huddle account. To use that subscription, sign in to that account. To subscribe here, use a different ${storeAccountName()}.`
+              : null
+          }
           prices={channel === 'store' ? storePrices(catalog) : null}
           storeFinePrint={channel === 'store' ? storeFinePrint() : null}
           onRestore={channel === 'store' ? handleRestore : null}
@@ -826,6 +848,7 @@ function FreeSummary({
   proCardRef,
   canBuy = true,
   unavailableLine = null,
+  notice = null,
   prices = null,
   storeFinePrint = null,
   onRestore = null,
@@ -858,6 +881,11 @@ function FreeSummary({
     <>
       <SectionLabel>Your plan</SectionLabel>
       {planCard}
+      {notice && (
+        <p role="status" style={{ ...mutedLineStyle, marginBottom: 'var(--space-5)' }}>
+          {notice}
+        </p>
+      )}
 
       <SectionLabel>Upgrade to Plus</SectionLabel>
       <div style={cardStyle}>

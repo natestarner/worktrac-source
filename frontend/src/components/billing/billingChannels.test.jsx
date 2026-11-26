@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
 import {
+  currentStoreSubscription,
   finish,
   getProducts,
   manageSubscriptions,
@@ -45,6 +46,7 @@ vi.mock('../../lib/native', async (importOriginal) => ({
   getProducts: vi.fn(),
   purchase: vi.fn(),
   restore: vi.fn(),
+  currentStoreSubscription: vi.fn(),
   finish: vi.fn().mockResolvedValue(undefined),
   manageSubscriptions: vi.fn().mockResolvedValue({ result: 'shown' }),
   requestRefund: vi.fn(),
@@ -171,6 +173,7 @@ const PURCHASED = { result: 'purchased', proof: 'jws.signed.tx', transactionId: 
 
 describe("'store' -- In-App Purchase in the App Store app", () => {
   beforeEach(() => {
+    currentStoreSubscription.mockResolvedValue({ held: false });
     useBillingChannel.mockReturnValue('store');
     getStoreProducts.mockResolvedValue(OFFERED);
     getProducts.mockResolvedValue(STORE_PRICES);
@@ -232,6 +235,53 @@ describe("'store' -- In-App Purchase in the App Store app", () => {
 
     await waitFor(() => expect(releaseStorePurchase).toHaveBeenCalledWith('app-store'));
     expect(syncStorePurchases).not.toHaveBeenCalled();
+  });
+
+  // A subscription belongs to the Apple ID, one per group. A second household on the same Apple ID
+  // gets Apple's "already subscribed" and a cancel; this screen used to say nothing at all while the
+  // household stayed on Free (TestFlight 1.4 build 34). Now it says whose it is.
+  describe('when the Apple ID already pays for Huddle', () => {
+    const HELD_ELSEWHERE = /This Apple ID already pays for Huddle on another Huddle account/;
+
+    it('on ANOTHER household: says so, and how to use it or buy here', async () => {
+      prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.month', accountToken: 'token-new' });
+      purchase.mockResolvedValue({ result: 'cancelled' });
+      currentStoreSubscription.mockResolvedValue({ held: true, productId: 'huddle.plus.year', accountToken: 'token-old' });
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+      expect(await screen.findByText(HELD_ELSEWHERE)).toBeInTheDocument();
+      expect(screen.getByText(/sign in to that account\. To subscribe here, use a different Apple ID/)).toBeInTheDocument();
+    });
+
+    it(`also when the store hands back the other household's purchase, instead of "Purchase received"`, async () => {
+      prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.month', accountToken: 'token-new' });
+      purchase.mockResolvedValue(PURCHASED);
+      syncStorePurchases.mockResolvedValue({ plan: 'FREE' });
+      currentStoreSubscription.mockResolvedValue({ held: true, productId: 'huddle.plus.year', accountToken: 'TOKEN-OLD' });
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+      expect(await screen.findByText(HELD_ELSEWHERE)).toBeInTheDocument();
+      expect(showToast).not.toHaveBeenCalledWith('Purchase received. Your plan will update shortly.', expect.anything());
+    });
+
+    it.each([
+      ['nothing held', { held: false }],
+      ['held for THIS household (token case aside)', { held: true, productId: 'huddle.plus.year', accountToken: 'TOKEN-NEW' }],
+    ])('says nothing when %s', async (_, current) => {
+      prepareStorePurchase.mockResolvedValue({ productId: 'huddle.plus.month', accountToken: 'token-new' });
+      purchase.mockResolvedValue({ result: 'cancelled' });
+      currentStoreSubscription.mockResolvedValue(current);
+      renderBilling({ id: 1, plan: 'FREE' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+      await waitFor(() => expect(currentStoreSubscription).toHaveBeenCalled());
+      expect(screen.queryByText(HELD_ELSEWHERE)).not.toBeInTheDocument();
+    });
   });
 
   it('Ask to Buy says it is waiting, and confirms nothing yet', async () => {

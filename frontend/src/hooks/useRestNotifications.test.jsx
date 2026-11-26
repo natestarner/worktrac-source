@@ -97,4 +97,22 @@ describe('useRestNotifications', () => {
     rerender();
     expect(ensureRestNotificationPermission).toHaveBeenCalledTimes(1);
   });
+
+  // TestFlight 1.4 build 34: the alert landed over a person's very first set, which always raises
+  // the "First <exercise>" card. A rest that starts under a celebration is passed over -- not asked
+  // when the card is dismissed either -- and the next set's rest asks.
+  it('never asks over a celebration, nor when it is dismissed; the next rest asks', () => {
+    const firstSet = { 1: { startedAt: NOW, targetSeconds: 90, capped: false } };
+    useUI.mockReturnValue({ restTimers: firstSet, celebration: { firstTime: true } });
+    const { rerender } = renderHook(() => useRestNotifications());
+    expect(ensureRestNotificationPermission).not.toHaveBeenCalled();
+
+    useUI.mockReturnValue({ restTimers: firstSet, celebration: null });
+    rerender();
+    expect(ensureRestNotificationPermission).not.toHaveBeenCalled();
+
+    useUI.mockReturnValue({ restTimers: { 1: { startedAt: NOW + 120_000, targetSeconds: 90, capped: false } }, celebration: null });
+    rerender();
+    expect(ensureRestNotificationPermission).toHaveBeenCalledTimes(1);
+  });
 });

@@ -622,6 +622,16 @@ and the scroll runs in `requestAnimationFrame` so that space is laid out first. 
 `keyboard-scroll.spec.ts`'s "tapping the empty search on a short page" (taps at full phone height,
 THEN shrinks the window, as the keyboard does; red against the old code by 102px).
 
+**…and the app's keyboard reveal sends it to the SAME place (`data-reveal="start"`).** In the App
+Store app, `lib/native/keyboard.js` re-checks the focused field when the keyboard finishes opening
+and centres any field not fully in view. Opening mid-way through the search's smooth scroll, it
+centred the search: up to the top, then back down to the middle (TestFlight 1.4 build 34). The
+search carries `data-reveal="start"`, and `revealOnPage` PUTS such a field at its start once the
+keyboard has settled, even when it is already in view: the search's own smooth scroll can be cut
+short by the keyboard's resize and left mid-screen (seen on the simulator), and the reveal runs
+after the keyboard's last event, so nothing cuts it short. `09-search-focus-holds.yaml` gates it
+(the header above the tab bar must have scrolled away); every reveal logs `[keyboard] reveal …`.
+
 ## The picker is BOUNDED but never REORDERED
 
 `ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to

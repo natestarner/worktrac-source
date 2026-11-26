@@ -179,6 +179,49 @@ describe('revealFocusedField on the page', () => {
     expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
   });
 
+  // The Log search scrolls itself to the top on focus. A reveal that centred it undid that: up,
+  // then back down to the middle once the keyboard finished opening (TestFlight 1.4 build 34).
+  // ...and puts it there even when it is already in view: its own smooth scroll can be cut short by
+  // the keyboard's resize, leaving it mid-screen (simulator, 2026-11-25).
+  it('puts a field that asks for the top at the top even when it is already in view', () => {
+    const input = document.createElement('input');
+    input.dataset.reveal = 'start';
+    input.style.scrollMarginTop = '150px';
+    box(input, 400, 446);
+    input.scrollIntoView = vi.fn();
+    document.body.appendChild(input);
+    input.focus();
+    revealFocusedField();
+    expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+  });
+
+  it('leaves a field that asks for the top alone once it is there', () => {
+    const input = document.createElement('input');
+    input.dataset.reveal = 'start';
+    input.style.scrollMarginTop = '150px';
+    box(input, 151, 197);
+    input.scrollIntoView = vi.fn();
+    document.body.appendChild(input);
+    input.focus();
+    revealFocusedField();
+    expect(input.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('sends a field that asks for it to the top, not the centre', () => {
+    const chrome = document.createElement('div');
+    chrome.className = 'app-chrome';
+    box(chrome, 0, 141);
+    document.body.appendChild(chrome);
+    const input = document.createElement('input');
+    input.dataset.reveal = 'start';
+    box(input, 820, 860);
+    input.scrollIntoView = vi.fn();
+    document.body.appendChild(input);
+    input.focus();
+    revealFocusedField();
+    expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+  });
+
   it('does nothing on the page when asked to leave the page alone', () => {
     const input = document.createElement('input');
     box(input, 900, 940);

@@ -74,6 +74,7 @@ import {
   scheduleRestNotifications,
   cancelRestNotifications,
   ensureRestNotificationPermission,
+  currentStoreSubscription,
 } from './index';
 
 beforeEach(() => {
@@ -286,6 +287,13 @@ describe('keep the screen awake', () => {
 
     plugins.keepAwake.mockRejectedValue(new Error('nope'));
     await expect(keepScreenAwake()).resolves.toBeUndefined();
+  });
+});
+
+// The web never holds a store subscription: Stripe bills there, and nothing here asks a store.
+describe('currentStoreSubscription', () => {
+  it('holds nothing on the web', async () => {
+    await expect(currentStoreSubscription()).resolves.toEqual({ held: false });
   });
 });
 

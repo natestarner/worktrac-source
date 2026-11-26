@@ -143,10 +143,12 @@ export default function ConfirmEmailPage() {
 
   return (
     <main
+      // .code-screen: centred on a desktop, held at the top on a phone, so the keyboard opening
+      // cannot move the box being typed into (index.css).
+      className="code-screen"
       style={{
         minHeight: 'var(--viewport-min-height)',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-bg)',
         padding: 'var(--space-6)',

@@ -52,4 +52,25 @@ test.describe('pasting the emailed code', () => {
     await page.getByRole('button', { name: 'Paste code' }).click();
     await expect(page.getByPlaceholder('123456')).toHaveValue('482913');
   });
+
+  // TestFlight 1.4 build 34: "something happens in the background whenever I click into the box".
+  // The code screens centred their card vertically, and in the app the window shrinks above the
+  // keyboard, so the card re-centred -- jumped up -- under the finger as the keyboard arrived. On a
+  // phone the card now sits at the top, where the keyboard has nothing to move. Tap at full phone
+  // height, then shrink the window as the keyboard does.
+  test('the code screen does not move when the keyboard opens', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/forgot-password');
+    await page.getByPlaceholder('you@example.com').fill(`huddle+e2e-nobody-${Date.now()}@starner.co`);
+    await page.getByRole('button', { name: 'Send reset code' }).click();
+    const field = page.getByPlaceholder('123456');
+    await expect(field).toBeVisible();
+
+    const before = await field.boundingBox();
+    await field.click();
+    await page.setViewportSize({ width: 390, height: 420 });
+    await expect
+      .poll(async () => Math.round(((await field.boundingBox())?.y ?? 0) - (before?.y ?? 0)))
+      .toBe(0);
+  });
 });

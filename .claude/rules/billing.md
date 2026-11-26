@@ -584,6 +584,14 @@ Full design: `docs/in-app-purchase-plan.md`. App Review rejected the US link-out
 - **Kept for old app builds:** `POST /api/billing/checkout-link`, `/checkout-complete` and the
   `checkout-complete` scheme link. 1.0-1.2 still call them; delete them once
   `NATIVE_MIN_SUPPORTED_BUILD` reaches the first build with In-App Purchase (`api-compatibility.md`).
+- **A subscription belongs to the STORE ACCOUNT, one per group, not to a household.** A second
+  household on the same Apple ID gets Apple's own "already subscribed" and a cancel (or the first
+  household's purchase back). After either, `BillingTab`'s `buyInStore` asks
+  `currentStoreSubscription()` which household token the held subscription carries, and if it is
+  not this household's, the Free screen says the Apple ID already pays for Huddle on another
+  account (sign in there, or use a different Apple ID). It used to say nothing, or "Purchase
+  received" (TestFlight 1.4 build 34). Pinned in `billingChannels.test.jsx`. Testers hit this
+  constantly: one sandbox Apple ID, many test households.
 - **Refunds for a store purchase are the store's.** "Request a refund" (App Store households only)
   opens Apple's own sheet (`purchases.requestRefund`); nothing on our side changes the plan, which
   ends when Apple's REVOKED notification arrives.

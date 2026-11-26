@@ -163,6 +163,9 @@ export default function ExercisePicker({
         ref={searchInputRef}
         data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
         className="exercise-search-input"
+        // Where the app's keyboard reveal (lib/visibleViewport.js) sends this field if it must
+        // move it: the same top-of-screen spot the focus scroll below aims for, never the centre.
+        data-reveal="start"
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
         onFocus={() => {
