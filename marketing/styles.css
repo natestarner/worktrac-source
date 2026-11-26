@@ -914,8 +914,29 @@ img {
   }
 }
 
-/* Desktop: the header sits on the photo. Below 901px it is back in the page's flow, above the
-   photo, because there the phone stands near the top of the frame and the header would sit on it. */
+/* The header wears the hero's dark ground and cream type at every width. Desktop: it sits ON the
+   photo. Below 901px it is back in the page's flow, above the headline, because there the phone
+   stands near the top of the frame and the header would sit on it; it keeps the hero's night
+   colour so the two read as one dark band (2026-11-25: a light header bar over the dark hero left a
+   seam on every phone). */
+.site-header--over-photo {
+  background: #1c1b19;
+  border-bottom-color: transparent;
+}
+
+.site-header--over-photo .brand,
+.site-header--over-photo .site-nav__link--strong {
+  color: #f7f5f1;
+}
+
+.site-header--over-photo .site-nav__link {
+  color: rgba(247, 245, 241, 0.86);
+}
+
+.site-header--over-photo .brand__mark-hairline {
+  stroke: none;
+}
+
 @media (min-width: 901px) {
   .site-header--over-photo {
     position: absolute;
@@ -923,20 +944,7 @@ img {
     left: 0;
     right: 0;
     z-index: 5;
-    border-bottom-color: transparent;
-  }
-
-  .site-header--over-photo .brand,
-  .site-header--over-photo .site-nav__link--strong {
-    color: #f7f5f1;
-  }
-
-  .site-header--over-photo .site-nav__link {
-    color: rgba(247, 245, 241, 0.86);
-  }
-
-  .site-header--over-photo .brand__mark-hairline {
-    stroke: none;
+    background: transparent;
   }
 }
 
@@ -1233,6 +1241,13 @@ img {
   background:
     linear-gradient(225deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 45%),
     linear-gradient(0deg, rgba(242, 166, 90, 0.07), rgba(242, 166, 90, 0.07));
+}
+
+/* A section holding a tilted phone keeps the phone's wide soft shadow inside it. The phone's
+   transform makes it its own layer, painted over the NEXT section's background, so without this
+   the shadow showed as a grey smudge across the band below (2026-11-25). */
+.section--holds-device {
+  overflow: hidden;
 }
 
 /* A phone standing on its own in a section column: the household clip and the offline screen. It
