@@ -205,7 +205,9 @@ describe('ExercisePicker full-screen search', () => {
     const layer = screen.getByRole('dialog', { name: 'Exercise search' });
     const results = layer.querySelector('.exercise-search-results');
     const bar = screen.getByRole('button', { name: 'Cancel' });
-    // jsdom lays nothing out: give the results something to scroll.
+    // jsdom loads no stylesheet and lays nothing out: give the results their CSS and something to
+    // scroll.
+    results.style.overflowY = 'auto';
     Object.defineProperty(results, 'scrollHeight', { configurable: true, value: 900 });
     Object.defineProperty(results, 'clientHeight', { configurable: true, value: 300 });
 
@@ -218,6 +220,18 @@ describe('ExercisePicker full-screen search', () => {
     // A short list has nothing to scroll, so a drag on it would only carry on into the page.
     Object.defineProperty(results, 'scrollHeight', { configurable: true, value: 300 });
     expect(drag(results.firstChild)).toBe(false);
+
+    // "+ Add your own exercise" opens a dialog OVER the still-open layer. Its panel scrolls: the
+    // first guard allowed drags only in the results, so this dialog could not be scrolled at all.
+    const panel = document.createElement('div');
+    panel.style.overflowY = 'auto';
+    Object.defineProperty(panel, 'scrollHeight', { configurable: true, value: 1200 });
+    Object.defineProperty(panel, 'clientHeight', { configurable: true, value: 500 });
+    const field = document.createElement('input');
+    panel.appendChild(field);
+    document.body.appendChild(panel);
+    expect(drag(field), 'a drag inside a scrollable dialog over the layer scrolls it').toBe(true);
+    panel.remove();
 
     // Closed, the page scrolls normally again.
     fireEvent.click(bar);

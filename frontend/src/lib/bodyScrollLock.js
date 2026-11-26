@@ -11,14 +11,18 @@
 // ~15px -- everything behind the scrim would jump sideways as the overlay opens and jumps back as
 // it closes. Replacing the scrollbar's width with padding keeps the layout still.
 //
-// `touchScrollOnlyIn` (optional): the one element a finger drag may scroll while the lock is held.
+// `guardTouch` (optional): a finger drag may scroll only a scrollable box, never the page.
 // `overflow: hidden` alone does NOT stop iOS: with the keyboard up, a drag anywhere still pans
-// Safari's visual viewport (the page behind visibly moves), and a drag on an inner list that has
-// nothing to scroll, or is already at its end, carries on into the page. This is the same guard
-// react-remove-scroll and React Aria's usePreventScroll install: cancel every touchmove that would
-// not scroll that element. `overscroll-behavior: contain` on the element stops the fling at its
-// ends. Used by the Log picker's full-screen search (log-screen.md).
-export function lockBodyScroll({ touchScrollOnlyIn } = {}) {
+// Safari's visual viewport (the page behind visibly moves), and a drag on something with nothing
+// to scroll carries on into the page. This is the same guard react-remove-scroll and React Aria's
+// usePreventScroll install: cancel every touchmove whose target has no scrollable box between it
+// and the body. `overscroll-behavior: contain` on a box stops the fling at its ends. Used by the
+// Log picker's full-screen search (log-screen.md).
+//
+// ⚠️ ANY scrollable box, not one named element. The first version allowed drags only inside the
+// search results, and "+ Add your own exercise" opens a dialog OVER the still-open layer, so every
+// drag inside that dialog was cancelled and it could not be scrolled (2026-11-26, lower).
+export function lockBodyScroll({ guardTouch = false } = {}) {
   const previousOverflow = document.body.style.overflow;
   const previousPaddingRight = document.body.style.paddingRight;
   const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
@@ -26,10 +30,10 @@ export function lockBodyScroll({ touchScrollOnlyIn } = {}) {
   if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
 
   let removeTouchGuard = () => {};
-  if (touchScrollOnlyIn) {
+  if (guardTouch) {
     const onTouchMove = (event) => {
       if (!event.cancelable) return;
-      if (!canTouchScroll(touchScrollOnlyIn, event.target)) event.preventDefault();
+      if (!canTouchScroll(event.target)) event.preventDefault();
     };
     // Not passive: a passive listener cannot cancel the drag, which is the whole point.
     document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -43,9 +47,16 @@ export function lockBodyScroll({ touchScrollOnlyIn } = {}) {
   };
 }
 
-// A drag that starts inside the scroller scrolls it when it has something to scroll. Anywhere
-// else (the search bar, the empty space under a short list) there is nothing it should move.
-export function canTouchScroll(scroller, target) {
-  if (!(target instanceof Node) || !scroller.contains(target)) return false;
-  return scroller.scrollHeight > scroller.clientHeight;
+// A drag scrolls the nearest box above its target that scrolls vertically and has something to
+// scroll (the search results, a dialog's panel). With none below the body (the search bar, a
+// list too short to scroll), there is nothing it should move. Only `auto`/`scroll` boxes count:
+// a clipped `overflow: hidden` box cannot be scrolled by a finger.
+export function canTouchScroll(target) {
+  let el = target instanceof Element ? target : target?.parentElement;
+  while (el && el !== document.body && el !== document.documentElement) {
+    const { overflowY } = getComputedStyle(el);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) return true;
+    el = el.parentElement;
+  }
+  return false;
 }

@@ -50,7 +50,9 @@ name: Tapping the search opens the full-screen search
 - scrollUntilVisible:
     element: '\+ Add your own exercise'
     direction: DOWN
-    timeout: 15000
+    # Each swipe-and-look took 9-12s on the runner (2026-11-26), and the list needs three: at 15s
+    # the flow gave up 16px from the end with the list scrolling fine.
+    timeout: 60000
 - takeScreenshot: mobile-flows-out/09-results-scrolled
 - assertVisible: 'Cancel'
 # Cancel closes it and the picker is back (the typed text stays in the field: it is the person's

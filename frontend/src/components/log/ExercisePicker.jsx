@@ -142,7 +142,7 @@ export default function ExercisePicker({
     }
     layer.addEventListener('keydown', onKeyDown);
     const uninstallFocusTrap = installFocusTrap(layer);
-    const unlockBodyScroll = lockBodyScroll({ touchScrollOnlyIn: results });
+    const unlockBodyScroll = lockBodyScroll({ guardTouch: true });
     // One line of evidence for the simulator flow (09-search-focus-holds) and Safari's Web
     // Inspector: where the field landed and whether the layer is the visible viewport.
     const frame = requestAnimationFrame(() => {
@@ -151,8 +151,10 @@ export default function ExercisePicker({
         `[keyboard] search layer open (field top ${Math.round(field?.top ?? -1)}, layer ${Math.round(layer.getBoundingClientRect().height)} of window ${window.innerHeight})`,
       );
     });
+    const stopEvidence = logSearchEvidence(layer, results);
     return () => {
       cancelAnimationFrame(frame);
+      stopEvidence();
       layer.removeEventListener('keydown', onKeyDown);
       uninstallFocusTrap();
       unlockBodyScroll();
@@ -355,6 +357,72 @@ export default function ExercisePicker({
       {preview && <ExercisePreviewSheet exerciseId={preview.id} exerciseName={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
+}
+
+// Evidence for the simulator flow (09-search-focus-holds) and Safari's Web Inspector, because the
+// one thing no browser here can show is what the App Store app's keyboard does to the layer
+// (2026-11-26: on TestFlight the results did not scroll). Two kinds of `[search]` line:
+//   geometry -- on every window / visual-viewport resize: the window, the visible part, the layer,
+//               and the results' scrollTop / scrollHeight / clientHeight (no overflow = nothing to
+//               scroll);
+//   touch    -- per finger: where it landed, how many touchmoves arrived and how many were
+//               cancelled, and the results' scrollTop before and after.
+// Logging only; nothing here changes behaviour.
+function logSearchEvidence(layer, results) {
+  const vv = window.visualViewport;
+  const round = (n) => Math.round(n ?? -1);
+  let frame = 0;
+  const geometry = (why) => {
+    frame = 0;
+    console.info(
+      `[search] geometry (${why}): window ${window.innerHeight}, visible ${round(vv?.height)}+${round(vv?.offsetTop)}, layer ${round(layer.getBoundingClientRect().height)}, results ${round(results.scrollTop)}/${results.scrollHeight}/${results.clientHeight}`,
+    );
+  };
+  const onResize = (event) => {
+    if (!frame) frame = requestAnimationFrame(() => geometry(event.type === 'resize' && event.target === vv ? 'visual viewport' : 'window'));
+  };
+  let touch = null;
+  const onTouchStart = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    touch = {
+      on: target ? `${target.tagName.toLowerCase()}${results.contains(target) ? ' in results' : ''}` : '?',
+      scrollTop: results.scrollTop,
+      moves: 0,
+      cancelled: 0,
+    };
+  };
+  // On window, after the scroll lock's document listener, so defaultPrevented is its verdict.
+  const onTouchMove = (event) => {
+    if (!touch) return;
+    touch.moves += 1;
+    if (event.defaultPrevented) touch.cancelled += 1;
+  };
+  const onTouchEnd = () => {
+    if (!touch) return;
+    const t = touch;
+    touch = null;
+    // A frame later, so a fling that has already started shows in scrollTop.
+    requestAnimationFrame(() =>
+      console.info(
+        `[search] touch on ${t.on}: ${t.moves} moves, ${t.cancelled} cancelled, results scrollTop ${round(t.scrollTop)} -> ${round(results.scrollTop)} of ${results.scrollHeight - results.clientHeight} (layer ${round(layer.getBoundingClientRect().height)} of window ${window.innerHeight})`,
+      ),
+    );
+  };
+  window.addEventListener('resize', onResize);
+  vv?.addEventListener('resize', onResize);
+  layer.addEventListener('touchstart', onTouchStart, { passive: true });
+  window.addEventListener('touchmove', onTouchMove, { passive: true });
+  window.addEventListener('touchend', onTouchEnd, { passive: true });
+  const first = requestAnimationFrame(() => geometry('open'));
+  return () => {
+    cancelAnimationFrame(first);
+    if (frame) cancelAnimationFrame(frame);
+    window.removeEventListener('resize', onResize);
+    vv?.removeEventListener('resize', onResize);
+    layer.removeEventListener('touchstart', onTouchStart);
+    window.removeEventListener('touchmove', onTouchMove);
+    window.removeEventListener('touchend', onTouchEnd);
+  };
 }
 
 // One bounded, alphabetical section of chips. The clip is CSS (.picker-chip-wrap--clipped), so

@@ -229,11 +229,13 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
   A field inside `[data-keyboard-layer]` (the Log picker's full-screen search, `log-screen.md`) is
   never revealed: the layer pins it at the top of the window by construction.
-- **`--keyboard-inset`** (also from `trackVisibleViewport`) is how much of the window's bottom the
-  keyboard covers: Safari only, 0 in the app. A full-screen layer pinned with `inset: 0` pads its
-  scroller's end by it instead of resizing or moving (the search layer). **Don't size or place a
-  full-screen layer from `--visible-viewport-*`**: it chases Safari's pans a frame late, and a stale
-  value (iOS 26 reports them around the keyboard) leaves it the wrong size
+- **`--window-height`** and **`--keyboard-inset`** (also from `trackVisibleViewport`) are for a
+  full-screen layer (the search): size it `top: 0; height: var(--window-height)` and pad its
+  scroller's end by `--keyboard-inset` (how much of the window Safari's keyboard covers; 0 in the
+  app). **Don't place a full-screen layer from `--visible-viewport-*`** (it chases Safari's pans a
+  frame late: flicker), **and don't rely on `inset: 0` in the app**: WKWebView sometimes kept such
+  a layer at its pre-keyboard height after the window shrank, while `window.innerHeight` was right.
+  `--window-height` is republished synchronously on every window resize, which forces the layout
   (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`). Dialogs keep the
   visible-viewport scrim for the reason in "Modals" above.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
