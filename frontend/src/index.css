@@ -768,6 +768,22 @@ button:not(.pressable):active:not(:disabled) {
   scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
+/* The two screens where a 6-digit emailed code is typed (Confirm email, Reset password).
+   Centred vertically on a desktop. On a phone (or any touch screen) the card is held at the top:
+   in the App Store app the window shrinks above the keyboard, so a centred card re-centred --
+   jumped up ~108px -- under the finger just as the keyboard and iOS's AutoFill bar arrived, which
+   read as "something happening in the background" (TestFlight 1.4 build 34, 2026-11-25). At the
+   top there is nothing for the keyboard to move. Pinned by verification-code-paste.spec.ts. */
+.code-screen {
+  align-items: flex-start;
+}
+
+@media (min-width: 600px) and (pointer: fine) {
+  .code-screen {
+    align-items: center;
+  }
+}
+
 /* Everything below the Log picker's search field while a search is running (results + "Add your
    own exercise"). At least a screen tall, so a short result list -- one match, or none -- cannot
    shorten the page under the field: the browser would clamp the scroll to the new end of the page

@@ -71,6 +71,23 @@ export async function purchase({ productId, accountToken }) {
   return purchasesPlugin().purchase({ productId, accountToken });
 }
 
+/**
+ * The subscription this store account holds right now, without asking anyone to sign in:
+ *   { held: false } | { held: true, productId, accountToken }
+ * `accountToken` is the household token signed into it (null when the purchase named none). Read
+ * after the store declines a purchase as "already subscribed": the subscription belongs to the
+ * store account, so it may be paying for ANOTHER household. Web: never held.
+ */
+export async function currentStoreSubscription() {
+  if (!storeSource()) return { held: false };
+  try {
+    return (await purchasesPlugin().currentSubscription()) ?? { held: false };
+  } catch {
+    // An app build without the method (or a store that cannot answer): say nothing rather than guess.
+    return { held: false };
+  }
+}
+
 /** Restore Purchases: every current subscription on this store account, as proofs. */
 export async function restore() {
   if (!storeSource()) return [];

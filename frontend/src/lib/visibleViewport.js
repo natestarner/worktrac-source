@@ -124,5 +124,11 @@ function revealOnPage(el) {
   // Logged because a reveal is a scroll nobody asked for: when one fights another scroll, this line
   // is the only trace of it in the app's console (09-search-focus-holds.yaml reads it).
   console.info(`[keyboard] reveal ${el.getAttribute('placeholder') ?? el.id ?? el.tagName} (field ${Math.round(rect.top)}-${Math.round(rect.bottom)}, visible ${Math.round(top)}-${Math.round(bottom)})`);
-  el.scrollIntoView({ block: 'center' });
+  // A field that scrolls ITSELF somewhere on focus says where (`data-reveal="start"`, the Log
+  // search), and a reveal sends it to the same place. Centring it instead undid its own scroll:
+  // the search went to the top, then -- when the keyboard finished opening mid-scroll and this
+  // found it not yet in view -- jumped to the middle of the page (TestFlight 1.4 build 34). Two
+  // scrolls with different targets on one focus is the bug; now they agree. `start` honours the
+  // field's scroll-margin-top, which keeps it clear of the sticky chrome.
+  el.scrollIntoView({ block: el.dataset?.reveal === 'start' ? 'start' : 'center' });
 }

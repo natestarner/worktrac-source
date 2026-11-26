@@ -25,6 +25,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "purchase", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unfinished", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "currentSubscription", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "finish", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "manageSubscriptions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRefund", returnType: CAPPluginReturnPromise)
@@ -133,6 +134,26 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
                 proofs.append(reported.asDictionary())
             }
             call.resolve(["proofs": proofs])
+        }
+    }
+
+    /// The subscription this Apple ID holds right now, read from what the device already knows (no
+    /// `AppStore.sync()`, so never a sign-in prompt) -> `{ held: false }` or
+    /// `{ held: true, productId, accountToken }`, where `accountToken` is the household token signed
+    /// into it (lowercased), or null for a purchase that named none. A subscription belongs to the
+    /// Apple ID, one per group, so Apple answers "already subscribed" when a second household on the
+    /// same Apple ID tries to buy; this is how the app can say WHICH household it belongs to.
+    @objc func currentSubscription(_ call: CAPPluginCall) {
+        Task {
+            for await result in Transaction.currentEntitlements {
+                let transaction = PurchasesPlugin.transaction(of: result)
+                if transaction.productType == .autoRenewable {
+                    let token: Any = transaction.appAccountToken.map { $0.uuidString.lowercased() } ?? NSNull()
+                    call.resolve(["held": true, "productId": transaction.productID, "accountToken": token])
+                    return
+                }
+            }
+            call.resolve(["held": false])
         }
     }
 

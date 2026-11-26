@@ -13,6 +13,7 @@ export {
 export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
 export {
   billingSourceName,
+  currentStoreSubscription,
   finish,
   getProducts,
   manageSubscriptions,
