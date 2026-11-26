@@ -183,6 +183,24 @@ a public page, which is what this replaced on 2026-10-27.
   then shows just the poster. The local preview types it right, so only `check-marketing.sh`
   check 11 and the deployed-site run of `landing.spec.ts` catch it (2026-10-28, `.mp4`).
 
+## The hero device covers the dad's face, placed in the PHOTO's coordinates
+
+`index.html`'s hero is a stock photo with the real app over the dad's face, at every width: an iPad
+in the desktop layout, an iPhone at 900px and below (one `<picture>`, one frame). The photo is
+`.hero__stage` (its own 3:2 shape, cropped by hand in CSS) inside the clipping `.hero__clip`; the
+device sits in `.hero__stage--over`, an unclipped twin with identical geometry, so it is placed in
+the photo's percentages yet is a layer ON the photo (on phones it hangs below the photo's bottom
+edge; the order there is headline and lead, photo, then the buttons under its overhang). **Never move the photo to `background-size: cover` /
+`object-fit: cover`, or the device out of the twin stage**: the crop and the device then follow
+different boxes and his face shows beside it at some widths. Nate wants the device big: the iPad
+runs from just past the boy's face to the photo's right edge. `landing.spec.ts` hit-tests his face (covered), the boy's face and the headline
+(both clear) at 18 viewport sizes; replacing `hero-row.jpg` means re-measuring both face boxes and
+the device's `left`/`top` together. No entrance animation on the device: any frame where it is
+elsewhere or transparent shows his face. Every phone on the page is the one `.device--iphone` frame
+(the hero's iPad is that frame re-proportioned at 901px and up): change its look there, never in a
+second phone frame. The bezel is the site's CSS one, never Apple's: Apple's
+bezel license covers the App Store listing only. Narrative: `docs/marketing-site.md`, "The photo hero".
+
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop
 
 `device-ipad.jpg` used to be cropped tight to its interactive content (no dead space below the

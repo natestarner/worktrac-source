@@ -363,8 +363,8 @@ async function offline(scheme) {
 }
 
 // The card a shared link unfurls into (iMessage, Slack, social): the site's hero line beside the
-// real hero phone capture, on the App Store art's cream ground. The phone wears the hero's bezel
-// (styles.css .device--phone): warm near-black frame, a status band in the app header's white, and
+// real hero phone capture, on the App Store art's cream ground. The phone wears a bezel drawn here,
+// after the site's old flat phone frame (styles.css has since moved to .device--iphone): warm near-black frame, a status band in the app header's white, and
 // a drawn island -- bare, the capture read as a floating card rather than a phone.
 //
 async function ogImage() {

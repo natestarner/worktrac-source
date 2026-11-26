@@ -693,10 +693,6 @@ img {
   max-width: 48ch;
 }
 
-/* Sits after .hero__devices now, not right under the lead paragraph -- the product shots are
-   the pitch, so the ask comes right after the proof rather than before it. margin-top clears
-   the devices' own mask-fade + reserved phone-overlap padding, which already puts some empty
-   space above this; the rest is deliberate, not doubled. */
 .hero__cta {
   display: flex;
   flex-direction: column;
@@ -744,39 +740,350 @@ img {
   text-align: center;
 }
 
-/* A tablet with a phone leaning on it, grounded by an ordinary drop shadow rather than
-   fading into the page. An earlier version faded the bottom out with a CSS mask, but a mask
-   clips everything painted for the element, shadow included -- it was quietly swallowing
-   each .device's own box-shadow (below) along with the pixels, so the pair read as
-   dissolving rather than sitting above the page. device-ipad.jpg is cropped tight to its
-   real content now anyway (no dead space below the "Log set" button), so there's nothing
-   left worth fading past. */
-.hero__devices {
+/* ============================================================================
+   Photo hero (index.html) -- a full-bleed photo with the real app held over the dad's face
+   (an iPad in the desktop layout, an iPhone at 900px and below)
+   ========================================================================= */
+
+/* The ONE hard requirement: the device covers the dad's face at every width. That is impossible to
+   guarantee with `background-size: cover` or `object-fit: cover`, because those crop the photo by
+   the viewport's shape while the phone is placed by the page's -- the two drift apart, which is
+   exactly what the first mockup did (covered at 1440px, his whole face beside the phone at 1024px,
+   phone hidden below 860px).
+
+   So the crop is done by hand. .hero__photo is a size container; .hero__stage is the photo at its
+   OWN 3:2 shape, scaled to cover that container, and slid so a focal point (--fx, --fy) stays in
+   view without ever exposing an edge. The device is placed in percentages of the same stage, so it
+   moves and scales with the face whatever the crop.
+
+   The device is a layer ON the photo, not part of it: the photo's stage sits in .hero__clip, and
+   the device in .hero__stage--over, an unclipped twin with identical geometry. On phones that lets
+   the iPhone hang below the photo's bottom edge rather than being cut off by it.
+
+   In hero-row.jpg (1800 x 1200) the dad's face spans x 74-84%, y 22-36%, the boy's x 48-55%. The
+   iPad is 42% of the photo wide, from just past the boy's face to the right edge (centred on
+   x 78%, from y 14%); the iPhone 32%, centred on x 79% from y 16%. Re-measure if the photo is ever
+   replaced; landing.spec.ts checks the dad (covered), the boy and the headline (clear) at 18 real
+   viewport sizes.
+
+   No entrance animation on the device, on purpose: anything that starts it elsewhere or
+   transparent shows his face for that moment. */
+.hero--photo {
+  --hero-night: #1c1b19;
+  --hero-cream: #f7f5f1;
   position: relative;
-  z-index: 0; /* contains the ::after contact shadow's negative z-index to this element */
-  /* 940 = an 820px tablet (82%) plus the phone standing beside it. */
-  width: min(940px, 100%);
-  margin: clamp(20px, 2.8vw, 40px) auto 0;
-  /* Room for the phone to hang below the tablet without crowding the CTA under it. At true scale
-     the phone is nearly the tablet's height and hangs ~60px lower, hence more than the old 44px. */
-  padding-bottom: clamp(28px, 4.5vw, 60px);
+  display: flex;
+  align-items: center;
+  /* Tall enough to feel like a photo, capped by width too so a tall, narrow desktop window doesn't
+     crop the photo so hard that the phone runs into the headline. */
+  min-height: clamp(600px, min(88svh, 72vw), 1100px);
+  padding: 0;
+  background: var(--hero-night);
+  color: var(--hero-cream);
 }
 
-/* A dedicated contact shadow under the pair, on top of each .device's own --shadow-4 below.
-   --shadow-4 alone reads fine up close but washes out to nearly nothing at full hero width --
-   diffuse ambient shadows do that, they're subtle by design. This is a second, tighter, darker
-   shadow concentrated right under the devices specifically, which is what actually reads as
-   "resting on the page" at a glance instead of on close inspection. */
-.hero__devices::after {
+.hero__photo {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  /* The stage's width: wide enough to cover the container in both directions. Substituted where
+     it is used, so the cq units there resolve against this container. */
+  --stage-w: max(100cqw, 150cqh);
+  --fx: 0.7;
+  --fy: 0.35;
+  /* The cap still overhangs his face by 300px+ a side on a 3440px ultrawide. */
+  --dev-w: min(calc(var(--stage-w) * 0.42), 1100px);
+}
+
+/* Clips the photo (and its scrim) to the frame; the device's twin stage is outside it. */
+.hero__clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The unclipped twin: same box as the photo's stage, holding only the device, above the scrim. */
+.hero__stage--over {
+  z-index: 2;
+}
+
+.hero__stage {
+  position: absolute;
+  width: var(--stage-w);
+  height: calc(var(--stage-w) / 1.5);
+  left: clamp(calc(100cqw - var(--stage-w)), calc(50cqw - var(--fx) * var(--stage-w)), 0px);
+  top: clamp(calc(100cqh - var(--stage-w) / 1.5), calc(50cqh - var(--fy) * var(--stage-w) / 1.5), 0px);
+}
+
+.hero__stage-img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+/* The hero's device is the page's one iPhone frame (.device--iphone, under "Device frames"),
+   placed in the photo's coordinates; in the desktop layout the same frame becomes an iPad (the
+   min-width: 901px block there). Perspective sits on the PARENT (.hero__stage--over) at 6x the
+   device's width, about Rotato's camera, aimed at the device: 5x with the old proportions read as
+   warped, and 12x read flat once the tilt grew. */
+.hero__stage--over {
+  perspective: calc(var(--dev-w) * 6);
+  perspective-origin: 78% 35%;
+}
+
+.hero__stage .hero__device {
+  position: absolute;
+  left: 78%;
+  top: 14%;
+  transform: translateX(-50%) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
+}
+
+/* Dark from the left where the words sit, clear over the people; a fade at the top for the header
+   and at the floor so the proof strip meets it without a seam. */
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(28, 27, 25, 0.94) 0%, rgba(28, 27, 25, 0.84) 38%, rgba(28, 27, 25, 0.45) 56%, rgba(28, 27, 25, 0) 76%),
+    linear-gradient(180deg, rgba(28, 27, 25, 0.6) 0%, rgba(28, 27, 25, 0) 18%),
+    linear-gradient(0deg, rgba(28, 27, 25, 0.8) 0%, rgba(28, 27, 25, 0) 26%);
+}
+
+.hero__copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  /* 48%: at every desktop width the iPad's left edge stays to the right of that. */
+  max-width: min(600px, 48%);
+  margin-left: clamp(20px, 5vw, 72px);
+  padding: 120px 0 clamp(56px, 6vw, 88px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(14px, 1.4vw, 20px);
+  text-align: left;
+}
+
+.hero--photo .hero__title {
+  color: var(--hero-cream);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* On the photo the accent settles on amber, not --color-accent-text (a deep rust made for the
+   light page, too dark to read here). */
+.hero--photo .hero__title em {
+  animation-name: hero-accent-in-photo;
+}
+
+@keyframes hero-accent-in-photo {
+  to {
+    color: var(--color-amber);
+  }
+}
+
+.hero--photo .hero__lead {
+  color: rgba(247, 245, 241, 0.9);
+  max-width: 34em;
+}
+
+.hero--photo .hero__cta {
+  align-items: flex-start;
+  margin-top: var(--space-2);
+  text-align: left;
+}
+
+.hero--photo .hero__actions {
+  justify-content: flex-start;
+}
+
+.hero--photo .hero__more {
+  margin-top: 0;
+  color: var(--color-amber);
+}
+
+.hero--photo .hero__trust {
+  color: rgba(247, 245, 241, 0.75);
+  text-align: left;
+}
+
+/* Explicit resting state, not just the sitewide duration cap (.claude/rules/marketing.md). Later
+   and more specific than the base override, which would otherwise pin the light-page rust. */
+@media (prefers-reduced-motion: reduce) {
+  .hero--photo .hero__title em {
+    color: var(--color-amber) !important;
+  }
+}
+
+/* The header wears the hero's dark ground and cream type at every width. Desktop: it sits ON the
+   photo. Below 901px it is back in the page's flow, above the headline, because there the phone
+   stands near the top of the frame and the header would sit on it; it keeps the hero's night
+   colour so the two read as one dark band (2026-11-25: a light header bar over the dark hero left a
+   seam on every phone). */
+.site-header--over-photo {
+  background: #1c1b19;
+  border-bottom-color: transparent;
+}
+
+.site-header--over-photo .brand,
+.site-header--over-photo .site-nav__link--strong {
+  color: #f7f5f1;
+}
+
+.site-header--over-photo .site-nav__link {
+  color: rgba(247, 245, 241, 0.86);
+}
+
+.site-header--over-photo .brand__mark-hairline {
+  stroke: none;
+}
+
+@media (min-width: 901px) {
+  .site-header--over-photo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    background: transparent;
+  }
+}
+
+/* Phones and portrait tablets: headline and lead first, then the photo with the iPhone, then the
+   buttons (chosen by Nate 2026-11-25 over photo-first, which put the headline at the bottom of the
+   first screen, and words-first, which put the photo after everything). .hero__copy and .hero__cta
+   become display: contents so their children can be ordered around the photo.
+
+   Same stage, same percentages as desktop -- only the frame and the focal point change, and the
+   iPhone takes a bigger share of the photo so the app is legible. It hangs below the frame's bottom
+   edge, so the buttons start under its overhang (--hero-overhang).
+
+   The overhang is worked out in vw because the photo's margin is set on the container itself, which
+   can't read its own cq units. The photo frame is full width at these sizes, so 100vw is its width, give or
+   take a desktop scrollbar (which only adds a few px of gap). In this range the stage's top is
+   always 0: its height equals the frame's. */
+@media (max-width: 900px) {
+  .hero--photo {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+    padding-bottom: var(--space-10);
+    --hero-pad: clamp(20px, 5vw, 72px);
+    --hero-frame-h: clamp(320px, 100vw, 560px);
+    --hero-stage-w: max(100vw, var(--hero-frame-h) * 1.5);
+    --hero-phone-w: min(var(--hero-stage-w) * 0.32, 260px);
+    /* top (16% of the stage) + the phone's height (2.15 x its width: a 440 x 956 screen, its
+       border, and the tilt) - the frame. */
+    --hero-overhang: max(0px, var(--hero-stage-w) / 1.5 * 0.16 + var(--hero-phone-w) * 2.15 - var(--hero-frame-h));
+  }
+
+  .hero__photo {
+    order: 3;
+    position: relative;
+    inset: auto;
+    height: var(--hero-frame-h);
+    margin-bottom: calc(var(--hero-overhang) + var(--space-6));
+    --fx: 0.66;
+    --fy: 0.4;
+    --dev-w: min(var(--stage-w) * 0.32, 260px);
+  }
+
+  .hero__stage--over {
+    perspective-origin: 79% 45%;
+  }
+
+  .hero__stage .hero__device {
+    left: 79%;
+    top: 16%;
+  }
+
+  /* Fades into the dark ground at both ends: the lead above, the hanging iPhone below. */
+  .hero__scrim {
+    background:
+      linear-gradient(180deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0) 22%),
+      linear-gradient(0deg, rgba(28, 27, 25, 1) 0%, rgba(28, 27, 25, 0.5) 14%, rgba(28, 27, 25, 0) 30%);
+  }
+
+  .hero__copy,
+  .hero--photo .hero__cta {
+    display: contents;
+  }
+
+  .hero--photo .hero__title {
+    order: 1;
+    margin: var(--space-8) var(--hero-pad) var(--space-3);
+  }
+
+  .hero--photo .hero__lead {
+    order: 2;
+    margin: 0 var(--hero-pad) var(--space-8);
+  }
+
+  .hero--photo .hero__actions {
+    order: 4;
+    margin: 0 var(--hero-pad);
+  }
+
+  .hero--photo .hero__more {
+    order: 5;
+    align-self: flex-start;
+    margin: var(--space-4) var(--hero-pad) 0;
+  }
+
+  .hero--photo .hero__trust {
+    order: 6;
+    margin: var(--space-4) var(--hero-pad) 0;
+  }
+}
+
+/* A wide photo leading into a section. */
+.photo-wide {
+  position: relative;
+  margin-bottom: clamp(40px, 5vw, 72px);
+}
+
+.photo-wide img {
+  width: 100%;
+  /* 2:1 on wide screens so the photo leads into the section rather than filling the window;
+     its own 1.57:1 below 900px, where it is already short. */
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  object-position: center 12%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-3), 0 18px 40px -18px var(--contact-shadow);
+}
+
+@media (max-width: 900px) {
+  .photo-wide img {
+    aspect-ratio: auto;
+  }
+}
+
+/* The closing band with a photo behind it. The scrim keeps the band's own inverse text contrast. */
+.band-photo {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding-block: clamp(72px, 9vw, 128px);
+}
+
+.band-photo__img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: center 35%;
+}
+
+.band-photo::before {
   content: '';
   position: absolute;
+  inset: 0;
   z-index: -1;
-  left: 8%;
-  right: 8%;
-  bottom: 2px;
-  height: clamp(26px, 4vw, 50px);
-  background: radial-gradient(ellipse at center, var(--contact-shadow), transparent 72%);
-  filter: blur(10px);
+  background: rgba(28, 27, 25, 0.82);
 }
 
 /* ============================================================================
@@ -810,110 +1117,210 @@ img {
   display: block;
 }
 
-/* The hero's phone standing on its own in a section column, not leaning on the tablet: the
-   household clip and the offline screen. Same bezel, island and status band; only the placement
-   differs. */
-.device--phone.device--solo {
+/* The iPhone: ONE frame for every phone on the page (the hero in the phone layout, the household
+   clip, the offline screen), built the way tilted-device heroes usually are and measured against
+   the real thing (2026-11-25 reviews: "plopped over the image", "slightly warped", and the old
+   section phones "very boxy, almost like Android devices"):
+   - Real proportions. The screen is the capture's own 440 x 956, with the status bar INSIDE it as
+     on a real phone (an extra band above the screenshot made it 4% too tall); a black border 3% of
+     the width a side; corners 15% of the width, which is what reads as an iPhone and not a slab.
+   - Drawn, not captured: the Dynamic Island (126 x 37pt, 11pt down) and the status bar (9:41,
+     signal, Wi-Fi, battery), since a browser screenshot starts below where they would be.
+   - Tilted on three axes at the angles Nate picked in Rotato (x -15, y -20, z -4). Rotato is y-up
+     and CSS is y-down, so x and z flip sign: --rx 15deg tips the top back, --ry -20deg turns the
+     screen to the left, --rz 4deg leans it clockwise. Same Euler order as Rotato's. A phone to the
+     LEFT of its words turns the other way (.device--turn-right).
+   - Thickness as an extrusion: solid shadows stepped toward the edges the tilt shows you, dark
+     titanium with a lit lip, as Rotato renders it. Its depth is the device's thickness x the sine
+     of each tilt (iPhone: 8.25mm on a 71.5mm width). Box-shadows follow the rounded corners,
+     which separate side faces could not (they left gaps at every corner).
+   - Lit from the upper right (the hero photo's windows): the soft shadows fall down and to the
+     left, tight, mid, and a wide one using the site's --contact-shadow; the rim catches the light.
+   - Glass: a faint reflection and a light warm tint over the screen (.device__screen::after).
+   Every length is a fraction of --dev-w, which each placement sets. */
+.device.device--iphone {
+  --rx: 15deg;
+  --ry: -20deg;
+  --rz: 4deg;
+  --bezel: calc(var(--dev-w) * 0.03);
+  --radius: calc(var(--dev-w) * 0.15);
+  --ex: calc(var(--dev-w) * 0.04);
+  --ey: calc(var(--dev-w) * 0.03);
+  /* The status bar and island are placed in the SCREEN's points: its width is 94% of the device. */
+  --pt: calc(var(--dev-w) * 0.94 / 440);
+  /* The tight and mid soft shadows' strength: full over the dark hero photo. */
+  --shade-tight: rgba(0, 0, 0, 0.5);
+  --shade-mid: rgba(0, 0, 0, 0.42);
   position: relative;
-  right: auto;
-  bottom: auto;
-  width: min(300px, 78%);
-  margin: 0 auto;
+  width: var(--dev-w);
+  padding: var(--bezel);
+  border-radius: var(--radius);
+  background: linear-gradient(150deg, #3a3732 0%, #1b1916 35%, #0e0d0b 75%, #1f1d1a 100%);
+  box-shadow:
+    /* rim light on the top and right edges */
+    inset calc(var(--dev-w) * -0.0015) calc(var(--dev-w) * 0.0015) 0 rgba(255, 244, 228, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    /* the edge band: a lit lip nearest the face, dark titanium behind it */
+    calc(var(--ex) * 0.2) calc(var(--ey) * 0.2) 0 #5e5a54,
+    calc(var(--ex) * 0.45) calc(var(--ey) * 0.45) 0 #34312d,
+    calc(var(--ex) * 0.75) calc(var(--ey) * 0.75) 0 #22201d,
+    var(--ex) var(--ey) 0 #161513,
+    /* tight, mid and wide soft shadows, all falling down and to the left */
+    calc(var(--dev-w) * -0.006) calc(var(--dev-w) * 0.012) calc(var(--dev-w) * 0.016) var(--shade-tight),
+    calc(var(--dev-w) * -0.04) calc(var(--dev-w) * 0.06) calc(var(--dev-w) * 0.1) var(--shade-mid),
+    calc(var(--dev-w) * -0.1) calc(var(--dev-w) * 0.16) calc(var(--dev-w) * 0.26) var(--contact-shadow);
 }
 
-/* No CSS status band over the clip: the band is painted into the video itself, in the colour of the
-   app's header in each frame, so it dims with the app when the PR celebration's backdrop comes up.
-   A CSS band stayed white over a dimmed screen. */
-.device--phone.device--clip .device__screen {
+/* The screen at the capture's own 440 x 956, status bar included: the bar's 62pt sits on top of
+   the screenshot's area, and the screenshot is cropped at the bottom to make room. */
+.device--iphone .device__screen {
+  position: relative;
+  aspect-ratio: 440 / 956;
+  border-radius: calc(var(--dev-w) * 0.125);
+  padding-top: calc(var(--pt) * 62);
+  background: #ffffff;
+}
+
+.device--iphone .device__screen picture {
+  display: block;
+  height: 100%;
+}
+
+.device--iphone .device__screen img,
+.device--iphone .device__screen video {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* The Dynamic Island. */
+.device--iphone .device__screen::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--pt) * 11);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--pt) * 126);
+  height: calc(var(--pt) * 37);
+  border-radius: var(--radius-full);
+  background: #0b0a09;
+}
+
+/* The status bar: the time in the left ear, signal / Wi-Fi / battery in the right. Decoration on a
+   picture of a phone (aria-hidden in the markup). */
+.device--iphone .device__status {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--pt) * 62);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(var(--dev-w) * 0.09) 0 calc(var(--dev-w) * 0.1);
+  color: #000000;
+  font: 600 calc(var(--pt) * 17) / 1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.device--iphone .device__status svg {
+  width: calc(var(--dev-w) * 0.2);
+  height: auto;
+}
+
+/* The glass: a soft reflection from the top right, and a warm tint. Decoration over a picture of a
+   screen; pointer-events none so it never catches a hit-test. */
+.device--iphone .device__screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(225deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(0deg, rgba(242, 166, 90, 0.07), rgba(242, 166, 90, 0.07));
+}
+
+/* A section holding a tilted phone keeps the phone's wide soft shadow inside it. The phone's
+   transform makes it its own layer, painted over the NEXT section's background, so without this
+   the shadow showed as a grey smudge across the band below (2026-11-25). */
+.section--holds-device {
+  overflow: hidden;
+}
+
+/* A phone standing on its own in a section column: the household clip and the offline screen. It
+   takes its own perspective (the hero's sits on its parent), at the same 6x its width. */
+.device--iphone.device--solo {
+  --dev-w: min(300px, 66vw);
+  margin: 0 auto;
+  transform: perspective(calc(var(--dev-w) * 6)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
+}
+
+/* On the light page the hero's shadow strengths read as a grey smudge; in dark mode the page is
+   near-black and they keep their full strength, as --contact-shadow does. */
+@media (prefers-color-scheme: light) {
+  .device--iphone.device--solo {
+    --shade-tight: rgba(0, 0, 0, 0.3);
+    --shade-mid: rgba(0, 0, 0, 0.16);
+  }
+}
+
+/* Mirrored for a phone LEFT of its words, so its screen turns toward them: the edge it shows is
+   now its left one. The light (and so the soft shadows) stays where it is. */
+.device--iphone.device--turn-right {
+  --ry: 20deg;
+  --rz: -4deg;
+  --ex: calc(var(--dev-w) * -0.04);
+}
+
+/* No screen padding under the clip's status bar: its band is painted into the video itself, in
+   the colour of the app's header in each frame, so it dims with the app when the PR celebration's
+   backdrop comes up. A CSS band stayed white over a dimmed screen. The video's band is shorter
+   than the 62pt bar, and the island and the time still clear the app's logo and Go Plus. */
+.device--iphone.device--clip .device__screen {
   padding-top: 0;
 }
 
 /* The offline screen opens on the app's offline banner, not its white header, so the band the
-   island sits in takes the banner's colour. The app's banner is --color-subtle-bg, the same value as
-   this page's in both schemes, and the screenshot swaps light/dark on the same media query. */
-.device--phone.device--offline .device__screen {
+   island sits in takes the banner's colour. The app's banner is --color-subtle-bg, the same value
+   as this page's in both schemes, and the screenshot swaps light/dark on the same media query. */
+.device--iphone.device--offline .device__screen {
   background: var(--color-subtle-bg);
 }
 
-.device--tablet {
-  width: 82%;
-  border-radius: clamp(20px, 3.2vw, 40px);
-  padding: clamp(7px, 1.2vw, 14px);
+@media (prefers-color-scheme: dark) {
+  .device--iphone.device--offline .device__status {
+    color: #ffffff;
+  }
 }
 
-.device--tablet .device__screen {
-  border-radius: clamp(13px, 2.1vw, 27px);
-}
+/* The hero in the desktop layout: the same frame as an iPad in landscape, like the one on our gym
+   wall. iPad Air 11": the black border ~3.8% of the width a side, corners ~7.5%, 6.1mm thick on
+   a 247.6mm width; the screenshot is its whole 1180 x 820 screen, with no island or status bar. */
+@media (min-width: 901px) {
+  .hero__stage .hero__device {
+    --bezel: calc(var(--dev-w) * 0.038);
+    --radius: calc(var(--dev-w) * 0.075);
+    --ex: calc(var(--dev-w) * 0.009);
+    --ey: calc(var(--dev-w) * 0.007);
+  }
 
-/* True to scale: a 6.9" iPhone is 78mm wide against an 11" iPad Air's 248mm in landscape, so the
-   phone is 31% of the tablet's width (25.5% of a container the tablet fills 82% of). It was 21%,
-   which read as a smaller phone standing farther back, though it sits in front.
+  .hero__stage .hero__device .device__screen {
+    aspect-ratio: auto;
+    border-radius: calc(var(--dev-w) * 0.035);
+    padding-top: 0;
+  }
 
-   At that size it would cover the tablet's "This session" column, so the tablet sits left in the
-   container and the phone stands at the right edge, overlapping only the tablet's last few percent.
-   right: 0 keeps it inside .hero__devices, so nothing is clipped at any width. */
-.device--phone {
-  position: absolute;
-  right: 0;
-  bottom: -3%;
-  width: 25.5%;
-  border-radius: clamp(16px, 2.2vw, 26px);
-  padding: clamp(3px, 0.6vw, 7px);
-  z-index: 2;
-}
+  .hero__stage .hero__device .device__screen picture,
+  .hero__stage .hero__device .device__screen img {
+    height: auto;
+  }
 
-/* A status-bar band above the screenshot, in the app's own header colour, so the
-   island has somewhere to sit. Without it the island landed on top of the app's
-   logo -- a browser screenshot starts at the page content, not below a status
-   bar, so the space has to be added here. */
-.device--phone .device__screen {
-  border-radius: clamp(14px, 2vw, 23px);
-  padding-top: clamp(11px, 1.6vw, 19px);
-  background: var(--color-surface);
-}
-
-/* The dynamic island. Drawn, not captured -- a browser screenshot can't contain
-   one. Decoration on a picture of a phone, which is honest enough. */
-.device--phone::after {
-  content: '';
-  position: absolute;
-  top: clamp(6px, 0.95vw, 11px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: clamp(26px, 3.6vw, 44px);
-  height: clamp(7px, 0.9vw, 11px);
-  border-radius: var(--radius-full);
-  background: #14130f;
-  z-index: 3;
-}
-
-/* Below this width the pair no longer fits, and the phone is the one to keep: a
-   tablet screenshot scaled to 390px is unreadable, while a phone screenshot at
-   phone size is exactly what a visitor on a phone is being sold. */
-@media (max-width: 700px) {
-  .device--tablet {
+  .hero__stage .hero__device .device__screen::before,
+  .hero__stage .hero__device .device__status {
     display: none;
-  }
-
-  .device--phone {
-    position: relative; /* keep the island anchored once it stops being absolute */
-    right: auto;
-    bottom: auto;
-    width: min(260px, 66%);
-    margin: 0 auto;
-    border-radius: 34px;
-    padding: 8px;
-  }
-
-  .device--phone .device__screen {
-    border-radius: 27px;
-    padding-top: 20px;
-  }
-
-  .device--phone::after {
-    top: 12px;
-    width: 58px;
-    height: 15px;
   }
 }
 
