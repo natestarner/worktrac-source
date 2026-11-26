@@ -91,6 +91,19 @@ test.describe('your own exercise\'s load type', () => {
     await expect(muscles).toHaveAttribute('aria-expanded', 'false');
     await expect(dialog.getByRole('button', { name: 'Legs', exact: true })).toHaveCount(0);
     await muscles.click();
-    await expect(dialog.getByRole('button', { name: 'Legs', exact: true })).toBeVisible();
+    // Opened, the picker is INSIDE the card that holds the row, so it reads as the row's contents
+    // rather than as more of the form: its body areas fall within the card's box.
+    const card = muscles.locator('xpath=..');
+    const legs = card.getByRole('button', { name: 'Legs', exact: true });
+    await expect(legs).toBeVisible();
+    // A drawn card, not just a wrapper: the first cut's wrapper enclosed the picker too, unbordered,
+    // and it read as loose form content.
+    await expect(card).toHaveCSS('border-top-style', 'solid');
+    await expect(card).not.toHaveCSS('border-top-width', '0px');
+    const cardBox = (await card.boundingBox())!;
+    const legsBox = (await legs.boundingBox())!;
+    expect(legsBox.x).toBeGreaterThanOrEqual(cardBox.x);
+    expect(legsBox.x + legsBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+    expect(legsBox.y + legsBox.height).toBeLessThanOrEqual(cardBox.y + cardBox.height + 0.5);
   });
 });

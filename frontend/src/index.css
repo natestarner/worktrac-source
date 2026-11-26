@@ -2224,15 +2224,14 @@ button.person-row {
    -> secondary. The chips wear the body diagram's colour, so what is tapped here is what the About
    sheet draws: primary solid, secondary at the key's strength. Primary is also bold on a dark fill,
    so the state reads without relying on hue alone. */
-/* Fixed copy that fits one line at 375pt; if a larger text setting ever pushes it over, it ends in
-   an ellipsis rather than growing the dialog by a line. */
+/* Fixed copy, and since 2026-11-26 also the picker's colour key, so it WRAPS rather than ending in
+   an ellipsis: cut short it lost "secondary" and its swatch, the half of the key that explains the
+   lighter chips. One line on most phones; two inside the Add exercise card on a narrow one. */
 .muscle-picker-hint {
   margin: 0 0 var(--space-2);
-  overflow: hidden;
   color: var(--color-muted);
   font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: var(--leading-normal);
 }
 
 /* The key, inline: each state's swatch sits just before the word it is the colour of. */
@@ -2246,6 +2245,13 @@ button.person-row {
    the form asks nothing of someone who doesn't care and shows a suggestion without its machinery.
    The summary carries an exercise name of any length and a list of muscles, so it wraps; the
    fixed hint's nowrap cut a long line off on every iPhone once (found 2026-11-09). */
+.muscles-field {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
 .muscles-field-toggle {
   display: flex;
   align-items: flex-start;
@@ -2253,9 +2259,9 @@ button.person-row {
   width: 100%;
   min-height: 44px;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text);
   text-align: left;
   cursor: pointer;
@@ -2304,10 +2310,19 @@ button.person-row {
   font-weight: var(--weight-semibold);
 }
 
-/* Unboxed, at the form's full width: the picker's one-line hint is sized to that width, and a
-   box's padding cut it short on a 375pt iPhone. */
+/* Opened, the picker sits INSIDE the same card as the row that opened it, under a hairline, so it
+   reads as that row's contents rather than as the rest of the form. Its horizontal padding is
+   tighter than the row's so the one-line hint still fits a 320pt iPhone. */
 .muscles-field-panel {
-  padding-top: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Between "Measured in" and "Muscles worked": two separate questions, so a hairline says so. */
+.exercise-form-divider {
+  margin: 0 0 var(--space-5);
+  border: none;
+  border-top: 1px solid var(--color-border);
 }
 
 /* AddEditExerciseModal's "Measured in": three choices as three separate rows, each a real radio.

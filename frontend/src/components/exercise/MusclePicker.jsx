@@ -19,9 +19,9 @@ import { IconChevronDown } from '../shared/icons';
 // open is plain local state: it lives only as long as the dialog and belongs to nobody's data.
 const NEXT = { off: 'primary', primary: 'secondary', secondary: 'off' };
 const STATE_WORD = { off: 'not worked', primary: 'primary', secondary: 'secondary' };
-// Short enough for one line on a 375pt-wide iPhone held upright (212px of 278px at --text-xs,
-// measured in Chrome's system font; SF Pro runs a few percent wider). Its CSS never wraps it; past the edge it ends in an ellipsis instead. Not an e2e:
-// the app uses the system font, so a fit measured on a Linux runner says nothing about an iPhone.
+// One line on most phones. It carries the colour key too, so its CSS lets it wrap rather than cut
+// off the "secondary" half. Not an e2e: the app uses the system font, so a fit measured on a Linux
+// runner says nothing about an iPhone.
 export const PICKER_HINT = 'Tap once for primary, twice for secondary.';
 
 export default function MusclePicker({ value, onChange, disabled = false }) {

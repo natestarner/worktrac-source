@@ -76,7 +76,7 @@ function MusclesField({ value, onChange, suggestedFrom }) {
   const summary = pickedSummary(value);
   const panelId = `${idBase}-panel`;
   return (
-    <div style={{ marginBottom: 'var(--space-5)' }}>
+    <div className="muscles-field" style={{ marginBottom: 'var(--space-5)' }}>
       <button
         type="button"
         className="muscles-field-toggle pressable"
@@ -403,6 +403,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       {/* Optional, and only for a genuinely new exercise: one that already exists opens instead,
           and keeps the muscles it has. "Suggested from" shows only while the suggestion is what is
           set; once a chip is tapped the choice is theirs. */}
+      {!isEditing && !openTarget && <hr className="exercise-form-divider" />}
       {!isEditing && !openTarget && (
         <MusclesField
           value={muscles}

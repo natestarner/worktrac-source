@@ -139,8 +139,10 @@ in-app how-to videos, which share the same entry point and the same library-cura
 - **On Add exercise the picker starts folded to one row** (`AddEditExerciseModal`'s
   `MusclesField`, 2026-11-26): "Muscles worked" over a summary in the About sheet's words
   (`muscleText.js#pickedSummary`: "Chest · helped by Triceps"), "Not set (optional)", or the
-  suggestion with "Suggested from <exercise>". Tapping it opens the picker beneath; the chips and
-  their taps are unchanged. The row's accessible name is just "Muscles worked" and the summary is
+  suggestion with "Suggested from <exercise>". Tapping it opens the picker inside the same card,
+  under a hairline, so it reads as that row's contents (a first cut opened it below the card and it
+  read as the rest of the form); the chips and their taps are unchanged. A divider separates it from
+  "Measured in" above. The row's accessible name is just "Muscles worked" and the summary is
   its description. The picker's key is folded into its hint line (a swatch beside "primary" and
   "secondary"), in Customize too.
 - **The app says "primary" and "secondary"** (2026-11-08), matching the data model's own
