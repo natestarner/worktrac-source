@@ -121,5 +121,8 @@ function revealOnPage(el) {
   // on top of the keyboard; in Safari it stays at the bottom of the layout viewport, behind it.
   const bottom = Math.min(band.bottom, window.innerHeight - readPx('--bottom-bar-height'));
   if (rect.top >= top && rect.bottom <= bottom) return;
+  // Logged because a reveal is a scroll nobody asked for: when one fights another scroll, this line
+  // is the only trace of it in the app's console (09-search-focus-holds.yaml reads it).
+  console.info(`[keyboard] reveal ${el.getAttribute('placeholder') ?? el.id ?? el.tagName} (field ${Math.round(rect.top)}-${Math.round(rect.bottom)}, visible ${Math.round(top)}-${Math.round(bottom)})`);
   el.scrollIntoView({ block: 'center' });
 }

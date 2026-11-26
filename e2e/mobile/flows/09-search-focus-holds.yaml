@@ -1,0 +1,30 @@
+# Tapping the Log search brings the field up under the tab bar, and it STAYS there (TestFlight 1.4
+# build 34, 2026-11-25: it scrolled to the top, then jumped back down to the middle of the page).
+# Only the app can show this: the jump comes from keyboard.js's reveal, which runs only in the app,
+# when the keyboard finishes opening. The screenshots are taken at intervals after the tap, so a
+# field that arrives and then leaves shows in the later ones.
+#
+# app-evidence: the keyboard helper scrolled the page = \[keyboard\] reveal Search all exercises
+appId: fitness.huddle.app
+name: The search field stays at the top once tapped
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_9}
+- extendedWaitUntil:
+    visible: 'Search all exercises'
+    timeout: 30000
+- takeScreenshot: mobile-flows-out/09-before
+- tapOn: 'Search all exercises'
+- takeScreenshot: mobile-flows-out/09-just-after
+- waitForAnimationToEnd:
+    timeout: 2000
+- takeScreenshot: mobile-flows-out/09-after-settle
+- waitForAnimationToEnd:
+    timeout: 4000
+- takeScreenshot: mobile-flows-out/09-later
+# The field must be on screen above the keyboard, and the section below it too: a field centred
+# down the page puts "Search results"/the list out of reach. Visible, not position-checked --
+# Maestro has no coordinates -- so the screenshots are the real evidence.
+- assertVisible: 'Search all exercises'
