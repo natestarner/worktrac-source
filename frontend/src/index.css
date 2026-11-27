@@ -821,6 +821,15 @@ button.search-trigger:active {
   color: var(--color-muted);
 }
 
+/* While History's or PRs' search field has focus, the SessionBar is hidden: Safari keeps a fixed
+   bottom bar just above the keyboard, so scrolling the matches with the keyboard up drew the bar
+   over them (2026-11-26). `visibility`, not `display`: nothing changes size, so nothing reflows.
+   This replaced closing the keyboard on a drag, which made Safari redraw the page mid-scroll and
+   History flash blank (2026-11-27; ExerciseFilterBar.jsx). */
+.app-shell:has(.exercise-filter-input:focus) .session-bar {
+  visibility: hidden;
+}
+
 /* While the search screen is up: the chrome goes, so the search bar is the top of the page and the
    whole screen is search. `!important` because Header draws its display inline. The SessionBar is
    hidden too, so the padding .app-shell reserves for it goes as well -- left in, the page scrolled

@@ -372,11 +372,12 @@ test.describe('PRs board sorting', () => {
   });
 });
 
-// History's and PRs' search field puts the keyboard away when the person is done typing: on the
-// keyboard's Search key, and as soon as a finger starts dragging the page (ExerciseFilterBar.jsx).
-// Scrolling the matches with the keyboard up left the SessionBar riding on the keyboard on iPhones
-// (2026-11-26). Real finger drags are sent through CDP, so Chromium only.
-test.describe('History and PRs search: the keyboard goes away when typing is done', () => {
+// History's and PRs' search field: the keyboard goes away on its Search key, and NOT when a finger
+// drags the page. Closing it mid-scroll made Safari redraw History while it coasted -- the list
+// flashed blank and the sticky chrome vanished (2026-11-27). The SessionBar, which Safari keeps just
+// above the keyboard, is hidden while the field has focus instead (index.css), so it never covers
+// the matches (2026-11-26). Real finger drags are sent through CDP, so Chromium only.
+test.describe('History and PRs search: the keyboard and the session bar', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
   async function drag(page, at: { x: number; y: number }, dy: number) {
@@ -392,28 +393,34 @@ test.describe('History and PRs search: the keyboard goes away when typing is don
     await cdp.detach();
   }
 
-  test('the Search key and a finger drag each put it away, on both tabs', async ({ page, request, browserName }) => {
+  test('typing hides the session bar; a drag keeps the keyboard; the Search key puts it away', async ({ page, request, browserName }) => {
     test.skip(browserName !== 'chromium', 'touch drags are sent through CDP');
     await registerHousehold(page, request, 'Nate');
     await pickExercise(page, 'Barbell Bench Press');
     await logSetAndDismissCelebration(page);
+    // By class, not role: a role query skips a hidden element, and the bar is hidden on purpose.
+    const bar = page.locator('.session-bar');
 
     for (const tab of ['History', 'PRs']) {
       await page.getByRole('link', { name: tab, exact: true }).click();
       const field = page.getByRole('searchbox', { name: 'Search exercises' });
+      await expect(bar).toBeVisible();
 
       await field.tap();
       await page.keyboard.type('bench');
       await expect(field).toBeFocused();
+      await expect(bar, 'hidden while typing').toBeHidden();
+      // Hidden by visibility, so the page keeps its size: nothing reflows while the keyboard is up.
+      expect(await bar.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(0);
+
+      await drag(page, { x: 195, y: 600 }, 120);
+      await expect(field, 'a drag keeps the keyboard up').toBeFocused();
+      await expect(bar).toBeHidden();
+
       await page.keyboard.press('Enter');
       await expect(field).not.toBeFocused();
       await expect(field).toHaveValue('bench');
-
-      await field.tap();
-      await expect(field).toBeFocused();
-      await drag(page, { x: 195, y: 600 }, 120);
-      await expect(field).not.toBeFocused();
-      await expect(field).toHaveValue('bench');
+      await expect(bar, 'back once typing is done').toBeVisible();
     }
   });
 });
