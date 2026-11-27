@@ -238,10 +238,10 @@ test.describe('the exercise search screen', () => {
     await expect(page.locator('.app-chrome')).toBeVisible();
     await expect(searchTrigger(page)).toHaveText('Search all exercises');
     expect(await page.evaluate(() => window.scrollY)).toBe(scrolledTo);
+    expect(Math.round((await box(searchTrigger(page))).y)).toBe(triggerTop);
     // Cancel means "never mind": the next search starts empty.
     await searchTrigger(page).click();
     await expect(searchField(page)).toHaveValue('');
-    expect(Math.round((await box(searchTrigger(page))).y)).toBe(triggerTop);
   });
 
   // Back pressed the moment the URL changes, before React Router has rendered the search route (a
