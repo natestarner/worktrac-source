@@ -381,6 +381,13 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
     `PICKER_WATCH_MS` after the dialog closes and the assert waits for the watch to finish. To
     test a sampler against a slow runner, slow `requestAnimationFrame` with an init script (each
     callback behind a 300ms `setTimeout`): the old read failed 12/16 that way, the fixed one 0/16.
+  - **Never judge a CSS transition by counting frames or by its largest per-frame step.** Both are
+    the runner's frame rate, not the app's: lower's WebKit runner drew ~25 frames a second, and the
+    one slow frame that is the resize itself carried 80% of a correctly easing 280ms glide.
+    Frames are fine for "never moved the wrong way"; to prove "a glide, not a jump", catch the
+    transition (`transitionrun` + `getAnimations()`), hold it at `currentTime` 0 and halfway, and
+    measure there (`modal-keyboard-hold.spec.ts`'s `catchGlide`).
+    `docs/incidents/2026-11-26-modal-glide-counted-frames-in-webkit.md`.
 - **Inside `expect.poll`, bound every read and catch its errors.** A callback that THROWS ends the
   poll at once (Playwright doesn't retry it); one that never returns uses up the whole window and
   leaves nothing to report. `historyConvergence.ts` had both: lower answered one GET /history in
