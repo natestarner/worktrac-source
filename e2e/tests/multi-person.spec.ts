@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, closeSearch } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, searchTrigger } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -38,7 +38,7 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
     // Newly added person becomes active, and starts with no exercise selected.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
 
     // Switch back to Alex -- should return to Barbell Bench Press, not the picker.
     await personPill(page, 'Alex').click();
@@ -46,7 +46,7 @@ test.describe('Multi-person switching', () => {
 
     // Switch to Sam again -- still no exercise selected for them.
     await personPill(page, 'Sam').click();
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
   });
 
   test('switching people preserves which tab each person was viewing', async ({ page, request }) => {
@@ -281,26 +281,5 @@ test.describe('Multi-person switching', () => {
     await expect(restReadout(page)).toHaveCount(0);
     await expect(restRing(page, 'Alex')).toHaveCount(0);
     await expect(page.getByText(/Session in progress/)).toHaveCount(0);
-  });
-
-  test('switching people preserves a half-typed exercise search', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Alex');
-
-    await page.getByRole('button', { name: '+ Add person' }).click();
-    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-
-    await personPill(page, 'Alex').click();
-    await page.getByPlaceholder('Search all exercises').fill('bench');
-    // The search layer covers the person bar; its Cancel keeps what was typed.
-    await closeSearch(page);
-
-    // Sam's search box starts empty, unaffected by Alex's search.
-    await personPill(page, 'Sam').click();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
-
-    // Switching back to Alex restores what they'd typed.
-    await personPill(page, 'Alex').click();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('bench');
   });
 });

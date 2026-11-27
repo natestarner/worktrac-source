@@ -32,10 +32,9 @@ reasoning — read those before changing the mechanism, not just this list.
   would fork it on a person switch and (via `PERSON_DEFAULTS`) turn it into a persisted-schema
   change for state that must never persist across a reload.
 - **The exercise-restore and `setDraft` calls in `ProductTour`'s exit handler (`finishOrSkip`) are
-  dispatched together, in that order, every time.** Splitting them (or reordering `setExerciseSearch`
-  before the exercise restore) reopens exactly the prefill-stomping bug in
-  `docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md` — `SELECT_EXERCISE` clears
-  `exerciseSearch` as a side effect, so the search restore has to happen *after*.
+  dispatched together, in that order, every time.** Splitting them reopens exactly the
+  prefill-stomping bug in `docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`. (There is
+  no search to restore: the Log search's text lives only on its own screen since 2026-11-27.)
   `ProductTour.test.jsx`'s restore tests pin all six draft fields, the exercise, and the pathname
   together for this reason.
 - **Steps 5-6 put a sample weight in (`screen.sampleDraft`, `TOUR_SAMPLE_DRAFT`)**, written by

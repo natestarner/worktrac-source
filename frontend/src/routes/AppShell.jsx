@@ -15,6 +15,7 @@ import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
 import SessionBar from '../components/layout/SessionBar';
 import TabsNav from '../components/layout/TabsNav';
+import { EXERCISE_SEARCH_PATH, LOG_PATH } from '../components/log/searchRoute';
 import Toast from '../components/shared/Toast';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
@@ -36,7 +37,8 @@ export default function AppShell() {
   const { people, refreshPeople, account } = useAuth();
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
-  const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding } = useUI();
+  const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding, exerciseSearchOpen } =
+    useUI();
   const { selfPersonId, isPaused } = useAccountAccess();
   // "Rest's up" while the app is in the background -- the App Store app only; a no-op on the web.
   useRestNotifications();
@@ -164,8 +166,10 @@ export default function AppShell() {
 
   // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
   // on, so switching to someone else and back resumes on the same tab too.
+  // The Log tab's search screen is not a place to come back to (only a tap can raise its keyboard),
+  // so it is remembered as the Log page.
   useEffect(() => {
-    if (activePersonId) setLastTab(location.pathname);
+    if (activePersonId) setLastTab(location.pathname === EXERCISE_SEARCH_PATH ? LOG_PATH : location.pathname);
   }, [location.pathname, activePersonId, setLastTab]);
 
   // Only navigate when the active person actually changes (not on the initial
@@ -247,7 +251,14 @@ export default function AppShell() {
   const personBarSticks = people.length >= 2;
 
   return (
-    <div className="app-shell" style={{ minHeight: 'var(--viewport-min-height)', background: 'var(--color-bg)' }}>
+    <div
+      // While the Log tab's search screen is up, the chrome (header, person bar, tab bar, SessionBar)
+      // is hidden by CSS so the search field is the top of the page. A class, not conditional
+      // rendering: the chrome keeps its local state and tree position, and the sticky tab bar must
+      // not be wrapped (a wrapper would become its sticky containing block). See index.css.
+      className={`app-shell${exerciseSearchOpen ? ' app-shell--searching' : ''}`}
+      style={{ minHeight: 'var(--viewport-min-height)', background: 'var(--color-bg)' }}
+    >
       {/* The first thing a keyboard reaches, and invisible until it is focused. Without it,
           getting to the log form meant tabbing through the account menu, every person pill and
           all five tab links on every single screen. Targets the <main> below. */}
@@ -339,10 +350,11 @@ export default function AppShell() {
 
 // Publishes the sticky chrome's real height on the root element as --app-chrome-height, which
 // --sticky-chrome-clearance (index.css) is built from: everything scrolled to under the chrome --
-// the Log picker's search field, History's jump, the Handbook's anchors -- lands just below it.
-// That value used to be a fixed 132px guess, and with two or more people the chrome is ~141px, so
-// the search field's top edge (its orange focus border) was left under the tab bar. The height
-// depends on the household size and the safe-area insets, so it is measured, never guessed.
+// History's jump, the Handbook's anchors, Billing's and Trends' anchors, a focused field the app
+// reveals -- lands just below it. That value used to be a fixed 132px guess, and with two or more
+// people the chrome is ~141px, so what was scrolled to (and its orange focus border) was left under
+// the tab bar. The height depends on the household size and the safe-area insets, so it is
+// measured, never guessed.
 // Module scope keeps the callback ref's identity stable (React 19 runs the returned cleanup when
 // the node goes); without ResizeObserver (jsdom) the CSS fallback stands.
 function publishChromeHeight(el) {

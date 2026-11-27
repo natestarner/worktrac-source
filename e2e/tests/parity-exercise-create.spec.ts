@@ -70,7 +70,13 @@ forEachConnectivityMode<void>('creating an exercise opens its detail screen', {
       const tick = () => {
         if (!document.querySelector('[role="dialog"]')) {
           firstClosedFrame ??= performance.now();
-          samples.push(document.querySelector('input[placeholder="Search all exercises"]') ? 1 : 0);
+          // The picker's search trigger (a button since the search became its own screen), or that
+          // screen's field: either means the picker painted instead of the new exercise.
+          samples.push(
+            document.querySelector('button[aria-label="Search all exercises"], input[placeholder="Search all exercises"]')
+              ? 1
+              : 0,
+          );
         }
         if (firstClosedFrame !== null && performance.now() - firstClosedFrame >= watchMs) w.__pickerDone = true;
         else requestAnimationFrame(tick);

@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setHoldSeconds, tapLogSet, clearSearch } from './support/exercises';
+import { dismissPrCelebration, pickExercise, setHoldSeconds, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: logging a hold, run across online / lie-fi / hard-offline / pinned-offline from one
@@ -29,10 +29,9 @@ const holdRow = (page: Page) => page.getByText('0:50', { exact: true }).first();
 // finished would leave the picker permanently empty and this spec would measure the warm race
 // rather than the flow. Same reasoning as parity-active-loop's warmCatalog.
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
-  await search.fill(EXERCISE);
+  await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 forEachConnectivityMode<void>('a hold logs and reads back as time', {

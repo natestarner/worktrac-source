@@ -276,8 +276,6 @@
      scrolling up beneath it, and stay under every scrim so a modal still dims it. */
   --z-status-bar: 15;
   --z-bottom-bar: 20;
-  /* The Log picker's full-screen search: over the chrome and the SessionBar, under toasts (40). */
-  --z-search-layer: 30;
 
   /* --- Top safe area ------------------------------------------------------
      The App Store app draws edge to edge, so the page starts BEHIND the iOS status bar (the clock,
@@ -303,14 +301,14 @@
      How far anything scrolled-to under the sticky .app-chrome needs to clear
      it by, so the thing being scrolled to doesn't end up PAINTED OVER by the
      chrome rather than merely near it. One shared value rather than two
-     independent guesses that could drift apart -- .help-section's anchored
-     headings and the Log picker's search field both need it.
+     independent guesses that could drift apart -- the Handbook's anchors,
+     History's jump, Billing's Pro anchor and Trends' exercise anchor all use it.
      Exact, not a guess: --app-chrome-height is the chrome's MEASURED height,
      published by AppShell (publishChromeHeight). It varies with whether the
      person bar is in the chrome (one person vs. several), and the old fixed
-     132px undershot the several-people chrome (~141px), leaving the search
-     field's focus border under the tab bar. --space-3 on top keeps the focus
-     ring clear of the chrome's edge. 132px is only the fallback before the
+     132px undershot the several-people chrome (~141px), leaving what was
+     scrolled to (and its focus border) under the tab bar. --space-3 on top
+     keeps a focus ring clear of the chrome's edge. 132px is only the fallback before the
      first measurement (and in jsdom). Plus --safe-top, because in the App
      Store app the chrome sticks below the status bar rather than at the very top. */
   --app-chrome-height: 132px;
@@ -761,54 +759,27 @@ button:not(.pressable):active:not(:disabled) {
   color: var(--color-faint);
 }
 
-/* The Log picker's full-screen search (ExercisePicker.jsx), like iOS Mail's and Music's: tapping
-   the field lifts it, unchanged, into a fixed layer over the whole screen. The field is pinned at
-   the top, under the status bar; results scroll beneath it, inside the layer; Cancel closes it.
-   It replaced scrolling the PAGE to put the field at the top, which the App Store app's keyboard
-   kept defeating (#626: the WebView shrinks as the keyboard opens, and the scroll clamped or was
-   dropped about half the time). Nothing here asks the page to move.
+/* The Log tab's exercise search SCREEN (ExerciseSearchScreen.jsx). An ordinary page: the field and
+   Cancel in a bar that sticks to the top, the results below it in normal document flow, scrolled
+   by the page like every other screen. Nothing here is fixed, sized from JS, scroll-locked or moved
+   while the keyboard opens; each of those was tried in an earlier design and broke on iOS -- read
+   docs/architecture/exercise-search-history.md before adding any of them back.
 
-   Sized to the WINDOW: `top: 0` and `height: var(--window-height)`, window.innerHeight in pixels
-   (lib/visibleViewport.js). Never placed from visualViewport: it was (`--visible-viewport-top` /
-   `-height`), and in Safari it chased every pan of the visual viewport a frame late (the flicker,
-   2026-11-26). Not `inset: 0` either: in the App Store app the window shrinks above the keyboard
-   (`Keyboard.resize: "native"`), and WKWebView sometimes left an `inset: 0` layer at its
-   pre-keyboard height (956px in a 609px window, on the simulator), with the end of the list under
-   the keyboard and a short list unable to scroll. A pixel value republished on every resize is a
-   style change, which forces the layout. In Safari the keyboard covers the bottom of the window
-   instead, so the results pad their end by `--keyboard-inset` while the field has focus. Safari
-   is kept from panning in the first place: the tap opens the layer before the field takes focus
-   (ExercisePicker.jsx), and lockBodyScroll's touch guard cancels every drag with nothing to
-   scroll.
-
-   It sits above the sticky chrome and the SessionBar and below toasts, the PR celebration, the
-   tour and every Modal (the preview sheet and "Add your own exercise" open over it). */
-.exercise-search-layer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* The window's height in pixels (lib/visibleViewport.js), not `bottom: 0`: WKWebView sometimes
-     kept an `inset: 0` layer at its pre-keyboard height after the app's window shrank (956px in a
-     609px window), leaving the end of the list under the keyboard. Without visualViewport (jsdom)
-     nothing is published and it is the whole window. */
-  height: var(--window-height, 100%);
-  z-index: var(--z-search-layer);
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg);
-  animation: fadeIn var(--dur-fast) var(--ease-out);
-}
-
+   The chrome is hidden while it is up (.app-shell--searching, below), so the bar is the top of the
+   page. Sticky in flow, never fixed: the App Store app's window shrinking above the keyboard just
+   shortens the page, which needs no help. */
 .exercise-search-bar {
+  position: sticky;
+  /* --safe-top is the status bar in the app (0 on the web). */
+  top: var(--safe-top);
+  z-index: var(--z-app-chrome);
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
-  max-width: 840px;
-  margin: 0 auto;
-  /* --safe-top is the status bar in the app (0 on the web): the layer starts behind it. */
-  padding: calc(var(--safe-top) + var(--space-3)) var(--space-4) var(--space-3);
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-4);
+  /* Results scroll up under it, so it needs a ground, and a hairline to say where it ends. */
+  background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -821,34 +792,52 @@ button:not(.pressable):active:not(:disabled) {
   flex-shrink: 0;
 }
 
-/* The only part of the layer that scrolls (lockBodyScroll's touch guard allows drags here and
-   nowhere else). `contain` keeps a fling at either end from carrying on into the page behind. No
-   -webkit-overflow-scrolling: it has done nothing since iOS 13 except carry old WebKit bugs. */
-.exercise-search-results {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.exercise-search-results-inner {
-  max-width: 840px;
-  margin: 0 auto;
-  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
-}
-
-/* Room for Safari's keyboard only while the field has focus, which is when the keyboard is up
-   (iOS blurs the field when the keyboard is dismissed). Applied always, a value left behind after
-   the keyboard went (or Brave's toolbars counted as keyboard) let the list scroll well past
-   "+ Add your own exercise" into blank space (2026-11-26). */
-.exercise-search-layer:has(.exercise-search-bar input:focus) .exercise-search-results-inner {
-  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px));
-}
-
 .exercise-search-hint {
   margin: 0 0 var(--space-5);
   color: var(--color-muted);
   font-size: var(--text-sm);
+}
+
+/* The Log page's search "field": a button drawn as the field (ExercisePicker's SearchTrigger), so
+   tapping it opens the search screen without focusing anything mid-page. It takes `.input` for the
+   look, and undoes what the global button rules add: semibold text, centring, the press scale. */
+.search-trigger {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: text;
+  font-weight: var(--weight-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.search-trigger:active {
+  transform: none;
+}
+
+.search-trigger-placeholder {
+  color: var(--color-muted);
+}
+
+/* While the search screen is up: the chrome goes, so the search bar is the top of the page and the
+   whole screen is search. `!important` because Header draws its display inline. The SessionBar is
+   hidden too, so the padding .app-shell reserves for it goes as well -- left in, the page scrolled
+   past "+ Add your own exercise" by the bar's height. */
+.app-shell--searching .header-bar,
+.app-shell--searching .person-pill-bar,
+.app-shell--searching .app-chrome,
+.app-shell--searching .session-bar {
+  display: none !important;
+}
+
+.app-shell.app-shell--searching {
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.app-shell--searching .tab-panel {
+  padding-top: 0;
 }
 
 /* The two screens where a 6-digit emailed code is typed (Confirm email, Reset password).
@@ -1666,7 +1655,7 @@ button.person-row {
 
 /* BillingTab scrolls this label into view for someone who arrived from the trainer page's
    ?plan=pro CTAs, because the screen leads with Plus and keeps Pro deliberately quiet below it.
-   Third consumer of --sticky-chrome-clearance, for the same reason as the other two: without it
+   Uses --sticky-chrome-clearance for the same reason as everything else scrolled to: without it
    `block: 'start'` parks its top edge exactly where the sticky .app-chrome paints, at a
    higher z-index, so the thing we scrolled to lands behind the tab bar. */
 .pro-upgrade-anchor {
@@ -1674,7 +1663,7 @@ button.person-row {
 }
 
 /* TrendsTab scrolls this into view for someone who arrived from a PR row's "View progress".
-   Fourth consumer of --sticky-chrome-clearance, for exactly the reason the other three list:
+   Uses --sticky-chrome-clearance for the same reason as everything else scrolled to:
    without it `block: 'start'` parks the card's top edge where the sticky .app-chrome paints, so
    the section we deep-linked to lands behind the tab bar. */
 .trends-exercise-anchor {
@@ -2557,7 +2546,8 @@ button.person-row {
 
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,
    this session's set history on the right. Block (stacked) by default/portrait;
-   only the @media block below switches it to a real grid. */
+   only the landscape @media block below switches it to a real grid -- and only at 640px+ wide,
+   because a keyboard that shrinks the page makes a portrait phone "landscape" (see that block). */
 .exercise-detail-grid {
   display: block;
 }
@@ -3078,7 +3068,14 @@ button.person-row {
   }
 }
 
-@media (orientation: landscape) and (max-height: 900px) {
+/* Landscape: a phone on its side, or an iPad. ⚠️ The min-width is NOT optional. `orientation`
+   only compares the page's width to its height, and some browsers shrink the page's height when
+   the keyboard opens (Brave on iPhone, Chrome on Android). A portrait phone then reads as
+   "landscape" (390 wide, ~300 tall) the moment the person taps Weight, and the two columns below
+   squeeze the whole log form into 0px beside the sets column (2026-11-27, on prod since July).
+   The keyboard can shrink the height but never the width, and no phone is 640px wide upright, so
+   the min-width keeps every portrait phone out of this block whatever the keyboard does. */
+@media (orientation: landscape) and (min-width: 640px) and (max-height: 900px) {
   .header-bar {
     padding-top: var(--space-1);
     padding-bottom: var(--space-1);
@@ -3680,8 +3677,8 @@ button.person-row {
   background: var(--color-subtle-bg);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-8);
-  /* The shared, measured clearance -- this was a hand-copied 132px, the same guess that left the
-     Log search field under the two-person chrome. */
+  /* The shared, measured clearance -- this was a hand-copied 132px, a guess that undershot the
+     two-person chrome. */
   scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
@@ -4209,7 +4206,7 @@ button.person-row {
 
    scroll-margin-top: the jump uses `block: 'start'`, which parks a block exactly where the sticky
    .app-chrome paints, so the workout landed BEHIND the tab bar. Same fix and token as the Help
-   page, the exercise search and BillingTab's Pro anchor (see --sticky-chrome-clearance). */
+   page and BillingTab's Pro anchor (see --sticky-chrome-clearance). */
 .history-block {
   margin-bottom: var(--space-5);
   content-visibility: auto;

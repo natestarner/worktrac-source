@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, dismissPrCelebration, pickExercise, tapLogSet, clearSearch } from './support/exercises';
+import { backToPicker, dismissPrCelebration, pickExercise, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: how a person's FIRST set of an exercise asks for its weight, across online /
@@ -17,12 +17,11 @@ const LOADED = 'Barbell Back Squat';
 const BODYWEIGHT = 'Pull-up';
 
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
   for (const name of [LOADED, BODYWEIGHT]) {
-    await search.fill(name);
+    await searchFor(page, name);
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   }
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 const setRow = (page: Page, n: number) => page.getByText(`Set ${n}`, { exact: true });

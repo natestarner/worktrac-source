@@ -58,6 +58,7 @@ need the "why" or the debugging story.
 | 2026-11-25 | [The session bar blinked out when the next workout started while the last one was still ending](2026-11-25-ended-session-answer-blinks-session-bar.md) — a live-session read from before the End landed named the ended workout, replaced the new one's placeholder, and closed an open "End this workout?" sheet; a nightly "flake" in both engines | Offline / log screen |
 | 2026-11-26 | [The Log search layer could not scroll in the app, and flickered in Safari](2026-11-26-search-layer-sized-from-visual-viewport.md) — placed from visualViewport (a frame late in Safari), WKWebView left an `inset: 0` layer at its pre-keyboard height, the tap focused the field before the layer was up, and the first fix's touch guard froze the Add exercise dialog opened over it; found only once the app logged its own geometry | Log screen / keyboard |
 | 2026-11-26 | [The dialog-glide spec counted the runner's frames, so it failed in lower's WebKit run](2026-11-26-modal-glide-counted-frames-in-webkit.md) — at ~25 fps one resize frame carried 80% of a correctly easing 280ms glide; the spec now holds the transition at its start and middle instead of counting frames | e2e / WebKit |
+| 2026-11-27 | [Typing a weight in Brave collapsed the Log screen](2026-11-27-brave-keyboard-collapses-log-form.md): Brave shrinks the page above the keyboard, so a portrait iPhone read as `orientation: landscape` and the two-column layout gave the form 0px. On prod since July | Log screen / keyboard |
 
 ## Adding a new incident
 

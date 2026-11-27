@@ -3,9 +3,7 @@
 // must never fight them for the page. Returns the cancel.
 //
 // History's jump to a workout (HistoryTab.jsx's effect has the why): Safari has no scroll
-// anchoring, so blocks drawing around the target keep moving it. (The Log search also used it,
-// through the keyboard reveal, until the search became a full-screen layer that never scrolls the
-// page -- #626.)
+// anchoring, so blocks drawing around the target keep moving it.
 export const JUMP_STILL_FRAMES = 3;
 export const JUMP_MAX_FRAMES = 30;
 const JUMP_INTERRUPTS = ['wheel', 'touchstart', 'keydown', 'mousedown'];

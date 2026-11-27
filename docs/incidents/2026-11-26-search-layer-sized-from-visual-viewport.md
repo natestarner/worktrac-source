@@ -1,5 +1,12 @@
 # 2026-11-26 — The Log search layer: no scroll in the app, flicker in Safari, and two regressions from the fix
 
+> **Outcome:** the layer was then **abandoned for a search screen** the same day. A third failure
+> on TestFlight run 40 was a ghost click taking the focus, so there was no keyboard. It was fixed on
+> the unmerged branch `fix/search-tap-focus`, but Nate judged the layer overcomplicated. The full
+> history, including that branch's simulator evidence and why every piece was removed, is in
+> `docs/architecture/exercise-search-history.md`. This file stays as the post-mortem of the layer
+> itself.
+
 ## Symptom
 
 The full-screen exercise search (#630, closing #626) reached lower and Huddle Lower TestFlight

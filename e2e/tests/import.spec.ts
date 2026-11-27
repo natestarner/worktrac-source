@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
-import { logSetAt, pickExercise, prCelebration } from './support/exercises';
+import { logSetAt, pickExercise, prCelebration, searchTrigger } from './support/exercises';
 
 // Import through the real UI: pick a person, pick a file, confirm what it says, and check the data
 // landed where it was supposed to and nowhere else.
@@ -44,7 +44,7 @@ async function addPerson(page, name: string) {
   await page.getByRole('button', { name: '+ Add person' }).click();
   await page.getByPlaceholder('Name', { exact: true }).fill(name);
   await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  await expect(searchTrigger(page)).toBeVisible();
 }
 
 test.describe('CSV import', () => {

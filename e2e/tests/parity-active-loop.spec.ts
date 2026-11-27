@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, logSetButton, clearSearch } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, logSetButton, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY specs: one assertion body, run across online / lie-fi / hard-offline / pinned-offline.
@@ -50,10 +50,9 @@ const setRow = (page: Page, weight: number, reps = 8) =>
 // leaves the picker permanently empty. That is correct app behaviour (nothing was cached yet), but
 // it makes the test measure the warm race instead of the flow, so pay it explicitly and online.
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
-  await search.fill(EXERCISE);
+  await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 // The single most-used flow in the app. `frontend-core.md` states the invariant this pins down:
@@ -248,10 +247,9 @@ forEachConnectivityMode<void>('switching exercises never shows the previous one\
     await warmCatalog(page);
     // Warm the second exercise too -- the picker filters client-side over one cached query, so an
     // exercise never fetched while online is simply absent from the list in a degraded mode.
-    const search = page.getByPlaceholder('Search all exercises');
-    await search.fill('Pull-up');
+    await searchFor(page, 'Pull-up');
     await expect(page.getByRole('button', { name: 'Pull-up', exact: true })).toBeVisible();
-    await clearSearch(page);
+    await closeSearch(page);
   },
   navigate: async (page) => {
     await pickExercise(page, EXERCISE);

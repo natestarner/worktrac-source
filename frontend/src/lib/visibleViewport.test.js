@@ -74,41 +74,6 @@ describe('trackVisibleViewport', () => {
     expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('420px');
   });
 
-  // The search layer pins to the window and pads its list's end by this, instead of moving.
-  it('publishes how much of the window the keyboard covers', () => {
-    const vv = fakeVisualViewport({ height: 800 });
-    vi.stubGlobal('visualViewport', vv);
-    stop = trackVisibleViewport();
-    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('0px');
-
-    // Safari: an 800px window, 420px visible, panned 180px down -> the bottom 200px are covered.
-    vv.height = 420;
-    vv.offsetTop = 180;
-    vv.dispatchEvent(new Event('resize'));
-    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('200px');
-
-    stop();
-    stop = () => {};
-    expect(root.style.getPropertyValue('--keyboard-inset')).toBe('');
-  });
-
-  // The search layer is sized with it: WKWebView left an `inset: 0` layer at its pre-keyboard
-  // height after the app's window shrank. Publishing it on the window's resize, synchronously,
-  // is what forces the layout.
-  it('publishes the window height, and republishes it the moment the window resizes', () => {
-    vi.stubGlobal('visualViewport', fakeVisualViewport({ height: 800 }));
-    stop = trackVisibleViewport();
-    expect(root.style.getPropertyValue('--window-height')).toBe('800px');
-
-    vi.stubGlobal('innerHeight', 453);
-    window.dispatchEvent(new Event('resize'));
-    expect(root.style.getPropertyValue('--window-height')).toBe('453px');
-
-    stop();
-    stop = () => {};
-    expect(root.style.getPropertyValue('--window-height')).toBe('');
-  });
-
   it('follows a pan with no resize', () => {
     const vv = fakeVisualViewport({ height: 420 });
     vi.stubGlobal('visualViewport', vv);
@@ -198,8 +163,8 @@ describe('revealFocusedField inside a Modal', () => {
 describe('revealFocusedField on the page', () => {
   beforeEach(() => vi.stubGlobal('visualViewport', fakeVisualViewport({ height: 800 })));
 
-  // The search field's focus border used to sit under the tab bar: "in view" must mean below the
-  // sticky chrome, measured, not merely below the top of the screen.
+  // A field's focus border used to be left under the tab bar: "in view" must mean below the sticky
+  // chrome, measured, not merely below the top of the screen.
   it('counts a field under the sticky chrome as hidden', () => {
     const chrome = document.createElement('div');
     chrome.className = 'app-chrome';
@@ -212,21 +177,6 @@ describe('revealFocusedField on the page', () => {
     input.focus();
     revealFocusedField();
     expect(input.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
-  });
-
-  // The Log picker's full-screen search pins its field at the top of a fixed layer sized to the
-  // visible viewport. A page reveal there would scroll the page behind the layer for nothing (#626).
-  it('leaves a field inside a keyboard layer alone, wherever it is', () => {
-    const layer = document.createElement('div');
-    layer.dataset.keyboardLayer = '';
-    const input = document.createElement('input');
-    box(input, 900, 940);
-    input.scrollIntoView = vi.fn();
-    layer.appendChild(input);
-    document.body.appendChild(layer);
-    input.focus();
-    revealFocusedField();
-    expect(input.scrollIntoView).not.toHaveBeenCalled();
   });
 
   it('does nothing on the page when asked to leave the page alone', () => {

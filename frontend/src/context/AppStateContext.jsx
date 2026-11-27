@@ -58,7 +58,6 @@ const PERSON_DEFAULTS = {
   draftExerciseId: null, // which exercise these describe; a mismatch reads as "not known yet"
   draftSetCount: 0, // displaySets.length when seeded; an INCREASE means a set was logged
   draftSource: 'prefill', // 'prefill' = computed, free to replace | 'user' = typed, protected
-  exerciseSearch: '',
   lastTab: '/app/log', // kept in sync by AppShell as the route changes.
   trendsRangeWeeks: 12,
   trendsExerciseId: null,
@@ -247,11 +246,9 @@ export function reducer(state, action) {
       return { ...state, activePersonId: action.personId, byPerson };
     }
     case 'SELECT_EXERCISE':
-      return updateActive(state, { selectedExerciseId: action.exerciseId, exerciseSearch: '' });
+      return updateActive(state, { selectedExerciseId: action.exerciseId });
     case 'BACK_TO_PICKER':
       return updateActive(state, { selectedExerciseId: null });
-    case 'SET_EXERCISE_SEARCH':
-      return updateActive(state, { exerciseSearch: action.value });
     case 'SET_LAST_TAB':
       return updateActive(state, { lastTab: action.path });
     case 'SET_TRENDS_RANGE':
@@ -482,7 +479,6 @@ export function AppStateProvider({ children }) {
       selectPerson: (personId) => dispatch({ type: 'SELECT_PERSON', personId }),
       selectExercise: (exerciseId) => dispatch({ type: 'SELECT_EXERCISE', exerciseId }),
       backToPicker: () => dispatch({ type: 'BACK_TO_PICKER' }),
-      setExerciseSearch: (value) => dispatch({ type: 'SET_EXERCISE_SEARCH', value }),
       setLastTab: (path) => dispatch({ type: 'SET_LAST_TAB', path }),
       setTrendsRange: (weeks) => dispatch({ type: 'SET_TRENDS_RANGE', weeks }),
       selectTrendsExercise: (exerciseId) => dispatch({ type: 'SELECT_TRENDS_EXERCISE', exerciseId }),

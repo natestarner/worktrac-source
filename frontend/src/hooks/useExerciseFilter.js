@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 // Local-only filter state for History/PRs' ExerciseFilterBar. Deliberately NOT AppStateContext:
 // requirement 5 ("filters clear on navigate-away") needs state that's simply gone on unmount, not
-// persisted per keystroke to IndexedDB the way the Log picker's exerciseSearch is. Isolation
+// persisted per person (the Log search screen's text is gone on close the same way). Isolation
 // across a PERSON switch (which doesn't unmount the route -- AppShell just navigates to that
 // person's lastTab, which can be the same tab) comes from the call site remounting via
 // key={activePersonId}, mirroring ExerciseDetail's own key={activePersonId} at LogTab.jsx -- so

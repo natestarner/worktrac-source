@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAs, registerHousehold } from './support/auth';
-import { pickExercise, logSetAt, logSetButton } from './support/exercises';
+import { pickExercise, logSetAt, logSetButton, searchTrigger } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
 import { LEGACY_MARKER_WORKOUT, plantDriftInPersistedHistory, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
 
@@ -160,7 +160,7 @@ test('a fresh sign-in downloads History once', { tag: '@critical' }, async ({ pa
   test.fixme(browserName === 'webkit', 'WebKit intermittently downloads History twice on sign-in (#429)');
   const sync = await watchSync(page);
   await registerHousehold(page, request, 'Once');
-  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  await expect(searchTrigger(page)).toBeVisible();
   const fresh = { started: 0, calls: 0 };
   await expect.poll(() => sync.settledSince(fresh)).toBe(true);
   await page.waitForTimeout(3000); // anything still to come from the boot warm or a mounting screen

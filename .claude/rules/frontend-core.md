@@ -227,21 +227,18 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   (`[data-modal-panel]`) clear of its sticky header (`[data-modal-header]`); on the page it keeps
   clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On
   the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
-  A field inside `[data-keyboard-layer]` (the Log picker's full-screen search, `log-screen.md`) is
-  never revealed: the layer pins it at the top of the window by construction.
-- **`--window-height`** and **`--keyboard-inset`** (also from `trackVisibleViewport`) are for a
-  full-screen layer (the search): size it `top: 0; height: var(--window-height)` and pad its
-  scroller's end by `--keyboard-inset` (how much of the window Safari's keyboard covers; 0 in the
-  app). **Don't place a full-screen layer from `--visible-viewport-*`** (it chases Safari's pans a
-  frame late: flicker), **and don't rely on `inset: 0` in the app**: WKWebView sometimes kept such
-  a layer at its pre-keyboard height after the window shrank, while `window.innerHeight` was right.
-  `--window-height` is republished synchronously on every window resize, which forces the layout
-  (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`). Dialogs keep the
+- **A screen that is all about one text field is a SCREEN, not an overlay.** The Log tab's exercise
+  search tried a full-screen fixed layer, and every way of sizing one broke on an iPhone:
+  `--visible-viewport-*` chased Safari's pans a frame late (flicker), and WKWebView left `inset: 0`
+  at its pre-keyboard height after the app's window shrank; it also needed a touch guard and keyboard
+  padding, which caused their own bugs. It is now an ordinary page (`log-screen.md`, "Search is its
+  own SCREEN"; the full story in `docs/architecture/exercise-search-history.md`). Dialogs keep the
   visible-viewport scrim for the reason in "Modals" above.
+- **History's and PRs' search field puts the keyboard away when typing is done** (`ExerciseFilterBar.jsx`): on the Search key, and when a finger drags the page more than 10px (a drag, never a `scroll` event -- focusing the field scrolls the page by itself). With the keyboard up while scrolling the matches, iPhones drew the fixed `SessionBar` on top of the keyboard, in Safari and in the app (2026-11-26). It is the native list's dismiss-on-drag, not a second keyboard mechanism. The Log search screen deliberately does NOT do this (flow 09 swipes with the keyboard up). Pinned by `ExerciseFilterBar.test.jsx` and `history-filter.spec.ts`'s touch block, both verified red.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
   `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
-  and left the Log search field's focus border under the tab bar.
+  and left a scrolled-to field's focus border under the tab bar.
 - `e2e/tests/keyboard-scroll.spec.ts` stands in for the keyboard (a short window for the app, the
   two published values for Safari); its Safari dialog case was verified red against the
   old code.
@@ -286,7 +283,7 @@ looks rows up by.
 ## Every person has their own independent client-side state
 
 Whatever a person is currently doing or viewing — tab/screen, selected exercise, routine position,
-draft weight/reps, search text, an in-progress past-session edit, an active rest timer — **must
+draft weight/reps, an in-progress past-session edit, an active rest timer — **must
 survive switching to another person and back**. Nothing representing "what this person is doing
 right now" may live as a single global value. This is the client-side mirror of the backend's
 per-person data separation.

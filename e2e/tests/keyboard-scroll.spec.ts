@@ -1,7 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addPerson } from './support/people';
-import { addExerciseToRoutine } from './support/exercises';
+import { addExerciseToRoutine, logSetButton, searchField, searchFor, searchScreen, searchTrigger } from './support/exercises';
 
 // What the iPhone keyboard does to scrolling, and the one mechanism that answers it
 // (frontend/src/lib/visibleViewport.js). Reported 2026-11-08, on iPhone Safari and in the App
@@ -13,9 +13,9 @@ import { addExerciseToRoutine } from './support/exercises';
 //   3. The first letter typed there jumped the page to the bottom of the list and back, and hid
 //      "Or pick an exercise".
 // 2 and 3 were fixed by scrolling the page to the field, which the App Store app's keyboard then
-// defeated about half the time (#626). The search is now a full-screen layer: the field is pinned
-// at the top of what is visible and the page is never scrolled at all, which is what the picker
-// cases below assert.
+// defeated about half the time (#626); a full-screen layer replaced that and broke differently
+// (2026-11-26). The search is now its own screen, opened by a tap that focuses its field at the
+// top: nothing moves while the keyboard opens. docs/architecture/exercise-search-history.md.
 //
 // No browser here opens a software keyboard. Two shapes stand in for it:
 //   - The App Store app's: the window itself shrinks above the keyboard (`Keyboard.resize:
@@ -97,149 +97,187 @@ test.describe('the keyboard and scrolling', () => {
     await expectWithin(dialog.getByRole('button', { name: 'Close' }), 250, 610, 'close button');
     await expectWithin(dialog.getByRole('textbox').first(), 250, 610, 'name field');
   });
+});
 
-  // Records window.scrollY and the field's top on every frame until stopped. A retrying matcher
-  // would wait out a page that moved and came back; samples cannot.
-  async function startSampling(page: Page) {
-    await page.evaluate(() => {
-      const field = document.querySelector('input[placeholder="Search all exercises"]')!;
-      const w = window as unknown as { __samples: { scrollY: number; top: number }[]; __sampling: boolean };
-      w.__samples = [];
-      w.__sampling = true;
-      const sample = () => {
-        w.__samples.push({ scrollY: Math.round(window.scrollY), top: Math.round(field.getBoundingClientRect().top) });
-        if (w.__sampling) requestAnimationFrame(sample);
-      };
-      sample();
-    });
-  }
-  async function stopSampling(page: Page) {
-    return page.evaluate(() => {
-      const w = window as unknown as { __samples: { scrollY: number; top: number }[]; __sampling: boolean };
-      w.__sampling = false;
-      return w.__samples;
-    });
-  }
+// Records window.scrollY and the search field's top on every frame until stopped. A retrying
+// matcher would wait out a field that moved and came back; samples cannot.
+async function startSampling(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __samples: { scrollY: number; top: number }[]; __sampling: boolean };
+    w.__samples = [];
+    w.__sampling = true;
+    const sample = () => {
+      const field = document.querySelector('[aria-label="Exercise search"] input');
+      if (field) w.__samples.push({ scrollY: Math.round(window.scrollY), top: Math.round(field.getBoundingClientRect().top) });
+      if (w.__sampling) requestAnimationFrame(sample);
+    };
+    sample();
+  });
+}
+async function stopSampling(page: Page) {
+  return page.evaluate(() => {
+    const w = window as unknown as { __samples: { scrollY: number; top: number }[]; __sampling: boolean };
+    w.__sampling = false;
+    return w.__samples;
+  });
+}
 
-  // #626: on TestFlight the page sometimes refused to scroll the field to the top (the App Store
-  // app's window shrinks as the keyboard opens, and the scroll clamped). The search now opens a
-  // fixed layer, so the field is at the top without the page moving at all.
-  test('tapping the search opens a full-screen layer: field at the top, results above the keyboard, page never scrolled', async ({ page, request }) => {
+// The Log tab's exercise search is its own SCREEN (ExerciseSearchScreen): the Log page's search
+// "field" is a button, and a tap opens an ordinary page with the field at the top, focused in the
+// same click, and the results below it in normal document flow. Nothing moves while the keyboard
+// opens, which is what every earlier design (scroll the page to the field; a fixed layer) got wrong
+// on iPhones. docs/architecture/exercise-search-history.md.
+test.describe('the exercise search screen', () => {
+  test('a tap opens it: the field focused at the top, the chrome gone, and the field never moves', async ({ page, request }) => {
     await twoPersonHousehold(page, request);
-    // The tap lands on a FULL-height phone screen; the keyboard (the app's window shrinking above
-    // it) arrives after. That order is what defeated the old scroll.
+    // The tap lands on a full-height phone; the keyboard (the app's window shrinking) comes after.
     await page.setViewportSize(PHONE);
-    const search = page.getByPlaceholder('Search all exercises');
-    await expect(search).toHaveValue('');
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const restingTop = Math.round((await box(search)).y);
+    await searchTrigger(page).click();
 
+    const screen = searchScreen(page);
+    await expect(screen).toBeVisible();
+    await expect(searchField(page)).toBeFocused();
+    // The chrome is hidden, so the search bar is the top of the page.
+    await expect(page.locator('.app-chrome')).toBeHidden();
+    await expect(page.locator('.header-bar')).toBeHidden();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const top = Math.round((await box(searchField(page))).y);
+    expect(top, 'the field is at the top of the screen').toBeLessThanOrEqual(40);
+
+    // The keyboard arrives, and results draw under the field as it is typed into. Not one frame
+    // may move the field.
     await startSampling(page);
-    await search.click();
     await page.setViewportSize(KEYBOARD_UP);
-    const layer = page.getByRole('dialog', { name: 'Exercise search' });
-    await expect(layer).toBeVisible();
-    await search.pressSequentially('press');
+    await searchField(page).pressSequentially('press');
     await expect(page.getByText('Search results', { exact: true })).toBeVisible();
-    await page.waitForTimeout(400); // a few more frames, for any scroll the tap or typing set off
+    await page.waitForTimeout(400); // a few more frames, for anything the typing set off
     const samples = await stopSampling(page);
-
-    // The page itself never moved, on any frame.
     expect(samples.length, 'the sampler must have run').toBeGreaterThan(3);
-    for (const { scrollY } of samples) expect(scrollY, 'the page scrolled').toBe(0);
-
-    // The layer fills what is visible above the keyboard, and the field is at its top, over the chrome.
-    await expect(search).toBeFocused();
-    await expectWithin(layer, 0, KEYBOARD_UP.height, 'search layer');
-    expect(Math.round((await box(layer)).height), 'the layer is the visible viewport').toBe(KEYBOARD_UP.height);
-    expect(Math.round((await box(search)).y), 'the field is pinned at the top of the screen').toBeLessThanOrEqual(24);
-
-    // The results scroll inside the layer, and the last control in them can be brought above the
-    // keyboard without moving the page.
-    const add = layer.getByRole('button', { name: '+ Add your own exercise' });
-    await add.scrollIntoViewIfNeeded();
-    await expectWithin(add, 0, KEYBOARD_UP.height, 'last control in the results');
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
-
-    // Cancel puts the page back exactly as it was. The typed search stays in the field: it is the
-    // person's draft.
-    await page.setViewportSize(PHONE);
-    await layer.getByRole('button', { name: 'Cancel' }).click();
-    await expect(layer).toHaveCount(0);
-    await expect(search).toHaveValue('press');
-    await expect(search).not.toBeFocused();
-    expect(Math.round((await box(search)).y)).toBe(restingTop);
-  });
-
-  // 2026-11-26, on lower: in the App Store app the results could not be scrolled at all, and in
-  // Safari the layer flickered while the page behind it moved. The layer was sized and placed from
-  // visualViewport in JS (`--visible-viewport-*`), so it chased Safari's pans a frame late, and a
-  // stale height (iOS 26 reports stale visualViewport values around the keyboard) left it taller
-  // than the app's window -- the results then fit inside it, had nothing to scroll, and ran on
-  // under the keyboard. It is now pinned to the window with `inset: 0`, which the browser keeps
-  // right on every frame. Both cases make visualViewport itself report what iOS reports, so the
-  // app's own tracker publishes it: red against the old CSS.
-  async function visualViewportReports(page: Page, report: { offsetTop: number; height: number }) {
-    await page.evaluate((r) => {
-      const vv = window.visualViewport!;
-      Object.defineProperty(vv, 'offsetTop', { configurable: true, get: () => r.offsetTop });
-      Object.defineProperty(vv, 'height', { configurable: true, get: () => r.height });
-      vv.dispatchEvent(new Event('resize'));
-    }, report);
-    // The tracker publishes on the next frame.
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--visible-viewport-height')))
-      .toBe(`${report.height}px`);
-  }
-
-  test('the search layer is the window, whatever visualViewport says, and its results scroll', async ({ page, request, isMobile }) => {
-    await twoPersonHousehold(page, request);
-    await page.setViewportSize(PHONE);
-    const search = page.getByPlaceholder('Search all exercises');
-    await search.click();
-    const layer = page.getByRole('dialog', { name: 'Exercise search' });
-    await expect(layer).toBeVisible();
-    await search.pressSequentially('press');
-    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
-
-    // The app: the window shrinks above the keyboard, but a stale value still says full height.
-    await page.setViewportSize(KEYBOARD_UP);
-    await visualViewportReports(page, { offsetTop: 0, height: PHONE.height });
-    const appBox = await box(layer);
-    expect(Math.round(appBox.y), 'the layer starts at the top of the window').toBe(0);
-    expect(Math.round(appBox.height), 'the layer ends at the bottom of the window (the keyboard)').toBe(KEYBOARD_UP.height);
-    const results = layer.locator('.exercise-search-results');
-    const overflow = await results.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
-    expect(overflow.scroll, 'the results overflow their box, so a finger can scroll them').toBeGreaterThan(overflow.client);
-    // Scrolling the results moves them and not the page: a real wheel where there is one (mobile
-    // WebKit has none, e2e-tests.md), else a scroll from inside the page.
-    if (isMobile) {
-      await results.evaluate((el) => el.scrollBy(0, 300));
-    } else {
-      const r = await box(results);
-      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
-      await page.mouse.wheel(0, 300);
+    for (const s of samples) {
+      expect(s.top, 'the field moved').toBe(top);
+      expect(s.scrollY, 'the page scrolled').toBe(0);
     }
-    await expect.poll(() => results.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
-
-    // Safari: a full-height window with the keyboard over its bottom, and the view panned down.
-    // The layer stays put (the pan is what it used to chase), and the end of the results can still
-    // be scrolled above the keyboard because the list pads its end by the keyboard's height.
-    await page.setViewportSize(PHONE);
-    // Visible 250..610 of an 844px window: the keyboard covers the bottom 234px.
-    await visualViewportReports(page, { offsetTop: 250, height: 360 });
-    const safariBox = await box(layer);
-    expect(Math.round(safariBox.y), 'the layer does not chase the pan').toBe(0);
-    expect(Math.round(safariBox.height)).toBe(PHONE.height);
-    await expectWithin(search, 0, 80, 'search field');
-    await results.evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
-    await expectWithin(layer.getByRole('button', { name: '+ Add your own exercise' }), 0, PHONE.height - 234, 'last control, above the keyboard');
   });
 
-  test('searching changes nothing on the page, and keeps "Or pick an exercise"', async ({ page, request }) => {
+  test('the results scroll with the page, under a field that stays put, and end at "+ Add your own exercise"', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    await page.setViewportSize(KEYBOARD_UP);
+    await searchFor(page, 'press');
+    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
+    const top = Math.round((await box(searchField(page))).y);
+
+    // Ordinary page scrolling: there is more than fits, and the end can be reached.
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(room, 'the results run past the screen').toBeGreaterThan(0);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const add = searchScreen(page).getByRole('button', { name: '+ Add your own exercise' });
+    await expectWithin(add, 0, KEYBOARD_UP.height, 'the last control, scrolled to');
+    // The field stuck to the top through the scroll.
+    expect(Math.round((await box(searchField(page))).y), 'the field scrolled away').toBe(top);
+    // And nothing to scroll into past it: the SessionBar's reserved space goes with the bar
+    // (Brave scrolled well past the end in the layer this replaced).
+    const below = await add.evaluate((el) => document.documentElement.scrollHeight - (el.getBoundingClientRect().bottom + window.scrollY));
+    expect(below, 'blank space under the last control').toBeLessThan(80);
+  });
+
+  test('with nothing typed it lists the whole library A-Z; typing narrows it, clearing brings it back', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Browse');
+    // The list is drawn AFTER the tap: the field is focused inside the tap's click handler, so
+    // anything drawn on mount delays the keyboard (~200 rows held the tap 0.65-1.4s on a phone-speed
+    // CPU). So at the instant the field takes the focus, no result row may exist yet.
+    await page.evaluate(() => {
+      document.addEventListener(
+        'focusin',
+        (e) => {
+          // The field, not the Log page's trigger button of the same name.
+          const el = e.target as HTMLElement;
+          if (el.tagName !== 'INPUT' || el.getAttribute('aria-label') !== 'Search all exercises') return;
+          (window as any).__rowsAtFocus ??= document.querySelectorAll('section button[id][aria-label]').length;
+        },
+        true,
+      );
+    });
+    await searchTrigger(page).click();
+    const screen = searchScreen(page);
+    await expect(screen.getByText('All exercises', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__rowsAtFocus), 'rows drawn inside the tap').toBe(0);
+    // Each result row is the button carrying the exercise's id (ExerciseSearchResults).
+    const rowNames = () => screen.locator('button[id][aria-label]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+    const all = await rowNames();
+    expect(all.length, 'the library, not a handful').toBeGreaterThan(100);
+    expect(all).toEqual([...all].sort((a, b) => a.localeCompare(b)));
+    expect(all).toContain('Barbell Bench Press');
+
+    await searchField(page).fill('bench');
+    await expect(screen.getByText('Search results', { exact: true })).toBeVisible();
+    const matches = await rowNames();
+    expect(matches.length).toBeLessThan(all.length);
+    for (const name of matches) expect(all).toContain(name);
+
+    await searchField(page).fill('');
+    await expect(screen.getByText('All exercises', { exact: true })).toBeVisible();
+    expect(await rowNames()).toEqual(all);
+    // Chosen straight from the list, like any result.
+    await screen.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
+    await expect(screen).toBeHidden();
+    await expect(logSetButton(page)).toBeVisible();
+  });
+
+  test('Cancel goes back to the Log page where it was, and the typed search goes with it', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    await page.setViewportSize(KEYBOARD_UP);
+    // The field mid-page: scroll so it sits a little way down the screen.
+    await searchTrigger(page).scrollIntoViewIfNeeded();
+    const scrolledTo = await page.evaluate(() => window.scrollY);
+    const triggerTop = Math.round((await box(searchTrigger(page))).y);
+
+    await searchFor(page, 'bench');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    await expect(searchScreen(page)).toHaveCount(0);
+    await expect(page.locator('.app-chrome')).toBeVisible();
+    await expect(searchTrigger(page)).toHaveText('Search all exercises');
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrolledTo);
+    expect(Math.round((await box(searchTrigger(page))).y)).toBe(triggerTop);
+    // Cancel means "never mind": the next search starts empty.
+    await searchTrigger(page).click();
+    await expect(searchField(page)).toHaveValue('');
+  });
+
+  // Back pressed the moment the URL changes, before React Router has rendered the search route (a
+  // transition): the route never "leaves" anything, so only popstate can close it. Red in WebKit
+  // before the popstate listener (2026-11-26).
+  test("the browser's Back closes it too, however soon it is pressed", async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    await searchTrigger(page).click();
+    await expect(page).toHaveURL(/\/app\/log\/search$/);
+    await page.goBack();
+    await expect(searchScreen(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/app\/log$/);
+    await expect(searchTrigger(page)).toBeVisible();
+  });
+
+  // Only a tap can raise the keyboard, so the screen never opens by itself.
+  test('a reload on it lands on the Log page', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    await searchFor(page, 'bench');
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/log$/);
+    await expect(searchScreen(page)).toHaveCount(0);
+    await expect(searchTrigger(page)).toHaveText('Search all exercises');
+  });
+
+  test('choosing a result opens it, and Back from it does not reopen the search', async ({ page, request }) => {
+    await twoPersonHousehold(page, request);
+    await searchFor(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
+    await expect(logSetButton(page)).toBeVisible();
+    await expect(searchScreen(page)).toHaveCount(0);
+    await expect(page.locator('.app-chrome')).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/log$/);
+  });
+
+  test('searching changes nothing on the Log page, and keeps "Or pick an exercise"', async ({ page, request }) => {
     await twoPersonHousehold(page, request);
     // A routine, so the quick-start block sits above the field -- the block whose hiding once
     // moved the field on the first letter typed (2026-11-08).
@@ -251,108 +289,73 @@ test.describe('the keyboard and scrolling', () => {
     await page.getByRole('link', { name: 'Log' }).click();
     await expect(page.getByText('Or pick an exercise', { exact: true })).toBeVisible();
 
-    await page.setViewportSize(KEYBOARD_UP);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const search = page.getByPlaceholder('Search all exercises');
-    await search.click();
-    await expect(page.getByRole('dialog', { name: 'Exercise search' })).toBeVisible();
-    const pinnedTop = Math.round((await box(search)).y);
-
-    await startSampling(page);
-    await search.pressSequentially('b');
-    await expect(page.getByText('Search results', { exact: true })).toBeVisible();
-    await search.pressSequentially('qzx');
+    await searchFor(page, 'qzx');
     await expect(page.getByText(/No exercises match/)).toBeVisible();
-    await page.waitForTimeout(400);
-    const samples = await stopSampling(page);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-    expect(samples.length, 'the sampler must have run').toBeGreaterThan(3);
-    for (const { scrollY, top } of samples) {
-      expect(top, `the field moved, to ${top} from ${pinnedTop}`).toBe(pinnedTop);
-      expect(scrollY, 'the page scrolled').toBe(0);
-    }
-    await expect(page.getByText('Or pick an exercise', { exact: true })).toBeAttached();
-    await expect(page.getByText('Start a routine', { exact: true })).toBeAttached();
+    await expect(page.getByText('Or pick an exercise', { exact: true })).toBeVisible();
+    await expect(page.getByText('Start a routine', { exact: true })).toBeVisible();
+    // "Or pick an exercise" still heads the search field: the page order never changes.
+    const heading = await box(page.getByText('Or pick an exercise', { exact: true }));
+    expect((await box(searchTrigger(page))).y).toBeGreaterThan(heading.y);
   });
 });
 
-// A finger, not a mouse. On a phone the layer must be up BEFORE the field takes focus: focused at
-// its place mid-page, Safari starts panning toward it and the layer then rides that pan (the
-// 2026-11-26 flicker). So a tap opens the layer, then focuses the field where it now is, and the
-// browser's own focus and click are cancelled -- including the click that would otherwise land on
-// whatever the layer now puts under the finger.
-test.describe('the search, by touch', () => {
+// A finger, not a mouse: Chromium's touch tap ends in the same click a person's does, and the click
+// handler is what focuses the field (the one place iOS raises the keyboard for a programmatic
+// focus). The layer this replaced opened on touchend, and WebKit's ghost click then took the focus
+// back off the field (TestFlight 1.5.0, run 40).
+test.describe('the exercise search screen, by touch', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
 
-  test('a tap opens the layer and focuses the field at the top, with nothing clicked under the finger', async ({ page, request }) => {
+  test('a tap opens it with the field focused, and typing goes into it', async ({ page, request }) => {
     await twoPersonHousehold(page, request);
-    const search = page.getByPlaceholder('Search all exercises');
-    await page.evaluate(() => window.scrollTo(0, 0));
-    // Record the order: was the layer already up when the field took focus?
-    await search.evaluate((input) => {
-      const w = window as unknown as { __layerAtFocus: boolean | null };
-      w.__layerAtFocus = null;
-      input.addEventListener('focus', () => {
-        w.__layerAtFocus = !!input.closest('.exercise-search-layer');
-      });
-    });
-
-    await search.tap();
-
-    const layer = page.getByRole('dialog', { name: 'Exercise search' });
-    await expect(layer).toBeVisible();
-    await expect(search).toBeFocused();
-    expect(await page.evaluate(() => (window as unknown as { __layerAtFocus: boolean | null }).__layerAtFocus)).toBe(true);
-    expect(Math.round((await box(search)).y), 'the field is pinned at the top of the screen').toBeLessThanOrEqual(24);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
-
-    // Typing works in the field the tap focused.
+    await searchTrigger(page).tap();
+    await expect(searchScreen(page)).toBeVisible();
+    await expect(searchField(page)).toBeFocused();
     await page.keyboard.type('press');
-    await expect(search).toHaveValue('press');
+    await expect(searchField(page)).toHaveValue('press');
     await expect(page.getByText('Search results', { exact: true })).toBeVisible();
   });
 });
 
-// Real finger DRAGS (CDP touch events, Chromium only), because the touch guard only ever sees
-// touchmove -- a mouse wheel goes straight past it. 2026-11-26 on lower: "+ Add your own exercise"
-// from the search opens its dialog over the still-open search layer, and the first guard (drags
-// allowed only in the results) cancelled every drag inside that dialog, on the web and in the app.
-test.describe('the search, by finger drag', () => {
+// Real finger DRAGS (CDP touch events, Chromium only): a mouse wheel never reaches touch handling.
+// 2026-11-26: under the layer, "+ Add your own exercise" opened its dialog over the open search and
+// a touch guard froze it. The screen has no guard, but the dialog opened from it must still scroll.
+test.describe('the exercise search screen, by finger drag', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: KEYBOARD_UP });
 
+  // A finger's drag: a frame between moves, and a pause before lifting, so it scrolls without
+  // flinging. Ten moves with no time between them read as infinite speed, Chromium starts a fling
+  // that outlasts any wait, and it then suppresses the next tap as a fling-stop -- measured
+  // 2026-11-26: after such a drag a tap sent touchstart/touchend and no click at all.
   async function drag(page: Page, at: { x: number; y: number }, dy: number) {
     const cdp = await page.context().newCDPSession(page);
     const point = (y: number) => [{ x: Math.round(at.x), y: Math.round(y), id: 1 }];
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(at.y) });
     for (let i = 1; i <= 10; i += 1) {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(at.y - (dy * i) / 10) });
+      await page.waitForTimeout(16);
     }
+    await page.waitForTimeout(150);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await cdp.detach();
   }
 
-  test('a drag scrolls the results, and scrolls the Add exercise dialog opened from them', async ({ page, request, browserName }) => {
+  test('a drag scrolls the results, and the Add exercise dialog opened from them', async ({ page, request, browserName }) => {
     test.skip(browserName !== 'chromium', 'touch drags are sent through CDP');
     await twoPersonHousehold(page, request);
-    await page.getByPlaceholder('Search all exercises').tap();
-    const layer = page.getByRole('dialog', { name: 'Exercise search' });
-    await expect(layer).toBeVisible();
+    await searchTrigger(page).tap();
     await page.keyboard.type('press');
     await expect(page.getByText('Search results', { exact: true })).toBeVisible();
+    const top = Math.round((await box(searchField(page))).y);
 
-    const results = layer.locator('.exercise-search-results');
-    const r = await box(results);
-    // Playwright's tap() scrolls the field into view before tapping (it starts below the fold at
-    // this height), so the page's own position is read here, not assumed to be 0.
-    const pageBefore = await page.evaluate(() => window.scrollY);
-    await drag(page, { x: r.x + r.width / 2, y: r.y + r.height - 20 }, 200);
-    await expect.poll(() => results.evaluate((el) => el.scrollTop), 'a drag on the results scrolls them').toBeGreaterThan(0);
-    // A drag on the search bar has nothing to scroll and must not move the page behind.
-    const bar = await box(page.getByRole('button', { name: 'Cancel' }));
-    await drag(page, { x: bar.x + bar.width / 2, y: bar.y + bar.height / 2 }, -150);
-    expect(await page.evaluate(() => window.scrollY), 'the page behind never moves').toBe(pageBefore);
+    await drag(page, { x: 195, y: KEYBOARD_UP.height - 40 }, 200);
+    await expect.poll(() => page.evaluate(() => window.scrollY), 'a drag on the results scrolls the page').toBeGreaterThan(0);
+    expect(Math.round((await box(searchField(page))).y), 'the field stayed at the top').toBe(top);
 
-    await layer.getByRole('button', { name: '+ Add your own exercise' }).tap();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await searchScreen(page).getByRole('button', { name: '+ Add your own exercise' }).tap();
     const panel = page.locator('[data-modal-panel]').last();
     await dialogSettled(panel);
     const overflow = await panel.evaluate((el) => el.scrollHeight - el.clientHeight);

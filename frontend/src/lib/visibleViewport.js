@@ -48,25 +48,10 @@ export function trackVisibleViewport() {
   let frame = 0;
   let lastHeight = null;
 
-  // The window's own height, as a pixel value a full-screen layer is sized with (the Log picker's
-  // search). Not `inset: 0` alone: in the App Store app the window shrinks above the keyboard, and
-  // WKWebView sometimes left a fixed `inset: 0` layer at its pre-keyboard height -- 956px in a
-  // 609px window, measured on the simulator (2026-11-26) -- with the end of the list under the
-  // keyboard and, for a short list, nothing to scroll. window.innerHeight was right; only the CSS
-  // layout was stale. Changing the value is a style change, which forces the layout. Published at
-  // once on a window resize, and again with everything else a frame later.
-  const publishWindowHeight = () => root.style.setProperty('--window-height', `${window.innerHeight}px`);
-
   const publish = () => {
     frame = 0;
-    publishWindowHeight();
     root.style.setProperty('--visible-viewport-top', `${vv.offsetTop}px`);
     root.style.setProperty('--visible-viewport-height', `${vv.height}px`);
-    // How much of the bottom of the window the keyboard covers. Safari only: in the app the window
-    // itself ends at the keyboard, so this is 0. A scroller pinned to the window pads its end by
-    // this much, so its last row can be scrolled above the keyboard without the box itself moving
-    // (the Log picker's search layer). A stale value only adds empty space at the end of a list.
-    root.style.setProperty('--keyboard-inset', `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`);
     // The keyboard opening (or closing) is a height change. A dialog that has just been squeezed
     // into what is left may now hold its focused field below its own fold, so reveal it there.
     // Fields on the page are left to the browser: Safari already reveals those itself, and in the
@@ -82,27 +67,18 @@ export function trackVisibleViewport() {
   // Moving to another field in a dialog with the keyboard already up resizes nothing.
   const onFocusIn = () => requestAnimationFrame(() => revealFocusedField({ onPage: false }));
 
-  const onWindowResize = () => {
-    publishWindowHeight();
-    schedule();
-  };
-
   publish();
   vv.addEventListener('resize', schedule);
   vv.addEventListener('scroll', schedule);
-  window.addEventListener('resize', onWindowResize);
   document.addEventListener('focusin', onFocusIn);
 
   return () => {
     vv.removeEventListener('resize', schedule);
     vv.removeEventListener('scroll', schedule);
-    window.removeEventListener('resize', onWindowResize);
     document.removeEventListener('focusin', onFocusIn);
     if (frame) cancelAnimationFrame(frame);
-    root.style.removeProperty('--window-height');
     root.style.removeProperty('--visible-viewport-top');
     root.style.removeProperty('--visible-viewport-height');
-    root.style.removeProperty('--keyboard-inset');
   };
 }
 
@@ -113,10 +89,6 @@ export function trackVisibleViewport() {
 export function revealFocusedField({ onPage = true } = {}) {
   const el = document.activeElement;
   if (!el?.matches?.(FIELD)) return;
-  // A full-screen fixed layer with its field pinned at the top (the Log picker's search) has
-  // nothing to reveal, and scrolling the page under it would only move the page the person comes
-  // back to.
-  if (el.closest('[data-keyboard-layer]')) return;
   const panel = el.closest('[data-modal-panel]');
   if (panel) {
     revealInPanel(panel, el);

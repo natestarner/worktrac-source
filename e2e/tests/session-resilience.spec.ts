@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, searchTrigger } from './support/exercises';
 import { failNetwork, failWithStatus } from './support/faults';
 import { outboxCountText, waitForOutboxDrain } from './support/offline';
 
@@ -69,7 +69,7 @@ test.describe('Session resilience around a backend/DB outage', () => {
     await expect(page).not.toHaveURL(/\/login/);
 
     // Once /me can finally succeed again, the retry loop lands and the app boots in for real.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible({ timeout: 15000 });
+    await expect(searchTrigger(page)).toBeVisible({ timeout: 15000 });
     await expect(page).toHaveURL(/\/app\/log/);
   });
 });

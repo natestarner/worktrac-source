@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, dismissPrCelebration, pickExercise, logSetAt, tapLogSet } from './support/exercises';
+import { backToPicker, dismissPrCelebration, pickExercise, logSetAt, tapLogSet, searchTrigger } from './support/exercises';
 import { goHardOffline, goOnline } from './support/offline';
 import { expectHistoryMatchesServer } from './support/historyConvergence';
 
@@ -32,7 +32,7 @@ const rowFor = (page: Page, exercise: string) => page.getByRole('button', { name
 
 // Log opens on the picker or on the exercise last selected; wait for either before deciding.
 async function toExercise(page: Page, exercise: string) {
-  const picker = page.getByPlaceholder('Search all exercises');
+  const picker = searchTrigger(page);
   await expect(picker.or(page.getByRole('button', { name: /All exercises/ }))).toBeVisible();
   if (!(await picker.isVisible())) await backToPicker(page);
   await pickExercise(page, exercise);

@@ -74,14 +74,19 @@ export async function dismiss(page) {
 
 export const goTab = (page, name) => page.getByLabel('Sections').getByRole('link', { name, exact: true }).click();
 
+// The Log picker's search "field" is a button that opens the search screen (ExerciseSearchScreen),
+// whose own field takes the typing. Same as e2e/tests/support/exercises.ts's searchFor.
+export const searchTrigger = (page) => page.getByRole('button', { name: 'Search all exercises', exact: true });
+
 export async function toExercise(page, name) {
-  const picker = page.getByPlaceholder('Search all exercises');
-  await picker.or(page.getByRole('button', { name: /All exercises/ })).first().waitFor();
-  if (!(await picker.isVisible())) {
-    await page.getByRole('button', { name: /All exercises/ }).first().click();
-    await picker.waitFor();
+  const back = page.getByRole('button', { name: /All exercises/ });
+  await searchTrigger(page).or(back).first().waitFor();
+  if (!(await searchTrigger(page).isVisible())) {
+    await back.first().click();
+    await searchTrigger(page).waitFor();
   }
-  await picker.fill(name);
+  await searchTrigger(page).click();
+  await page.getByRole('region', { name: 'Exercise search' }).getByPlaceholder('Search all exercises').fill(name);
   await page.getByRole('button', { name, exact: true }).first().click();
   await logSetButton(page).waitFor();
 }

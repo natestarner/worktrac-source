@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, logSetAt, pickExercise, prCelebration, setStepper, tapLogSet, logSetButton } from './support/exercises';
+import { dismissPrCelebration, logSetAt, pickExercise, prCelebration, setStepper, tapLogSet, logSetButton, searchFor, searchTrigger, searchField } from './support/exercises';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always celebrated),
 // confirm the celebration fires, then check every tab renders without error.
@@ -9,7 +9,7 @@ test.describe('Log workout', () => {
     await registerHousehold(page, request, 'Nate');
 
     // A fresh person's picker is empty -- search the catalog to pick an exercise.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
     await expect(
       page.getByText("Let's find your first exercise")
     ).toBeVisible();
@@ -19,7 +19,7 @@ test.describe('Log workout', () => {
     // Selecting an exercise clears the search box, so returning to the picker starts
     // fresh instead of still showing the old search term.
     await page.getByRole('button', { name: '← All exercises' }).click();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
+    await expect(searchTrigger(page)).toHaveText('Search all exercises');
     await pickExercise(page, 'Barbell Bench Press');
     await expect(logSetButton(page)).toBeVisible();
 
@@ -97,13 +97,15 @@ test.describe('Log workout', () => {
     await registerHousehold(page, request, 'Nate');
 
     // iOS Safari auto-zooms the page on focus for any input under 16px font-size -- lock
-    // this in so a future style tweak can't reintroduce that.
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveCSS('font-size', '16px');
+    // this in so a future style tweak can't reintroduce that. The field that takes the focus is
+    // the search screen's; the Log page's trigger is drawn the same (`.input`) so it reads as it.
+    await expect(searchTrigger(page)).toHaveCSS('font-size', '16px');
 
     // "barbell squat" isn't a contiguous substring of "Barbell Back Squat" -- the older
     // exact-substring matcher would miss it. Token-based matching should still find it,
     // and clicking the result should select that exercise.
-    await page.getByPlaceholder('Search all exercises').fill('barbell squat');
+    await searchFor(page, 'barbell squat');
+    await expect(searchField(page)).toHaveCSS('font-size', '16px');
     await page.getByRole('button', { name: 'Barbell Back Squat' }).click();
     await expect(logSetButton(page)).toBeVisible();
   });

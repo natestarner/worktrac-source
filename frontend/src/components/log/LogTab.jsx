@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { loadTypeOf } from '../../utils/exerciseLoad';
 import SectionLabel from '../shared/SectionLabel';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import ExerciseSearchScreen from './ExerciseSearchScreen';
+import { EXERCISE_SEARCH_PATH, LOG_PATH } from './searchRoute';
 import { queryClient, refreshHistoryForEveryone, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { buildHistoryPrFlags } from '../../utils/historyPrFlags';
 import { useAppState } from '../../context/AppStateContext';
@@ -53,7 +56,6 @@ export default function LogTab() {
     forgetRoutineStepsLogged,
     doneEditingSession,
     updateEditingSession,
-    setExerciseSearch,
     clearVolumePrCelebrated,
   } = useAppState();
 
@@ -91,6 +93,128 @@ export default function LogTab() {
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
   const [routineBannerDismissed, setRoutineBannerDismissed] = useState(false);
   const routinePillRefs = useRef({});
+
+  // ---- The exercise search screen (ExerciseSearchScreen.jsx) ------------------------------------
+  // Opened by the Log page's search "field" (a button), it replaces the page until Cancel, Back or
+  // a choice. The page stays MOUNTED underneath (hidden), so lists stay expanded and the
+  // past-session frame keeps its tree position (log-screen.md). The full story of why it is a
+  // screen: docs/architecture/exercise-search-history.md.
+  //
+  // State is UIContext's `exerciseSearchOpen`, because it must change synchronously inside the tap
+  // (see openSearch) and AppShell hides its chrome off the same value. The route
+  // (EXERCISE_SEARCH_PATH) FOLLOWS the state, only so the browser's Back closes the screen.
+  const { exerciseSearchOpen: searchOpen, setExerciseSearchOpen } = useUI();
+  const location = useLocation();
+  const onSearchRoute = location.pathname === EXERCISE_SEARCH_PATH;
+  const searchFieldRef = useRef(null);
+  // Where the Log page was scrolled when the search opened, so Cancel lands back there.
+  const pageScrollRef = useRef(0);
+  const restoreScrollRef = useRef(false);
+  // Set once the route has reached the search path after an open: from then on, leaving that path
+  // (Back) is what closes the screen.
+  const searchRouteReachedRef = useRef(false);
+  // Set when openSearch pushed the search entry onto the history: Cancel then pops it. Not the same
+  // as "reached": the push happens at once, the route renders later (a transition).
+  const searchEntryPushedRef = useRef(false);
+
+  // The tap. Everything that matters happens synchronously, inside the click, in this order:
+  //   1. the screen renders (flushSync) -- with the chrome hidden, so the field is at the top;
+  //   2. the page is scrolled to the top, where the screen now is;
+  //   3. the screen's field is focused. Inside a click handler that is a user gesture, so iOS
+  //      raises the keyboard; and the field is already where it will stay, so neither Safari nor
+  //      the App Store app's window resize has anything to chase.
+  // Only then is the route pushed, as a transition (React Router v7 cannot do it synchronously).
+  function openSearch() {
+    if (searchOpen) return;
+    pageScrollRef.current = window.scrollY;
+    flushSync(() => setExerciseSearchOpen(true));
+    window.scrollTo(0, 0);
+    searchFieldRef.current?.focus({ preventScroll: true });
+    // One line of evidence for Maestro flow 09 and Safari's Web Inspector: the field must have the
+    // focus at the end of the tap, or iOS raises no keyboard.
+    console.info(`[search] screen open, field focused ${document.activeElement === searchFieldRef.current}`);
+    searchRouteReachedRef.current = false;
+    navigate(EXERCISE_SEARCH_PATH);
+    searchEntryPushedRef.current = true;
+  }
+
+  // Close without navigating (the route is handled by the caller). `restoreScroll`: put the Log
+  // page back where it was (Cancel, Back) rather than at the top (a choice, which opens an exercise).
+  function closeSearch({ restoreScroll }) {
+    restoreScrollRef.current = restoreScroll;
+    searchRouteReachedRef.current = false;
+    searchEntryPushedRef.current = false;
+    setExerciseSearchOpen(false);
+  }
+
+  // Cancel (and Escape) = Back: the search entry is popped, and Back's own handling (below) closes
+  // the screen. With no entry pushed there is nothing to pop, so it closes directly. What was typed
+  // goes with the screen (ExerciseSearchScreen's own state): Cancel means "never mind".
+  function cancelSearch() {
+    searchFieldRef.current?.blur();
+    if (searchEntryPushedRef.current) navigate(-1);
+    else closeSearch({ restoreScroll: true });
+  }
+
+  // Choosing an exercise (or creating one) leaves the search for that exercise's screen. The search
+  // entry is REPLACED by the Log route, so Back from the exercise does not reopen the search.
+  function leaveSearchForExercise() {
+    // Read before closeSearch clears it: the entry exists from the push, whether or not the route
+    // has rendered yet.
+    const onSearchEntry = searchEntryPushedRef.current || onSearchRoute;
+    closeSearch({ restoreScroll: false });
+    if (onSearchEntry) navigate(LOG_PATH, { replace: true });
+  }
+
+  // The route following the state, both ways:
+  //   - arriving on the search path marks it reached;
+  //   - leaving it while the screen is open (Back, or Cancel's navigate(-1)) closes the screen;
+  //   - being ON it with the screen closed (a reload, a restored lastTab, a deep link) goes back to
+  //     the Log page: only a tap can raise the keyboard, so the screen never opens by itself.
+  useEffect(() => {
+    if (onSearchRoute) {
+      if (searchOpen) searchRouteReachedRef.current = true;
+      else navigate(LOG_PATH, { replace: true });
+      return;
+    }
+    if (searchOpen && searchRouteReachedRef.current) closeSearch({ restoreScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the route's moves matter here
+  }, [onSearchRoute]);
+
+  // Back in a browser, straight from the history. The route above can miss it: React Router renders
+  // a navigation as a transition, so a Back pressed before the search route has rendered leaves the
+  // route at /app/log throughout -- it never "left" anything, and the screen stayed up with the URL
+  // already back on the Log page (WebKit e2e, 2026-11-26). popstate fires for every Back, whatever
+  // has rendered. (MemoryRouter has no popstate; the route effect covers it there.)
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    function onPopState() {
+      if (window.location.pathname !== EXERCISE_SEARCH_PATH) closeSearch({ restoreScroll: true });
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeSearch only touches refs and a setter
+  }, [searchOpen]);
+
+  // An exercise selected while the screen is up -- a result, or one created or opened from
+  // "+ Add your own exercise" -- leaves it.
+  useEffect(() => {
+    if (searchOpen && selectedExerciseId) leaveSearchForExercise();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a selection is the trigger
+  }, [selectedExerciseId]);
+
+  // Back on the Log page after Cancel/Back: where it was. Layout effect, so the first frame the page
+  // is visible is already at its old position.
+  useLayoutEffect(() => {
+    if (searchOpen || !restoreScrollRef.current) return;
+    restoreScrollRef.current = false;
+    window.scrollTo(0, pageScrollRef.current);
+  }, [searchOpen]);
+
+  // The screen never outlives the Log tab: leaving it some other way (a tab tap is not possible
+  // while the chrome is hidden, but a deep link or the tour can navigate) must not leave the chrome
+  // hidden on the next screen.
+  useEffect(() => () => setExerciseSearchOpen(false), [setExerciseSearchOpen]);
 
   const activeRoutine = activeRoutineId ? routines.find((r) => r.id === activeRoutineId) : null;
   const selectedExercise = selectedExerciseId
@@ -244,7 +368,6 @@ export default function LogTab() {
   // and why it hung for the full retry backoff under lie-fi.
   function handleExerciseCreated(created) {
     setAddExerciseName(null);
-    setExerciseSearch('');
     if (created?.id) selectExercise(created.id);
   }
 
@@ -311,6 +434,9 @@ export default function LogTab() {
 
   return (
     <div>
+      {/* The Log page. Hidden, never unmounted, while the search screen is up: lists keep their
+          expanded state and the past-session frame keeps its tree position (log-screen.md). */}
+      <div hidden={searchOpen || undefined}>
       {!routinesLoading && routines.length === 0 && !routineBannerDismissed && (
         <div
           style={{
@@ -582,11 +708,11 @@ export default function LogTab() {
               // Favorites list would be showing on the next person's screen.
               key={activePersonId}
               personExercises={personExercises}
-              catalog={catalog}
               routines={routines}
               loading={personExercisesLoading}
               onSelectExercise={selectExercise}
               onAddExercise={(term) => setAddExerciseName((term || '').trim())}
+              onOpenSearch={openSearch}
               onStartRoutine={handleStartRoutine}
               hasActiveRoutine={!!activeRoutine}
             />
@@ -627,7 +753,20 @@ export default function LogTab() {
           )}
         </div>
       </section>
+      </div>
 
+      {searchOpen && (
+        <ExerciseSearchScreen
+          fieldRef={searchFieldRef}
+          catalog={catalog}
+          loading={personExercisesLoading}
+          onSelectExercise={selectExercise}
+          onAddExercise={(term) => setAddExerciseName((term || '').trim())}
+          onCancel={cancelSearch}
+        />
+      )}
+
+      {/* Outside the hidden page, so "+ Add your own exercise" on the search screen opens it too. */}
       {addExerciseName !== null && (
         <AddEditExerciseModal
           exercise={null}
