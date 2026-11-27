@@ -67,7 +67,7 @@ export default function LogTab() {
   const { tags, refetch: refetchTags } = useTags();
   // The full catalog powers search and lets us resolve a search-selected exercise that isn't
   // in the person's list yet.
-  const { exercises: catalog, refetch: refetchCatalog } = useExercises();
+  const { exercises: catalog, loading: catalogLoading, unavailable: catalogUnavailable, refetch: refetchCatalog } = useExercises();
   const {
     routines,
     loading: routinesLoading,
@@ -759,7 +759,10 @@ export default function LogTab() {
         <ExerciseSearchScreen
           fieldRef={searchFieldRef}
           catalog={catalog}
-          loading={personExercisesLoading}
+          // The screen lists the LIBRARY, so it waits for the library, not the person's own list:
+          // the library often lands a beat later, and until then the screen said "No exercises yet".
+          loading={catalogLoading}
+          unavailable={catalogUnavailable}
           onSelectExercise={selectExercise}
           onAddExercise={(term) => setAddExerciseName((term || '').trim())}
           onCancel={cancelSearch}

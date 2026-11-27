@@ -28,7 +28,7 @@ import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 // draft, kept across Cancel, a person switch and a reload, which made sense while the field sat on
 // the Log page itself. On its own screen that kept text just read as stale. Choosing a result or
 // "+ Add your own exercise" still carries the term to where it is needed.
-export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSelectExercise, onAddExercise, onCancel }) {
+export default function ExerciseSearchScreen({ fieldRef, catalog, loading, unavailable = false, onSelectExercise, onAddExercise, onCancel }) {
   const [exerciseSearch, setExerciseSearch] = useState('');
   // "Preview exercise" on a result (its muscles and video before choosing it). Local: the screen
   // unmounts on close, and a preview never outlives the search it came from.
@@ -91,6 +91,13 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
       <div className="exercise-search-body">
         {loading ? (
           <Skeleton width="100%" height={46} radius={16} style={sectionSpacing} />
+        ) : unavailable ? (
+          // No library on this device and it can't be fetched right now (offline, or the server is
+          // not answering). Waiting would be a spinner over a request that may never succeed, and an
+          // empty list would claim there are no exercises. Your own exercise can still be added.
+          <p className="exercise-search-hint" style={sectionSpacing}>
+            The exercise library needs a connection the first time. You can still add your own exercise.
+          </p>
         ) : listShown ? (
           <>
             {!searching && (
@@ -113,7 +120,7 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
           </>
         ) : null}
         {/* With the list, so it does not draw at the top and then jump below it. */}
-        {!loading && listShown && (
+        {!loading && (listShown || unavailable) && (
           <Button onClick={() => onAddExercise(exerciseSearch)} fullWidth>
             + Add your own exercise
           </Button>

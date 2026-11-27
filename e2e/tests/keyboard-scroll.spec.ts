@@ -213,8 +213,9 @@ test.describe('the exercise search screen', () => {
     expect(await page.evaluate(() => (window as any).__rowsAtFocus), 'rows drawn inside the tap').toBe(0);
     // Each result row is the button carrying the exercise's id (ExerciseSearchResults).
     const rowNames = () => screen.locator('button[id][aria-label]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+    // Polled, not read once: the rows draw a moment after the heading (useDeferredValue).
+    await expect.poll(async () => (await rowNames()).length, { message: 'the library, not a handful' }).toBeGreaterThan(100);
     const all = await rowNames();
-    expect(all.length, 'the library, not a handful').toBeGreaterThan(100);
     expect(all).toEqual([...all].sort((a, b) => a.localeCompare(b)));
     expect(all).toContain('Barbell Bench Press');
 

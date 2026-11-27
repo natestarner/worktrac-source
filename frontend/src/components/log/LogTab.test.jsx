@@ -757,4 +757,25 @@ describe('LogTab exercise search screen', () => {
     expect(within(dialog).getByDisplayValue('bench')).toBeInTheDocument();
     expect(searchScreen(), 'the search stays underneath').not.toBeNull();
   });
+
+  // The screen lists the LIBRARY: it waits for the library, not the person's own list (which often
+  // lands first). Before, it said "All exercises" / "No exercises yet" until the library arrived.
+  it('waits for the library, not the person’s own list', async () => {
+    useExercises.mockReturnValue({ exercises: [], loading: true, unavailable: false });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    renderLog();
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(within(searchScreen()).queryByText('All exercises')).toBeNull();
+    expect(within(searchScreen()).queryByText('No exercises yet. Add your own below.')).toBeNull();
+  });
+
+  it('says the library needs a connection when it cannot be fetched', async () => {
+    useExercises.mockReturnValue({ exercises: [], loading: false, unavailable: true });
+    renderLog();
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    expect(
+      await within(searchScreen()).findByText('The exercise library needs a connection the first time. You can still add your own exercise.'),
+    ).toBeInTheDocument();
+  });
 });

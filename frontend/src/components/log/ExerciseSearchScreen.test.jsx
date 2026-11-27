@@ -96,6 +96,22 @@ describe('ExerciseSearchScreen', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
+  // Offline (or a failing server) with no library on the device: say so, keep "add your own".
+  it('with the library unavailable, says it needs a connection and still offers your own exercise', () => {
+    const { onAddExercise } = renderScreen({ catalog: [], unavailable: true });
+    expect(screen.getByText('The exercise library needs a connection the first time. You can still add your own exercise.')).toBeInTheDocument();
+    expect(screen.queryByText('All exercises')).toBeNull();
+    expect(screen.queryByText('No exercises yet. Add your own below.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add your own exercise' }));
+    expect(onAddExercise).toHaveBeenCalledWith('');
+  });
+
+  it('while loading, shows neither the list nor an empty-library message', () => {
+    renderScreen({ catalog: [], loading: true });
+    expect(screen.queryByText('All exercises')).toBeNull();
+    expect(screen.queryByText('No exercises yet. Add your own below.')).toBeNull();
+  });
+
   it('"Preview exercise" on a result opens its preview', () => {
     renderScreen({ search: 'bench' });
     fireEvent.click(screen.getAllByRole('button', { name: /preview exercise/i })[0]);
