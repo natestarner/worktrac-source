@@ -4,6 +4,7 @@ import IconButton from './IconButton';
 import { IconClose } from './icons';
 import { FOCUSABLE, installFocusTrap } from '../../lib/focusTrap';
 import { lockBodyScroll } from '../../lib/bodyScrollLock';
+import { trackVisibleViewport } from '../../lib/visibleViewport';
 
 // Generic overlay shell reused by every modal (Add Person, Add/Edit Exercise, Routine
 // form, Past Session, Edit Set, Setup Field Editor, End Workout Confirm).
@@ -55,6 +56,7 @@ export default function Modal({
   initialFocus = 'first',
 }) {
   const dialogRef = useRef(null);
+  const scrimRef = useRef(null);
   const restoreFocusRef = useRef(null);
   const titleId = useId();
   // onClose is read through a ref, NOT listed as an effect dependency. Callers pass an inline
@@ -138,6 +140,12 @@ export default function Modal({
   const headerRef = useRef(null);
   const contentRef = useRef(null);
 
+  // The keyboard: this dialog's scrim follows the part of the screen it leaves visible, published
+  // onto the scrim itself (lib/visibleViewport.js). Only while a dialog is open -- nothing else reads
+  // it. A layout effect declared BEFORE the rest-position measurement below, so a dialog opened with
+  // the keyboard already up is sized to it before that measurement and before the first paint.
+  useLayoutEffect(() => trackVisibleViewport(scrimRef.current), []);
+
   useLayoutEffect(() => {
     if (isSheet || restTop !== null) return;
     const panel = dialogRef.current;
@@ -194,6 +202,7 @@ export default function Modal({
 
   return createPortal(
     <div
+      ref={scrimRef}
       // No onClick: the backdrop is inert on purpose. See the header comment.
       style={{
         position: 'fixed',
@@ -202,7 +211,8 @@ export default function Modal({
         // view to the focused field. Sized to `inset: 0`, the panel sat partly under the keyboard
         // and the pan pushed its header and first fields off the top of the screen, where nothing
         // could scroll them back (the page behind is locked). lib/visibleViewport.js publishes these
-        // two values; without them (jsdom, no visualViewport) this is exactly `inset: 0`.
+        // two values onto this element (the effect above); without them (jsdom, no visualViewport)
+        // this is exactly `inset: 0`.
         left: 0,
         right: 0,
         top: 'var(--visible-viewport-top, 0px)',
