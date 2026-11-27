@@ -80,11 +80,12 @@ name: Tapping the search opens the search screen
 - extendedWaitUntil:
     notVisible: 'Add exercise'
     timeout: 5000
-# Cancel goes back to the Log page (the typed text stays: it is the person's draft, shown on the
-# search button there).
+# Cancel goes back to the Log page, and the typed text goes with the screen: the search button
+# shows its placeholder again, not 'press'.
 - tapOn: 'Cancel'
 - extendedWaitUntil:
     notVisible: '(?i)search results'
     timeout: 5000
 - assertNotVisible: 'Cancel'
+- assertNotVisible: 'press'
 - takeScreenshot: mobile-flows-out/09-after-cancel

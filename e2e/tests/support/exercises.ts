@@ -10,8 +10,8 @@ export async function pickExercise(page: Page, name: string) {
 }
 
 // The Log tab's exercise search is its own SCREEN (ExerciseSearchScreen): on the Log page the
-// search "field" is a BUTTON named "Search all exercises" (it shows the typed draft, or the
-// placeholder), and tapping it opens the screen with the real field focused. So "is the picker
+// search "field" is a BUTTON named "Search all exercises" (always showing that placeholder), and
+// tapping it opens the screen with the real field focused. So "is the picker
 // showing?" is searchTrigger, and typing a search is searchFor -- never a bare
 // getByPlaceholder('Search all exercises').fill(), which finds nothing until the screen is open.
 // docs/architecture/exercise-search-history.md has why.
@@ -33,19 +33,13 @@ export async function searchFor(page: Page, term: string) {
   await searchField(page).fill(term);
 }
 
-// Close the search screen with its Cancel, which keeps whatever was typed (the person's draft) and
-// brings the Log page back. A no-op when it isn't open.
+// Close the search screen with its Cancel, which brings the Log page back and drops whatever was
+// typed: the next search starts empty. A no-op when it isn't open.
 export async function closeSearch(page: Page) {
   const screen = searchScreen(page);
   if ((await screen.count()) === 0) return;
   await screen.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(screen).toHaveCount(0);
-}
-
-// Empty the search and close the screen: the picker as a fresh visit finds it.
-export async function clearSearch(page: Page) {
-  await searchFor(page, '');
-  await closeSearch(page);
 }
 
 // The routine builder's "Add exercise to routine" pool likewise defaults to favorites/logged,

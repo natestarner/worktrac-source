@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, setHoldSeconds, tapLogSet, clearSearch, searchFor } from './support/exercises';
+import { dismissPrCelebration, pickExercise, setHoldSeconds, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: logging a hold, run across online / lie-fi / hard-offline / pinned-offline from one
@@ -31,7 +31,7 @@ const holdRow = (page: Page) => page.getByText('0:50', { exact: true }).first();
 async function warmCatalog(page: Page) {
   await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 forEachConnectivityMode<void>('a hold logs and reads back as time', {

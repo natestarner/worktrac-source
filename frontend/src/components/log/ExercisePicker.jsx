@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'; // useRef: ChipGroup, below
 import SectionLabel from '../shared/SectionLabel';
-import { useAppState } from '../../context/AppStateContext';
 import Skeleton from '../shared/Skeleton';
 import Button from '../shared/Button';
 import EmptyState from '../shared/EmptyState';
@@ -40,7 +39,6 @@ export default function ExercisePicker({
   onOpenSearch,
   hasActiveRoutine,
 }) {
-  const { exerciseSearch } = useAppState();
   // Plain local state, not AppStateContext: LogTab mounts this component with
   // key={activePersonId}, so a person switch remounts it and these reset -- the same isolation
   // route useExerciseFilter takes on History/PRs. It also keeps "I expanded a list once" out of
@@ -117,7 +115,7 @@ export default function ExercisePicker({
       {showRoutineQuickStart && <SectionLabel style={sectionLabelSpacing}>Or pick an exercise</SectionLabel>}
 
       <div style={sectionSpacing}>
-        <SearchTrigger value={exerciseSearch} onOpen={onOpenSearch} />
+        <SearchTrigger onOpen={onOpenSearch} />
       </div>
 
       {loading && (
@@ -157,7 +155,7 @@ export default function ExercisePicker({
 
       {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. */}
       {!loading && (
-        <Button onClick={() => onAddExercise(exerciseSearch)} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
+        <Button onClick={() => onAddExercise('')} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
           + Add your own exercise
         </Button>
       )}
@@ -165,8 +163,8 @@ export default function ExercisePicker({
   );
 }
 
-// What looks like the search field on the Log page: a BUTTON drawn as the field (`.input`), showing
-// what was typed, or the placeholder. A tap opens the search screen, whose own field LogTab focuses
+// What looks like the search field on the Log page: a BUTTON drawn as the field (`.input`), always
+// showing the placeholder (what is typed lives and dies with the search screen). A tap opens the search screen, whose own field LogTab focuses
 // inside this same click -- the one place iOS raises the keyboard for a programmatic focus.
 //
 // Not an <input>: a real field here would take the focus (and start the keyboard and Safari's
@@ -175,9 +173,8 @@ export default function ExercisePicker({
 // touch handler: `click` is the tap's LAST event, so no synthetic click follows it to land on the
 // new screen (the "ghost click" that took the keyboard away from the old layer).
 //
-// Its name is "Search all exercises" (aria-label) whatever it shows, so tests, Maestro and the tour
-// find it the same way with or without a draft; the draft itself is its text.
-function SearchTrigger({ value, onOpen }) {
+// Its name is "Search all exercises" (aria-label), which tests, Maestro and the tour find it by.
+function SearchTrigger({ onOpen }) {
   return (
     <button
       type="button"
@@ -186,7 +183,7 @@ function SearchTrigger({ value, onOpen }) {
       data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
       onClick={onOpen}
     >
-      <span className={value ? undefined : 'search-trigger-placeholder'}>{value || 'Search all exercises'}</span>
+      <span className="search-trigger-placeholder">Search all exercises</span>
     </button>
   );
 }

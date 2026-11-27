@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise, clearSearch, searchFor } from './support/exercises';
+import { logSetAt, pickExercise, closeSearch, searchFor } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -15,7 +15,7 @@ const NOTE = 'Want to see these muscles on a body diagram? Turn on the muscle hi
 async function warmCatalog(page: Page) {
   await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 async function openAbout(page: Page) {

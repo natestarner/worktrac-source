@@ -607,8 +607,8 @@ something:
 ## Search is its own SCREEN, opened by a tap that focuses its field (2026-11-26)
 
 On the Log page the search "field" is a **button** drawn as the field (`ExercisePicker`'s
-`SearchTrigger`, `.input.search-trigger`, named "Search all exercises", showing the typed draft or
-the placeholder). Tapping it switches the Log tab to `ExerciseSearchScreen`: the field at the top
+`SearchTrigger`, `.input.search-trigger`, named "Search all exercises", always showing that
+placeholder). Tapping it switches the Log tab to `ExerciseSearchScreen`: the field at the top
 with Cancel beside it, and the results below in **normal document flow, scrolled by the page**.
 **Read `docs/architecture/exercise-search-history.md` before changing any of this.** Three designs
 before this one (scroll the page to the field; a full-screen fixed layer, with four rounds of fixes)
@@ -626,8 +626,7 @@ opened**. Here nothing moves.
   had exactly that: WKWebView's ghost mousedown took the focus back (TestFlight 1.5.0 build 40).
 - **The trigger is not an `<input>`.** A real field mid-page takes the focus (and starts the keyboard
   and Safari's scroll toward it) where it is, and then has to move -- the failure every earlier design
-  shared. Its accessible name stays "Search all exercises" whatever it shows, so tests, Maestro and
-  the tour find it the same way with or without a draft.
+  shared. Its accessible name is "Search all exercises", which tests, Maestro and the tour find it by.
 - **`exerciseSearchOpen` lives in UIContext, not LogTab**, because `AppShell` hides the chrome off
   it (`.app-shell--searching`: header, person bar, tab bar, SessionBar, plus the SessionBar's
   reserved bottom padding). Hiding is by CSS class, never by unmounting or wrapping: the chrome keeps
@@ -639,8 +638,12 @@ opened**. Here nothing moves.
   state if it did). Closing paths:
   - **Cancel / Escape** = `navigate(-1)` when the entry was pushed (`searchEntryPushedRef`), else
     close directly. Back's handling below then closes it, and the Log page comes back **where it
-    was** (`pageScrollRef`, restored in a layout effect). The typed text is **kept** (the person's
-    draft, AppStateContext).
+    was** (`pageScrollRef`, restored in a layout effect). **The typed text goes with the screen**
+    (`ExerciseSearchScreen`'s own `useState`): Cancel means "never mind", so the next search starts
+    empty (Nate, 2026-11-27). It was a per-person persisted draft, kept across Cancel, a person
+    switch and a reload, from when the field sat on the Log page itself; on its own screen that text
+    read as stale. Don't move it back into `AppStateContext`. A choice or "+ Add your own exercise"
+    still carries the term onward.
   - **Browser Back** closes it two ways, both needed: the route leaving the search path (works in
     `MemoryRouter`), and a **`popstate` listener** while open. A Back pressed before the search route
     has rendered never "leaves" anything, so only popstate sees it -- red in WebKit e2e without it.
@@ -677,7 +680,7 @@ opened**. Here nothing moves.
 - The screen is a region named "Exercise search", never "Search all exercises": Maestro matches
   labels, and `tapOn: 'Search all exercises'` must find the Log page's button.
 - **e2e: use `support/exercises.ts`'s `searchTrigger` / `searchFor` / `searchField` / `searchScreen` /
-  `closeSearch` / `clearSearch`**, never a bare `getByPlaceholder('Search all exercises').fill()` on
+  `closeSearch`**, never a bare `getByPlaceholder('Search all exercises').fill()` on
   the Log page -- there is no such field until the screen is open. (The routine dialog's search is a
   real input with the same placeholder; scope it to that dialog.)
 - Pinned by `ExercisePicker.test.jsx` (the trigger), `ExerciseSearchScreen.test.jsx`,
@@ -921,6 +924,15 @@ catalog row by id), so it shows exactly what the strip would.
 - **Read-only.** No "Add muscles worked" in a preview; muscles are edited in Customize.
 - Not a connectivity branch: `parity-exercise-preview.spec.ts` covers the picker in all four
   modes (verified red by hiding muscles offline).
+
+## The landscape layout needs a WIDTH gate, not just `orientation` (2026-11-27)
+
+`index.css`'s two-column Log layout is `(orientation: landscape) and (min-width: 640px) and
+(max-height: 900px)`. **Don't drop the `min-width`.** Brave on iPhone and Chrome on Android shrink
+the page above the keyboard, so a portrait phone typing a weight is ~390x300, which CSS calls
+"landscape". Without the width gate the form's grid column computed to 0px (on prod from July to
+2026-11-27). The same goes for any new height-based query. `log-keyboard-shrink.spec.ts`
+(`@critical`) pins it. `docs/incidents/2026-11-27-brave-keyboard-collapses-log-form.md`.
 
 ## Editable temp rows
 

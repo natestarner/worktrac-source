@@ -2546,7 +2546,8 @@ button.person-row {
 
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,
    this session's set history on the right. Block (stacked) by default/portrait;
-   only the @media block below switches it to a real grid. */
+   only the landscape @media block below switches it to a real grid -- and only at 640px+ wide,
+   because a keyboard that shrinks the page makes a portrait phone "landscape" (see that block). */
 .exercise-detail-grid {
   display: block;
 }
@@ -3067,7 +3068,14 @@ button.person-row {
   }
 }
 
-@media (orientation: landscape) and (max-height: 900px) {
+/* Landscape: a phone on its side, or an iPad. ⚠️ The min-width is NOT optional. `orientation`
+   only compares the page's width to its height, and some browsers shrink the page's height when
+   the keyboard opens (Brave on iPhone, Chrome on Android). A portrait phone then reads as
+   "landscape" (390 wide, ~300 tall) the moment the person taps Weight, and the two columns below
+   squeeze the whole log form into 0px beside the sets column (2026-11-27, on prod since July).
+   The keyboard can shrink the height but never the width, and no phone is 640px wide upright, so
+   the min-width keeps every portrait phone out of this block whatever the keyboard does. */
+@media (orientation: landscape) and (min-width: 640px) and (max-height: 900px) {
   .header-bar {
     padding-top: var(--space-1);
     padding-bottom: var(--space-1);

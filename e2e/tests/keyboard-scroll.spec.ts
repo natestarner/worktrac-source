@@ -223,7 +223,7 @@ test.describe('the exercise search screen', () => {
     await expect(logSetButton(page)).toBeVisible();
   });
 
-  test('Cancel goes back to the Log page where it was, keeping the typed search', async ({ page, request }) => {
+  test('Cancel goes back to the Log page where it was, and the typed search goes with it', async ({ page, request }) => {
     await twoPersonHousehold(page, request);
     await page.setViewportSize(KEYBOARD_UP);
     // The field mid-page: scroll so it sits a little way down the screen.
@@ -236,9 +236,12 @@ test.describe('the exercise search screen', () => {
 
     await expect(searchScreen(page)).toHaveCount(0);
     await expect(page.locator('.app-chrome')).toBeVisible();
-    await expect(searchTrigger(page)).toHaveText('bench');
+    await expect(searchTrigger(page)).toHaveText('Search all exercises');
     expect(await page.evaluate(() => window.scrollY)).toBe(scrolledTo);
     expect(Math.round((await box(searchTrigger(page))).y)).toBe(triggerTop);
+    // Cancel means "never mind": the next search starts empty.
+    await searchTrigger(page).click();
+    await expect(searchField(page)).toHaveValue('');
   });
 
   // Back pressed the moment the URL changes, before React Router has rendered the search route (a
@@ -261,7 +264,7 @@ test.describe('the exercise search screen', () => {
     await page.reload();
     await expect(page).toHaveURL(/\/app\/log$/);
     await expect(searchScreen(page)).toHaveCount(0);
-    await expect(searchTrigger(page)).toHaveText('bench');
+    await expect(searchTrigger(page)).toHaveText('Search all exercises');
   });
 
   test('choosing a result opens it, and Back from it does not reopen the search', async ({ page, request }) => {

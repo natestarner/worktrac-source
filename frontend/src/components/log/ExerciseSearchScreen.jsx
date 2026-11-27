@@ -1,5 +1,4 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import { useAppState } from '../../context/AppStateContext';
 import SectionLabel from '../shared/SectionLabel';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
@@ -23,8 +22,14 @@ import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 // sizes, locks or scrolls -- each of those was tried and is why the history doc exists.
 //
 // `fieldRef` is the field: LogTab focuses it in the tap.
+//
+// What is typed belongs to this screen and goes when it closes: Cancel (or Back) means "never
+// mind", so the next search starts empty (Nate, 2026-11-27). It used to be the person's saved
+// draft, kept across Cancel, a person switch and a reload, which made sense while the field sat on
+// the Log page itself. On its own screen that kept text just read as stale. Choosing a result or
+// "+ Add your own exercise" still carries the term to where it is needed.
 export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSelectExercise, onAddExercise, onCancel }) {
-  const { exerciseSearch, setExerciseSearch } = useAppState();
+  const [exerciseSearch, setExerciseSearch] = useState('');
   // "Preview exercise" on a result (its muscles and video before choosing it). Local: the screen
   // unmounts on close, and a preview never outlives the search it came from.
   const [preview, setPreview] = useState(null);

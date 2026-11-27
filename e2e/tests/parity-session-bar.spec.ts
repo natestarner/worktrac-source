@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, clearSearch, searchFor } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -13,7 +13,7 @@ const EXERCISE = 'Barbell Bench Press';
 async function warmCatalog(page: Page) {
   await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 // The session bar is the app's bottom chrome: it carries "Session in progress", the start time, the

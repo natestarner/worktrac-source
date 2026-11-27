@@ -100,8 +100,6 @@ function baseAppState(overrides = {}) {
     forgetRoutineStepsLogged: vi.fn(),
     doneEditingSession: vi.fn(),
     updateEditingSession: vi.fn(),
-    exerciseSearch: '',
-    setExerciseSearch: vi.fn(),
     // Passed down to SessionSummary's onChanged: removing an entry lowers that exercise's
     // session-volume record, so the latch holding the last celebrated value has to be re-armed.
     clearVolumePrCelebrated: vi.fn(),
@@ -631,7 +629,7 @@ describe('LogTab exercise search screen', () => {
       const [open, setOpen] = useState(false);
       return { showToast: vi.fn(), exerciseSearchOpen: open, setExerciseSearchOpen: setOpen };
     });
-    useAppState.mockReturnValue(baseAppState({ activeRoutineId: null, exerciseSearch: 'bench' }));
+    useAppState.mockReturnValue(baseAppState({ activeRoutineId: null }));
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -694,7 +692,7 @@ describe('LogTab exercise search screen', () => {
 
     expect(duringClick.screen, 'the screen rendered inside the click').not.toBeNull();
     expect(duringClick.focused).toBe(within(duringClick.screen).getByPlaceholderText('Search all exercises'));
-    expect(duringClick.focused).toHaveValue('bench');
+    expect(duringClick.focused).toHaveValue('');
     expect(duringClick.scrolledTo, 'the page is at the top, where the screen is').toBe(0);
     // The Log page is still there, hidden: lists keep their state for the way back.
     expect(screen.getByText('exercise-picker')).not.toBeVisible();
@@ -704,10 +702,11 @@ describe('LogTab exercise search screen', () => {
     expect(searchScreen(), 'switching route did not remount LogTab').not.toBeNull();
   });
 
-  it('Cancel goes back: the Log page is shown again where it was, with the draft kept', async () => {
+  it('Cancel goes back: the Log page is shown again where it was, and what was typed is gone', async () => {
     const where = renderLog();
     fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
     await waitFor(() => expect(where.pathname).toBe('/app/log/search'));
+    fireEvent.change(within(searchScreen()).getByPlaceholderText('Search all exercises'), { target: { value: 'bench' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -715,7 +714,10 @@ describe('LogTab exercise search screen', () => {
     await waitFor(() => expect(searchScreen()).toBeNull());
     expect(screen.getByText('exercise-picker')).toBeVisible();
     expect(scrollY, 'back where the Log page was').toBe(640);
-    expect(useAppState().setExerciseSearch).not.toHaveBeenCalledWith('');
+
+    // Cancel means "never mind": the next search starts empty.
+    fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    expect(within(searchScreen()).getByPlaceholderText('Search all exercises')).toHaveValue('');
   });
 
   it('the browser’s Back closes it the same way', async () => {
@@ -749,6 +751,7 @@ describe('LogTab exercise search screen', () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'mock-open-search' }));
+    fireEvent.change(within(searchScreen()).getByPlaceholderText('Search all exercises'), { target: { value: 'bench' } });
     fireEvent.click(within(searchScreen()).getByRole('button', { name: '+ Add your own exercise' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByDisplayValue('bench')).toBeInTheDocument();

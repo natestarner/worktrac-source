@@ -1,13 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExercisePicker from './ExercisePicker';
-import { useAppState } from '../../context/AppStateContext';
 import { useChipRowOverflow } from '../../hooks/useChipRowOverflow';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
-
-// ExercisePicker reads the person's exercise-search draft from AppStateContext; mock it so
-// these tests control the "searching vs default view" branch directly.
-vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 
 // The chip groups are bounded by measuring a clipped container against its own cap, and jsdom
 // lays nothing out -- scrollHeight is 0 and ResizeObserver doesn't exist, so the real hook can
@@ -50,7 +45,6 @@ function routines(count) {
 describe('ExercisePicker empty state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
@@ -81,7 +75,6 @@ describe('ExercisePicker empty state', () => {
 describe('ExercisePicker tour anchors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
@@ -107,7 +100,6 @@ describe('ExercisePicker search trigger', () => {
   }
 
   it('is a button, not a field: nothing on the Log page can take the keyboard', () => {
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     const { container } = renderPicker();
     expect(trigger().tagName).toBe('BUTTON');
     expect(container.querySelector('input')).toBeNull();
@@ -115,34 +107,17 @@ describe('ExercisePicker search trigger', () => {
 
   // `.input` carries the 16px floor and the field's look; the trigger must read as the field.
   it('is drawn with the .input class', () => {
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     renderPicker();
     expect(trigger()).toHaveClass('input');
   });
 
-  it('shows the placeholder when nothing is typed, and the person’s draft when something is', () => {
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
-    const { rerender } = renderPicker();
+  // What is typed lives and dies with the search screen, so the trigger always reads as empty.
+  it('shows the placeholder', () => {
+    renderPicker();
     expect(trigger()).toHaveTextContent('Search all exercises');
-
-    useAppState.mockReturnValue({ exerciseSearch: 'bench', setExerciseSearch: vi.fn() });
-    rerender(
-      <ExercisePicker
-        personExercises={[]}
-        routines={[]}
-        loading={false}
-        onSelectExercise={vi.fn()}
-        onAddExercise={vi.fn()}
-        onStartRoutine={vi.fn()}
-        hasActiveRoutine={false}
-      />,
-    );
-    // Same accessible name either way, so tests, Maestro and the tour find it the same way.
-    expect(trigger()).toHaveTextContent('bench');
   });
 
   it('a tap opens the search (a click, the tap’s last event, so no ghost click can follow)', () => {
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     const onOpenSearch = vi.fn();
     renderPicker({ onOpenSearch });
     fireEvent.click(trigger());
@@ -150,21 +125,9 @@ describe('ExercisePicker search trigger', () => {
   });
 
   it('stays below "Or pick an exercise": the page order is unchanged', () => {
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     renderPicker({ routines: routines(2) });
     const heading = screen.getByText('Or pick an exercise');
     expect(heading.compareDocumentPosition(trigger()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  // The page never changes for a search: the routines, the lists and "+ Add your own exercise" are
-  // all still there with a draft typed (the 2026-11-08 first-letter jump came from hiding them).
-  it('a typed draft changes nothing on the page', () => {
-    useAppState.mockReturnValue({ exerciseSearch: 'squ', setExerciseSearch: vi.fn() });
-    renderPicker({ routines: routines(1), personExercises: exercises(2, { favorite: true }) });
-    expect(screen.getByText('Start a routine')).toBeInTheDocument();
-    expect(screen.getByText('Favorites')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Add your own exercise' })).toBeInTheDocument();
-    expect(screen.queryByText('Search results')).toBeNull();
   });
 });
 
@@ -174,7 +137,6 @@ describe('ExercisePicker search trigger', () => {
 describe('ExercisePicker routine quick-start bound', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
     useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
   });
 
@@ -229,7 +191,6 @@ describe('ExercisePicker routine quick-start bound', () => {
 describe('ExercisePicker exercise group bounds', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
   });
 
   it('offers no disclosure while everything fits', () => {

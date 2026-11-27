@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, closeSearch, searchFor, searchTrigger } from './support/exercises';
+import { endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, searchTrigger } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -281,26 +281,5 @@ test.describe('Multi-person switching', () => {
     await expect(restReadout(page)).toHaveCount(0);
     await expect(restRing(page, 'Alex')).toHaveCount(0);
     await expect(page.getByText(/Session in progress/)).toHaveCount(0);
-  });
-
-  test('switching people preserves a half-typed exercise search', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Alex');
-
-    await page.getByRole('button', { name: '+ Add person' }).click();
-    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-
-    await personPill(page, 'Alex').click();
-    await searchFor(page, 'bench');
-    // The search screen hides the person bar; its Cancel keeps what was typed.
-    await closeSearch(page);
-
-    // Sam's search box starts empty, unaffected by Alex's search.
-    await personPill(page, 'Sam').click();
-    await expect(searchTrigger(page)).toHaveText('Search all exercises');
-
-    // Switching back to Alex restores what they'd typed.
-    await personPill(page, 'Alex').click();
-    await expect(searchTrigger(page)).toHaveText('bench');
   });
 });
