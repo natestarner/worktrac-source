@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise, clearSearch } from './support/exercises';
+import { logSetAt, pickExercise, clearSearch, searchFor } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -13,8 +13,7 @@ const ABOUT = 'About this exercise: works Chest, helped by Shoulders and Triceps
 const NOTE = 'Want to see these muscles on a body diagram? Turn on the muscle highlighter on the Settings page.';
 
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
-  await search.fill(EXERCISE);
+  await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
   await clearSearch(page);
 }

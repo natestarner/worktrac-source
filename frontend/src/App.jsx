@@ -165,6 +165,10 @@ export default function App() {
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />
                 <Route path="log" element={<LogTab />} />
+                {/* The Log tab's exercise search screen. The SAME element as `log`, so switching
+                    between the two keeps LogTab mounted; the route exists so Back closes the
+                    search (components/log/searchRoute.js). */}
+                <Route path="log/search" element={<LogTab />} />
                 <Route path="history" element={<HistoryTab />} />
                 <Route path="prs" element={<PRsTab />} />
                 <Route path="routines" element={<RoutinesTab />} />

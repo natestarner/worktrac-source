@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, closeSearch } from './support/exercises';
+import { pickExercise, closeSearch, searchFor, searchTrigger } from './support/exercises';
 
 // The first-run guided tour. Full design: the plan at
 // C:\Users\natha\.claude\plans\when-a-user-logs-steady-giraffe.md (components/onboarding/).
@@ -145,7 +145,7 @@ test.describe('The full walk at portrait phone', () => {
     await clickContinue(page);
     await expectStep(page, 8);
     await expect(page).toHaveURL(/\/app\/log/);
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible(); // back on the picker
+    await expect(searchTrigger(page)).toBeVisible(); // back on the picker
     await expectSpotlightContainsAnchor(page, ANCHOR.accountMenu);
 
     await page.getByRole('button', { name: 'Got it' }).click();
@@ -176,7 +176,7 @@ test.describe('The full walk at portrait phone', () => {
 
     // Leaving the tour takes the sample away: the person's own (blank) draft is back.
     await page.getByRole('button', { name: 'Skip tour' }).click();
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Back Squat');
+    await searchFor(page, 'Barbell Back Squat');
     await page.getByRole('button', { name: 'Barbell Back Squat', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Enter a weight' })).toBeDisabled();
     await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
@@ -243,7 +243,7 @@ test.describe('Escape skips and restores', () => {
     await registerHousehold(page, request, 'Odalys', { keepWelcome: true });
     await dismissWelcomeAndSearch(page);
 
-    await page.getByPlaceholder('Search all exercises').fill('dead');
+    await searchFor(page, 'dead');
     // The search layer covers the header; its Cancel keeps what was typed.
     await closeSearch(page);
     await openHelp(page);
@@ -258,7 +258,7 @@ test.describe('Escape skips and restores', () => {
     await expect(page.getByRole('dialog')).toBeHidden();
 
     await page.getByRole('link', { name: 'Log', exact: true }).click();
-    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('dead');
+    await expect(searchTrigger(page)).toHaveText('dead');
   });
 
   // The other half: an exercise open when the tour starts must reopen after Escape, even though

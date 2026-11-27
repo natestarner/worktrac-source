@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton } from './support/exercises';
+import { dismissPrCelebration, endWorkout, pickExercise, prCelebration, tapLogSet, logSetButton, searchFor, searchTrigger } from './support/exercises';
 import { goHardOffline, goOnline, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
@@ -68,7 +68,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await goHardOffline(page);
     await expect(offlineSavedLocallyBanner(page)).toBeVisible();
 
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
+    await searchFor(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Barbell Bench Press', exact: true })).toBeVisible();
   });
 
@@ -257,7 +257,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     await prCelebration(page).click({ force: true }); // dismiss (scrim click)
     await endWorkout(page);
     // Ending a workout from the exercise screen returns you to the Log picker automatically.
-    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(searchTrigger(page)).toBeVisible();
     // Confirm liveSession has genuinely settled to "none" (the person-pill's live-session dot
     // clears -- same signal reload-persistence.spec.ts uses) before a caller cuts the
     // connection. The picker rendering doesn't itself prove this: a not-yet-corrected "still

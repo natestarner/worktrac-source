@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold, setBillingPlan, setMemberVisibility } from './support/auth';
-import { addOwnExercise, logSetButton } from './support/exercises';
+import { addOwnExercise, logSetButton, searchFor } from './support/exercises';
 import { addPerson } from './support/people';
 
 // Pro's promise -- the one printed on the pricing page -- is that a trainer's clients do not see
@@ -65,13 +65,13 @@ test.describe('Pro — private clients', () => {
     await expect(logSetButton(page)).toBeVisible();
 
     await loginAs(page, alex.email, alex.password);
-    await page.getByPlaceholder('Search all exercises').fill(privateName);
+    await searchFor(page, privateName);
     await expect(page.getByRole('button', { name: privateName, exact: true })).toHaveCount(0);
 
     // ⚠️ The positive control, and it is not optional. The assertion above passes just as happily
     // when search is broken, when the picker never rendered, or when this login landed somewhere
     // else entirely -- every one of which would make the privacy claim untested rather than true.
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
+    await searchFor(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Barbell Bench Press', exact: true })).toBeVisible();
   });
 

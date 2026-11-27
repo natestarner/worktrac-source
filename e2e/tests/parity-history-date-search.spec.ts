@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, logSetAt, pickExercise } from './support/exercises';
+import { backToPicker, logSetAt, pickExercise, searchTrigger } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // History's "Search by date": tap the calendar beside the search box, pick a day, see only that
@@ -62,7 +62,7 @@ forEachConnectivityMode<{ day: Date }>('History can be searched by date', {
     // Log may reopen on the exercise the past session last had selected, or on the picker; wait
     // for either to render before deciding, so the check is not a race against the tab switch.
     await page.getByRole('link', { name: 'Log' }).click();
-    const picker = page.getByPlaceholder('Search all exercises');
+    const picker = searchTrigger(page);
     await expect(picker.or(page.getByRole('button', { name: /All exercises/ }))).toBeVisible();
     if (!(await picker.isVisible())) await backToPicker(page);
     await pickExercise(page, TODAY_EXERCISE);

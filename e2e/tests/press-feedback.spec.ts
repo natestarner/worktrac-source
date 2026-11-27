@@ -1,6 +1,6 @@
 import { test, expect, Locator } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, searchFor } from './support/exercises';
 
 // Press feedback is opt-OUT rather than opt-in, and this is the assertion that keeps it that way.
 //
@@ -62,7 +62,7 @@ test.describe('Press feedback', () => {
 
     // A control that does NOT carry .pressable. This is the case that had no feedback at all: a
     // raw <button> in ExercisePicker, and the first thing anyone taps on the busiest screen.
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
+    await searchFor(page, 'Barbell Bench Press');
     const chip = page.getByRole('button', { name: 'Barbell Bench Press' }).first();
     await expect(chip).toBeVisible();
     expect(await chip.evaluate((el) => el.classList.contains('pressable'))).toBe(false);

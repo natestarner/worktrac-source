@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { backToPicker, pickExercise, clearSearch } from './support/exercises';
+import { backToPicker, pickExercise, clearSearch, searchFor } from './support/exercises';
 import { turnOnMuscleHighlighter } from './support/muscleMap';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -24,8 +24,7 @@ const OTHER_EXERCISE = 'Barbell Back Squat';
 const OTHER_ABOUT = /^About this exercise: works /;
 
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
-  await search.fill(EXERCISE);
+  await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
   await clearSearch(page);
 }

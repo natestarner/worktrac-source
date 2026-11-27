@@ -1,6 +1,6 @@
 import { expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, clearSearch } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, clearSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -11,8 +11,7 @@ const EXERCISE = 'Barbell Bench Press';
 // spec timed out in `navigate` under full-suite load (issue #189); holding `GET /api/exercises`
 // past mode entry reproduces that every time ("No exercises match"), and this step removes it.
 async function warmCatalog(page: Page) {
-  const search = page.getByPlaceholder('Search all exercises');
-  await search.fill(EXERCISE);
+  await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
   await clearSearch(page);
 }

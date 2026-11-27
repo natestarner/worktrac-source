@@ -227,16 +227,12 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   (`[data-modal-panel]`) clear of its sticky header (`[data-modal-header]`); on the page it keeps
   clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On
   the page it runs only in the app (`lib/native/keyboard.js`) — Safari reveals page fields itself.
-  A field inside `[data-keyboard-layer]` (the Log picker's full-screen search, `log-screen.md`) is
-  never revealed: the layer pins it at the top of the window by construction.
-- **`--window-height`** and **`--keyboard-inset`** (also from `trackVisibleViewport`) are for a
-  full-screen layer (the search): size it `top: 0; height: var(--window-height)` and pad its
-  scroller's end by `--keyboard-inset` (how much of the window Safari's keyboard covers; 0 in the
-  app). **Don't place a full-screen layer from `--visible-viewport-*`** (it chases Safari's pans a
-  frame late: flicker), **and don't rely on `inset: 0` in the app**: WKWebView sometimes kept such
-  a layer at its pre-keyboard height after the window shrank, while `window.innerHeight` was right.
-  `--window-height` is republished synchronously on every window resize, which forces the layout
-  (`docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md`). Dialogs keep the
+- **A screen that is all about one text field is a SCREEN, not an overlay.** The Log tab's exercise
+  search tried a full-screen fixed layer, and every way of sizing one broke on an iPhone:
+  `--visible-viewport-*` chased Safari's pans a frame late (flicker), and WKWebView left `inset: 0`
+  at its pre-keyboard height after the app's window shrank; it also needed a touch guard and keyboard
+  padding, which caused their own bugs. It is now an ordinary page (`log-screen.md`, "Search is its
+  own SCREEN"; the full story in `docs/architecture/exercise-search-history.md`). Dialogs keep the
   visible-viewport scrim for the reason in "Modals" above.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +

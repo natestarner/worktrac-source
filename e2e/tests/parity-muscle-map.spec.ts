@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise, logSetButton } from './support/exercises';
+import { logSetAt, pickExercise, logSetButton, searchTrigger } from './support/exercises';
 import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 import { turnOnMuscleHighlighter } from './support/muscleMap';
@@ -57,7 +57,7 @@ forEachConnectivityMode<void>('sets logged in any mode are on the Trends muscle 
 
   async navigate(page) {
     await page.getByRole('link', { name: 'Log', exact: true }).click();
-    const picker = page.getByPlaceholder('Search all exercises');
+    const picker = searchTrigger(page);
     await expect(picker.or(page.getByRole('button', { name: 'Log set' })).first()).toBeVisible();
     if (await picker.isVisible()) await pickExercise(page, EXERCISE);
     await expect(logSetButton(page)).toBeVisible();
