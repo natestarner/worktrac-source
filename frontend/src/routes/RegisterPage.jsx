@@ -272,7 +272,7 @@ export default function RegisterPage() {
         {passwordError && <div id="password-error" style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>{isProIntent ? 'Create account' : 'Create household'}</span>
+          <span style={{ visibility: submitting ? 'hidden' : undefined }}>{isProIntent ? 'Create account' : 'Create household'}</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Spinner color="currentColor" />

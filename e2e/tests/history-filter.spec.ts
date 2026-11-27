@@ -410,8 +410,9 @@ test.describe('History and PRs search: the keyboard and the session bar', () => 
       await page.keyboard.type('bench');
       await expect(field).toBeFocused();
       await expect(bar, 'hidden while typing').toBeHidden();
-      // Hidden by visibility, so the page keeps its size: nothing reflows while the keyboard is up.
-      expect(await bar.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(0);
+      // All of it, children included: with `visibility: hidden` iPhone Safari still drew "End workout".
+      await expect(bar.getByText('End workout', { exact: true })).toBeHidden();
+      expect(await bar.evaluate((el) => getComputedStyle(el).display), 'removed, not just made invisible').toBe('none');
 
       await drag(page, { x: 195, y: 600 }, 120);
       await expect(field, 'a drag keeps the keyboard up').toBeFocused();

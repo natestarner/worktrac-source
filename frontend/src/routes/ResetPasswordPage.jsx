@@ -173,7 +173,7 @@ export default function ResetPasswordPage() {
         {passwordError && <div style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Reset password</span>
+          <span style={{ visibility: submitting ? 'hidden' : undefined }}>Reset password</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Spinner color="currentColor" />
@@ -199,7 +199,7 @@ export default function ResetPasswordPage() {
             cursor: resending || cooldown > 0 ? 'default' : 'pointer',
           }}
         >
-          <span style={{ visibility: resending ? 'hidden' : 'visible' }}>
+          <span style={{ visibility: resending ? 'hidden' : undefined }}>
             {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
           </span>
           {resending && (

@@ -75,7 +75,10 @@ export default function Button({
 
   return (
     <button {...rest} className={classes} onClick={handleClick} disabled={disabled || pending} style={style}>
-      <span style={{ visibility: pending ? 'hidden' : 'visible', display: 'inherit', alignItems: 'inherit', gap: 'inherit' }}>
+      {/* `undefined`, never 'visible', when not pending: an explicit `visibility: visible` on a child
+          overrides a hidden ancestor, so every button label showed through a `visibility: hidden`
+          parent -- "End workout" floated over the page with the SessionBar hidden (2026-11-27). */}
+      <span style={{ visibility: pending ? 'hidden' : undefined, display: 'inherit', alignItems: 'inherit', gap: 'inherit' }}>
         {children}
       </span>
       {pending && (

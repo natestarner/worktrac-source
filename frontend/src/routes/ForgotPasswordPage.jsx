@@ -123,7 +123,7 @@ export default function ForgotPasswordPage() {
         {emailError && <div id="email-error" style={fieldErrorStyle}>Enter your email address.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Send reset code</span>
+          <span style={{ visibility: submitting ? 'hidden' : undefined }}>Send reset code</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Spinner color="currentColor" />

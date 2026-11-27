@@ -242,7 +242,7 @@ export default function ConfirmEmailPage() {
             cursor: resending || cooldown > 0 ? 'default' : 'pointer',
           }}
         >
-          <span style={{ visibility: resending ? 'hidden' : 'visible' }}>
+          <span style={{ visibility: resending ? 'hidden' : undefined }}>
             {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
           </span>
           {resending && (
