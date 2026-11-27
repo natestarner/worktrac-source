@@ -237,7 +237,7 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
   `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
-  and left the Log search field's focus border under the tab bar.
+  and left a scrolled-to field's focus border under the tab bar.
 - `e2e/tests/keyboard-scroll.spec.ts` stands in for the keyboard (a short window for the app, the
   two published values for Safari); its Safari dialog case was verified red against the
   old code.

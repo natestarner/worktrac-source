@@ -336,8 +336,8 @@ test.describe('Enabling a member login', () => {
     const { ownerEmail, memberEmail } = await giveSamALogin(page, request);
 
     // Sam logs something, so there is real data to still be there at the end. Through the shared
-    // helpers -- "Search all exercises" is a PLACEHOLDER, not a button name, and the stepper is a
-    // stepper rather than a text input.
+    // helpers -- "Search all exercises" opens a search screen before there is anything to type
+    // into, and the stepper is a stepper rather than a text input.
     await pickExercise(page, 'Barbell Bench Press');
     await logSetAt(page, 100, 5);
 

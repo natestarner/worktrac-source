@@ -301,14 +301,14 @@
      How far anything scrolled-to under the sticky .app-chrome needs to clear
      it by, so the thing being scrolled to doesn't end up PAINTED OVER by the
      chrome rather than merely near it. One shared value rather than two
-     independent guesses that could drift apart -- .help-section's anchored
-     headings and the Log picker's search field both need it.
+     independent guesses that could drift apart -- the Handbook's anchors,
+     History's jump, Billing's Pro anchor and Trends' exercise anchor all use it.
      Exact, not a guess: --app-chrome-height is the chrome's MEASURED height,
      published by AppShell (publishChromeHeight). It varies with whether the
      person bar is in the chrome (one person vs. several), and the old fixed
-     132px undershot the several-people chrome (~141px), leaving the search
-     field's focus border under the tab bar. --space-3 on top keeps the focus
-     ring clear of the chrome's edge. 132px is only the fallback before the
+     132px undershot the several-people chrome (~141px), leaving what was
+     scrolled to (and its focus border) under the tab bar. --space-3 on top
+     keeps a focus ring clear of the chrome's edge. 132px is only the fallback before the
      first measurement (and in jsdom). Plus --safe-top, because in the App
      Store app the chrome sticks below the status bar rather than at the very top. */
   --app-chrome-height: 132px;
@@ -1655,7 +1655,7 @@ button.person-row {
 
 /* BillingTab scrolls this label into view for someone who arrived from the trainer page's
    ?plan=pro CTAs, because the screen leads with Plus and keeps Pro deliberately quiet below it.
-   Third consumer of --sticky-chrome-clearance, for the same reason as the other two: without it
+   Uses --sticky-chrome-clearance for the same reason as everything else scrolled to: without it
    `block: 'start'` parks its top edge exactly where the sticky .app-chrome paints, at a
    higher z-index, so the thing we scrolled to lands behind the tab bar. */
 .pro-upgrade-anchor {
@@ -1663,7 +1663,7 @@ button.person-row {
 }
 
 /* TrendsTab scrolls this into view for someone who arrived from a PR row's "View progress".
-   Fourth consumer of --sticky-chrome-clearance, for exactly the reason the other three list:
+   Uses --sticky-chrome-clearance for the same reason as everything else scrolled to:
    without it `block: 'start'` parks the card's top edge where the sticky .app-chrome paints, so
    the section we deep-linked to lands behind the tab bar. */
 .trends-exercise-anchor {
@@ -3669,8 +3669,8 @@ button.person-row {
   background: var(--color-subtle-bg);
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-8);
-  /* The shared, measured clearance -- this was a hand-copied 132px, the same guess that left the
-     Log search field under the two-person chrome. */
+  /* The shared, measured clearance -- this was a hand-copied 132px, a guess that undershot the
+     two-person chrome. */
   scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
@@ -4198,7 +4198,7 @@ button.person-row {
 
    scroll-margin-top: the jump uses `block: 'start'`, which parks a block exactly where the sticky
    .app-chrome paints, so the workout landed BEHIND the tab bar. Same fix and token as the Help
-   page, the exercise search and BillingTab's Pro anchor (see --sticky-chrome-clearance). */
+   page and BillingTab's Pro anchor (see --sticky-chrome-clearance). */
 .history-block {
   margin-bottom: var(--space-5);
   content-visibility: auto;

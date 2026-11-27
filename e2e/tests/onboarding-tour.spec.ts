@@ -244,7 +244,7 @@ test.describe('Escape skips and restores', () => {
     await dismissWelcomeAndSearch(page);
 
     await searchFor(page, 'dead');
-    // The search layer covers the header; its Cancel keeps what was typed.
+    // The search screen hides the header; its Cancel keeps what was typed.
     await closeSearch(page);
     await openHelp(page);
 

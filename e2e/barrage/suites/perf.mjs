@@ -1,7 +1,7 @@
 // What a person with years of History actually waits for, in a phone-sized Chromium with the CPU
 // throttled 4x (roughly a mid-range phone): first load, reload, logging a set, and where paint time
 // goes. Plus the cold start: the app opened while the backend is scaled to zero.
-import { converge, dismiss, goTab, login, logSetButton, openProfile, playwright, tapLogSet, traceSyncs, waitSynced } from '../lib/browser.mjs';
+import { converge, dismiss, goTab, login, logSetButton, openProfile, playwright, searchTrigger, tapLogSet, toExercise, traceSyncs, waitSynced } from '../lib/browser.mjs';
 import { log, sleep } from '../lib/config.mjs';
 import { replicaCount } from '../lib/ops.mjs';
 
@@ -50,9 +50,8 @@ async function oneRun(ctx) {
     for (let i = 0; i < 900 && responses.length === before; i += 1) await sleep(100);
     const reloadResp = responses.at(-1);
     await goTab(page, 'Log');
-    const search = page.getByPlaceholder('Search all exercises');
-    await search.or(logSetButton(page)).first().waitFor({ timeout: 120000 });
-    if (await search.isVisible()) { await search.fill('Barbell Bench Press'); await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).first().click(); }
+    await searchTrigger(page).or(logSetButton(page)).first().waitFor({ timeout: 120000 });
+    if (await searchTrigger(page).isVisible()) await toExercise(page, 'Barbell Bench Press');
     await logSetButton(page).waitFor({ timeout: 120000 });
     await page.waitForLoadState('networkidle');
     const beforeSet = responses.length;
