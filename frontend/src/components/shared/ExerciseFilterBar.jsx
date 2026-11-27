@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DatePickerSheet from './DatePickerSheet';
 import { IconCalendar } from './icons';
 import { formatDateRangeLabel } from '../../utils/dateRange';
@@ -33,8 +33,43 @@ export default function ExerciseFilterBar({
   dateBounds,
 }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [fieldFocused, setFieldFocused] = useState(false);
+  const fieldRef = useRef(null);
   const dateSearch = typeof onDateRangeChange === 'function';
   const dateLabel = dateRange ? formatDateRangeLabel(dateRange) : '';
+
+  // The keyboard goes away once the person is done typing: on the Search key, and as soon as a
+  // finger starts dragging the page, the way a native iOS list dismisses its keyboard on drag.
+  // Scrolling the matches with the keyboard still up left the SessionBar riding on top of the
+  // keyboard, in iPhone Safari and in the app alike, instead of at the bottom of the page
+  // (2026-11-26). With the keyboard down the page is an ordinary page again. A drag, not a scroll
+  // event: focusing the field makes Safari scroll the page by itself.
+  useEffect(() => {
+    if (!fieldFocused) return undefined;
+    let startY = null;
+    const onTouchStart = (event) => {
+      startY = event.target === fieldRef.current ? null : event.touches[0]?.clientY;
+    };
+    const onTouchMove = (event) => {
+      const y = event.touches[0]?.clientY;
+      if (startY == null || y == null || Math.abs(y - startY) < DRAG_DISMISS_PX) return;
+      startY = null;
+      fieldRef.current?.blur();
+    };
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [fieldFocused]);
+
+  function handleKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  }
 
   return (
     // One gap-driven stack, and no outer margin: the caller owns the space around it, so History
@@ -56,6 +91,10 @@ export default function ExerciseFilterBar({
             placeholder="Search exercises"
             value={text}
             onChange={(e) => onTextChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setFieldFocused(true)}
+            onBlur={() => setFieldFocused(false)}
+            ref={fieldRef}
             style={searchInputStyle}
           />
           {text && (
@@ -177,6 +216,9 @@ export default function ExerciseFilterBar({
     </div>
   );
 }
+
+// How far a finger must travel before it counts as a drag rather than a tap with a wobble in it.
+const DRAG_DISMISS_PX = 10;
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
 const searchInputStyle = {

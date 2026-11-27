@@ -248,10 +248,10 @@ export default function HelpTab() {
           <li><strong>Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
         </ul>
         <p>
-          Type in the search box to reach the full library. Search is forgiving about word order, so
-          &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
-          to guess the exact name. Tapping the search box opens search full screen, with the results
-          right under it. <strong>Cancel</strong> takes you back to your list and keeps what you typed,
+          The search box reaches the full library. Tapping it opens search full screen, listing every
+          exercise A to Z before you type anything, so you can browse. Typing narrows the list, and
+          search is forgiving about word order, so &ldquo;barbell squat&rdquo; finds{' '}
+          <strong>Barbell Back Squat</strong>. You don&rsquo;t have to guess the exact name. <strong>Cancel</strong> takes you back to your list and keeps what you typed,
           so one more tap brings the results back.
         </p>
         <p>

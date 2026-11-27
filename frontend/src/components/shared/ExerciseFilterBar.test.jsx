@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseFilterBar from './ExerciseFilterBar';
 
@@ -21,6 +21,37 @@ function baseProps(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('ExerciseFilterBar keyboard', () => {
+  const field = () => screen.getByRole('searchbox', { name: 'Search exercises' });
+  const touch = (type, target, y) => fireEvent[type](target, { touches: [{ clientY: y }] });
+
+  it('the Search key puts the keyboard away', () => {
+    render(<ExerciseFilterBar {...baseProps({ text: 'bench' })} />);
+    act(() => field().focus());
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    expect(field()).not.toHaveFocus();
+  });
+
+  it('a finger dragging the page puts the keyboard away', () => {
+    render(<ExerciseFilterBar {...baseProps({ text: 'bench' })} />);
+    act(() => field().focus());
+    touch('touchStart', document.body, 400);
+    touch('touchMove', document.body, 380);
+    expect(field()).not.toHaveFocus();
+  });
+
+  it('a tap with a wobble in it, or a drag on the field itself, keeps typing', () => {
+    render(<ExerciseFilterBar {...baseProps({ text: 'bench' })} />);
+    act(() => field().focus());
+    touch('touchStart', document.body, 400);
+    touch('touchMove', document.body, 396);
+    expect(field()).toHaveFocus();
+    touch('touchStart', field(), 400);
+    touch('touchMove', field(), 300);
+    expect(field()).toHaveFocus();
+  });
+});
 
 describe('ExerciseFilterBar', () => {
   it('hides the tag chip row entirely when no tags are in use', () => {

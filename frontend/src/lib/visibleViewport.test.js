@@ -163,8 +163,8 @@ describe('revealFocusedField inside a Modal', () => {
 describe('revealFocusedField on the page', () => {
   beforeEach(() => vi.stubGlobal('visualViewport', fakeVisualViewport({ height: 800 })));
 
-  // The search field's focus border used to sit under the tab bar: "in view" must mean below the
-  // sticky chrome, measured, not merely below the top of the screen.
+  // A field's focus border used to be left under the tab bar: "in view" must mean below the sticky
+  // chrome, measured, not merely below the top of the screen.
   it('counts a field under the sticky chrome as hidden', () => {
     const chrome = document.createElement('div');
     chrome.className = 'app-chrome';

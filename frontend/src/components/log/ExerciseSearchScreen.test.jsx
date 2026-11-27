@@ -41,10 +41,23 @@ describe('ExerciseSearchScreen', () => {
     expect(within(region).queryByRole('button', { name: 'Bench Press' })).toBeNull();
   });
 
-  it('with nothing typed, says what can be searched instead of listing results', () => {
-    renderScreen();
+  it('with nothing typed, lists every exercise A-Z under "All exercises", and says what can be searched', () => {
+    const { onSelectExercise } = renderScreen();
     expect(screen.getByText('Search by name, another name for it, or a muscle it works.')).toBeInTheDocument();
+    expect(screen.getByText('All exercises')).toBeInTheDocument();
     expect(screen.queryByText('Search results')).toBeNull();
+    const names = screen.getAllByRole('button', { name: /Squat|Press/ }).map((b) => b.getAttribute('aria-label'));
+    expect(names).toEqual(['Back Squat', 'Bench Press', 'Front Squat']);
+    fireEvent.click(screen.getByRole('button', { name: 'Front Squat' }));
+    expect(onSelectExercise).toHaveBeenCalledWith(12);
+  });
+
+  it('typing narrows the list to the matches, and the hint goes', () => {
+    renderScreen({ search: 'squat' });
+    expect(screen.getByText('Search results')).toBeInTheDocument();
+    expect(screen.queryByText('All exercises')).toBeNull();
+    expect(screen.queryByText('Search by name, another name for it, or a muscle it works.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Bench Press' })).toBeNull();
   });
 
   it('typing writes the person’s draft', () => {

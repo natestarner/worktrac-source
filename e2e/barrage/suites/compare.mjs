@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Api } from '../lib/api.mjs';
-import { dismiss, goTab, logSetButton, playwright, tapLogSet } from '../lib/browser.mjs';
+import { dismiss, goTab, logSetButton, playwright, tapLogSet, toExercise as openExercise } from '../lib/browser.mjs';
 import { REPO_ROOT, localTestSupportKey, log, sleep } from '../lib/config.mjs';
 
 const EXERCISES = ['Barbell Bench Press', 'Barbell Back Squat', 'Barbell Row', 'Pull-up'];
@@ -91,12 +91,7 @@ async function capture(target, creds, { offline }) {
   page.on('pageerror', (e) => errors.push(e.message.slice(0, 160)));
   const out = {};
   const toExercise = async (name) => {
-    const picker = page.getByPlaceholder('Search all exercises');
-    await picker.or(page.getByRole('button', { name: /All exercises/ })).first().waitFor();
-    if (!(await picker.isVisible())) { await page.getByRole('button', { name: /All exercises/ }).first().click(); await picker.waitFor(); }
-    await picker.fill(name);
-    await page.getByRole('button', { name, exact: true }).first().click();
-    await logSetButton(page).waitFor();
+    await openExercise(page, name);
     await sleep(1500);
   };
   const history = () => page.evaluate(() => {
@@ -242,13 +237,7 @@ async function countFlows(target, creds) {
     const stats = statSent.slice(statFrom);
     flows.push([name, got.length, tally(got), stats.length, tally(stats)]);
   };
-  const toExercise = async (name) => {
-    const picker = page.getByPlaceholder('Search all exercises');
-    await picker.or(page.getByRole('button', { name: /All exercises/ })).first().waitFor();
-    if (!(await picker.isVisible())) { await page.getByRole('button', { name: /All exercises/ }).first().click(); await picker.waitFor(); }
-    await picker.fill(name); await page.getByRole('button', { name, exact: true }).first().click();
-    await logSetButton(page).waitFor();
-  };
+  const toExercise = (name) => openExercise(page, name);
   const logSet = async () => { await tapLogSet(page); await sleep(400); await dismiss(page); };
   try {
     await count('sign in on a new device', async () => {

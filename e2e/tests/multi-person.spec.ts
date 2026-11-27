@@ -292,7 +292,7 @@ test.describe('Multi-person switching', () => {
 
     await personPill(page, 'Alex').click();
     await searchFor(page, 'bench');
-    // The search layer covers the person bar; its Cancel keeps what was typed.
+    // The search screen hides the person bar; its Cancel keeps what was typed.
     await closeSearch(page);
 
     // Sam's search box starts empty, unaffected by Alex's search.

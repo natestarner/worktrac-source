@@ -234,10 +234,11 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   padding, which caused their own bugs. It is now an ordinary page (`log-screen.md`, "Search is its
   own SCREEN"; the full story in `docs/architecture/exercise-search-history.md`). Dialogs keep the
   visible-viewport scrim for the reason in "Modals" above.
+- **History's and PRs' search field puts the keyboard away when typing is done** (`ExerciseFilterBar.jsx`): on the Search key, and when a finger drags the page more than 10px (a drag, never a `scroll` event -- focusing the field scrolls the page by itself). With the keyboard up while scrolling the matches, iPhones drew the fixed `SessionBar` on top of the keyboard, in Safari and in the app (2026-11-26). It is the native list's dismiss-on-drag, not a second keyboard mechanism. The Log search screen deliberately does NOT do this (flow 09 swipes with the keyboard up). Pinned by `ExerciseFilterBar.test.jsx` and `history-filter.spec.ts`'s touch block, both verified red.
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
   publishes `.app-chrome`'s real height as `--app-chrome-height`; the clearance is that +
   `--space-3` + `--safe-top`. The old fixed 132px undershot the two-or-more-people chrome (~141px)
-  and left the Log search field's focus border under the tab bar.
+  and left a scrolled-to field's focus border under the tab bar.
 - `e2e/tests/keyboard-scroll.spec.ts` stands in for the keyboard (a short window for the app, the
   two published values for Safari); its Safari dialog case was verified red against the
   old code.

@@ -350,10 +350,11 @@ export default function AppShell() {
 
 // Publishes the sticky chrome's real height on the root element as --app-chrome-height, which
 // --sticky-chrome-clearance (index.css) is built from: everything scrolled to under the chrome --
-// the Log picker's search field, History's jump, the Handbook's anchors -- lands just below it.
-// That value used to be a fixed 132px guess, and with two or more people the chrome is ~141px, so
-// the search field's top edge (its orange focus border) was left under the tab bar. The height
-// depends on the household size and the safe-area insets, so it is measured, never guessed.
+// History's jump, the Handbook's anchors, Billing's and Trends' anchors, a focused field the app
+// reveals -- lands just below it. That value used to be a fixed 132px guess, and with two or more
+// people the chrome is ~141px, so what was scrolled to (and its orange focus border) was left under
+// the tab bar. The height depends on the household size and the safe-area insets, so it is
+// measured, never guessed.
 // Module scope keeps the callback ref's identity stable (React 19 runs the returned cleanup when
 // the node goes); without ResizeObserver (jsdom) the CSS fallback stands.
 function publishChromeHeight(el) {
