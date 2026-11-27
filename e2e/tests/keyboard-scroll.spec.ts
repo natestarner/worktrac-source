@@ -180,6 +180,33 @@ test.describe('the exercise search screen', () => {
     expect(below, 'blank space under the last control').toBeLessThan(80);
   });
 
+  test('with nothing typed it lists the whole library A-Z; typing narrows it, clearing brings it back', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Browse');
+    await searchTrigger(page).click();
+    const screen = searchScreen(page);
+    await expect(screen.getByText('All exercises', { exact: true })).toBeVisible();
+    // Each result row is the button carrying the exercise's id (ExerciseSearchResults).
+    const rowNames = () => screen.locator('button[id][aria-label]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+    const all = await rowNames();
+    expect(all.length, 'the library, not a handful').toBeGreaterThan(100);
+    expect(all).toEqual([...all].sort((a, b) => a.localeCompare(b)));
+    expect(all).toContain('Barbell Bench Press');
+
+    await searchField(page).fill('bench');
+    await expect(screen.getByText('Search results', { exact: true })).toBeVisible();
+    const matches = await rowNames();
+    expect(matches.length).toBeLessThan(all.length);
+    for (const name of matches) expect(all).toContain(name);
+
+    await searchField(page).fill('');
+    await expect(screen.getByText('All exercises', { exact: true })).toBeVisible();
+    expect(await rowNames()).toEqual(all);
+    // Chosen straight from the list, like any result.
+    await screen.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
+    await expect(screen).toBeHidden();
+    await expect(logSetButton(page)).toBeVisible();
+  });
+
   test('Cancel goes back to the Log page where it was, keeping the typed search', async ({ page, request }) => {
     await twoPersonHousehold(page, request);
     await page.setViewportSize(KEYBOARD_UP);

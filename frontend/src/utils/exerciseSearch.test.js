@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlightMatches, matchReason, searchExercises } from './exerciseSearch';
+import { allSearchableExercises, highlightMatches, matchReason, searchExercises } from './exerciseSearch';
 
 const catalog = [
   { id: 1, name: 'Barbell Back Squat' },
@@ -84,6 +84,33 @@ describe('a household exercise with a library name', () => {
 
   it('shows the library row when the household has no twin', () => {
     expect(searchExercises(catalog.filter((e) => e.id !== 900), 'zottman').map((e) => e.id)).toEqual([1]);
+  });
+  it('the A-Z list (nothing typed) hides the same library twin', () => {
+    expect(allSearchableExercises(catalog).map((e) => e.id)).toEqual([2, 900]);
+  });
+});
+
+describe('allSearchableExercises', () => {
+  it('lists the whole catalog A-Z, whatever order it arrives in, without touching the original', () => {
+    const catalog = [
+      { id: 3, name: 'Zercher Squat', isGlobal: true },
+      { id: 1, name: 'arnold press', isGlobal: false },
+      { id: 2, name: 'Bench Press', isGlobal: true },
+    ];
+    expect(allSearchableExercises(catalog).map((e) => e.name)).toEqual(['arnold press', 'Bench Press', 'Zercher Squat']);
+    expect(catalog.map((e) => e.id)).toEqual([3, 1, 2]);
+  });
+
+  it('is everything a search can find, so typing only ever narrows it', () => {
+    const catalog = [
+      { id: 1, name: 'Bench Press', isGlobal: true, primaryMuscles: ['chest'] },
+      { id: 2, name: 'Cable Fly', isGlobal: true, aliases: ['Pec Fly'], primaryMuscles: ['chest'] },
+      { id: 3, name: 'Back Squat', isGlobal: true },
+    ];
+    const all = new Set(allSearchableExercises(catalog));
+    for (const term of ['b', 'press', 'pec', 'chest', 'squat']) {
+      for (const ex of searchExercises(catalog, term)) expect(all.has(ex)).toBe(true);
+    }
   });
 });
 

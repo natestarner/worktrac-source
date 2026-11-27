@@ -68,14 +68,27 @@ export function searchExercises(catalog, term) {
   const rawTerm = term.trim().toLowerCase();
   if (!rawTerm) return [];
   const tokens = tokensOf(term);
-  const ownNames = new Set(catalog.filter((ex) => ex.isGlobal === false).map((ex) => ex.name.toLowerCase()));
 
-  return catalog
-    .filter((ex) => !(ex.isGlobal && ownNames.has(ex.name.toLowerCase())))
+  return searchable(catalog)
     .map((ex) => ({ ex, tier: rankExercise(ex, rawTerm, tokens) }))
     .filter(({ tier }) => tier !== null)
     .sort((a, b) => a.tier - b.tier || a.ex.name.localeCompare(b.ex.name))
     .map(({ ex }) => ex);
+}
+
+// Everything searchExercises can find, A-Z: what the Log tab's search screen lists before anything
+// is typed, so the whole library can be browsed. Alphabetical, never by use, for the reason the
+// picker is never reordered (log-screen.md): a position that is the same on every visit can be
+// learned. The same rows a search draws from, so typing only ever narrows this list.
+export function allSearchableExercises(catalog) {
+  return searchable(catalog).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// The catalog minus a library row hidden by the household's own exercise of the same name (see
+// searchExercises).
+function searchable(catalog) {
+  const ownNames = new Set(catalog.filter((ex) => ex.isGlobal === false).map((ex) => ex.name.toLowerCase()));
+  return catalog.filter((ex) => !(ex.isGlobal && ownNames.has(ex.name.toLowerCase())));
 }
 
 // Why a search result is there, when its NAME is not the reason -- shown under the name, because a

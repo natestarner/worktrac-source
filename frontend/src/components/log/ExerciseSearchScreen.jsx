@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import SectionLabel from '../shared/SectionLabel';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
 import Input from '../shared/Input';
 import Button from '../shared/Button';
-import { searchExercises } from '../../utils/exerciseSearch';
+import { allSearchableExercises, searchExercises } from '../../utils/exerciseSearch';
 import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 
 // The Log tab's exercise search, as an ordinary SCREEN: the field at the top with Cancel beside
@@ -29,7 +29,11 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
   // unmounts on close, and a preview never outlives the search it came from.
   const [preview, setPreview] = useState(null);
   const searching = exerciseSearch.trim().length > 0;
-  const results = searching ? searchExercises(catalog, exerciseSearch) : [];
+  // Nothing typed lists the whole library A-Z, to browse; typing narrows it to ranked matches.
+  const results = useMemo(
+    () => (searching ? searchExercises(catalog, exerciseSearch) : allSearchableExercises(catalog)),
+    [searching, catalog, exerciseSearch],
+  );
 
   function handleKeyDown(event) {
     // The keyboard's Search key puts the keyboard away, so every result can be seen. Scrolling the
@@ -72,19 +76,26 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
       <div className="exercise-search-body">
         {loading ? (
           <Skeleton width="100%" height={46} radius={16} style={sectionSpacing} />
-        ) : searching ? (
-          <div style={sectionSpacing}>
-            <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
-            <ExerciseSearchResults
-              results={results}
-              term={exerciseSearch}
-              onSelect={onSelectExercise}
-              onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
-              emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
-            />
-          </div>
         ) : (
-          <p className="exercise-search-hint">Search by name, another name for it, or a muscle it works.</p>
+          <>
+            {!searching && (
+              <p className="exercise-search-hint">Search by name, another name for it, or a muscle it works.</p>
+            )}
+            <div style={sectionSpacing}>
+              <SectionLabel style={sectionLabelSpacing}>{searching ? 'Search results' : 'All exercises'}</SectionLabel>
+              <ExerciseSearchResults
+                results={results}
+                term={exerciseSearch}
+                onSelect={onSelectExercise}
+                onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
+                emptyMessage={
+                  searching
+                    ? `No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`
+                    : 'No exercises yet. Add your own below.'
+                }
+              />
+            </div>
+          </>
         )}
         {!loading && (
           <Button onClick={() => onAddExercise(exerciseSearch)} fullWidth>
