@@ -1,16 +1,15 @@
 import { useEffect } from 'react';
 import { keepFocusedFieldVisible } from '../../lib/native';
-import { trackVisibleViewport } from '../../lib/visibleViewport';
 
-// Keeps the field being typed into visible above the keyboard. Mounted once in App.jsx beside
-// AppLinkRouter, outside every route, so it covers the login screen as well as the app. Renders
-// nothing.
-//   - trackVisibleViewport (every platform): publishes the part of the screen the keyboard leaves
-//     visible, which every Modal sizes itself to, and reveals a focused field inside a dialog.
-//   - keepFocusedFieldVisible (the App Store app only): reveals a focused field on the page. On the
-//     web it never listens: Safari already does this.
+// Keeps a field being typed into on the PAGE visible above the keyboard, in the App Store app only:
+// the keyboard plugin removes WKWebView's own reveal, so lib/native/keyboard.js does it. On the web
+// it never listens: Safari already does this. Mounted once in App.jsx beside AppLinkRouter, outside
+// every route, so it covers the login screen as well as the app. Renders nothing.
+//
+// Dialogs follow the keyboard on their own: each open Modal tracks the visible viewport onto its
+// own scrim (lib/visibleViewport.js). That used to start here, app-wide, publishing on the root
+// element -- which restyled the whole page on every keyboard frame. Don't move it back.
 export default function FocusedFieldKeeper() {
-  useEffect(() => trackVisibleViewport(), []);
   useEffect(() => keepFocusedFieldVisible(), []);
   return null;
 }

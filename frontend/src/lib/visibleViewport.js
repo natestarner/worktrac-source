@@ -1,5 +1,5 @@
 // The part of the screen a person can actually see, and keeping the field they are typing into
-// inside it. The ONE place the app answers "where is the keyboard?" -- every overlay and every
+// inside it. The ONE place the app answers "where is the keyboard?" -- every dialog and every
 // "scroll the field into view" goes through here, so they cannot disagree.
 //
 // Why it is needed: on an iPhone the keyboard does not shrink the page. Safari keeps the layout
@@ -10,13 +10,22 @@
 // scroll-locked (lib/bodyScrollLock.js), so there was no way to scroll back to them: the Add
 // exercise and New routine dialogs both did this (2026-11-08).
 //
-// The fix is to size every overlay to the visual viewport, not the layout one. `trackVisibleViewport`
-// publishes it on the root element as two custom properties, beside --bottom-bar-height:
+// The fix is to size every dialog to the visual viewport, not the layout one. Each open Modal calls
+// `trackVisibleViewport` on its own scrim, which publishes the visible part as two custom
+// properties ON THAT SCRIM, read by the scrim's own position and padding:
 //   --visible-viewport-top     how far the visible part starts below the layout viewport's top
 //   --visible-viewport-height  how tall the visible part is (the keyboard's top, when it is up)
-// Modal.jsx positions its scrim with them, so its panel always fits in what is visible and scrolls
-// inside itself. Where `visualViewport` is missing (jsdom, very old browsers) nothing is published
-// and every reader falls back to the full viewport, which is exactly the old behaviour.
+// Where `visualViewport` is missing (jsdom, very old browsers) nothing is published and the scrim
+// falls back to the full viewport, which is exactly the old behaviour.
+//
+// ⚠️ Only while a dialog is open, and only on the dialog (2026-11-27). It used to run app-wide from
+// boot and publish on the ROOT element. Custom properties inherit, so every keyboard frame on any
+// screen restyled the whole document -- for nothing once the Log search stopped reading them (#635).
+// It was moved here as the leading suspect for History flickering in Safari (the list flashing
+// blank, the sticky chrome vanishing) when the keyboard closed mid-scroll through
+// ExerciseFilterBar's dismiss-on-drag: every drawn workout restyled on every frame of the fling.
+// Don't publish on the root again, and don't start this for anything but a dialog: nothing else
+// reads these values.
 //
 // This is one code path on every platform. In the App Store app the WebView itself shrinks above
 // the keyboard (`Keyboard.resize: "native"`), so the visual viewport simply equals the window and
@@ -40,18 +49,19 @@ function visibleBand() {
   return { top, bottom: top + height };
 }
 
-// Starts publishing. Returns a function that stops. Mounted once, app-wide, by FocusedFieldKeeper.
-export function trackVisibleViewport() {
+// Starts publishing onto `scrim` (an open Modal's backdrop). Returns a function that stops. Called by
+// Modal before its first paint, so a dialog opened with the keyboard already up is sized to it at
+// once, not at the keyboard's next move.
+export function trackVisibleViewport(scrim) {
   const vv = window.visualViewport;
-  if (!vv) return () => {};
-  const root = document.documentElement;
+  if (!vv || !scrim) return () => {};
   let frame = 0;
   let lastHeight = null;
 
   const publish = () => {
     frame = 0;
-    root.style.setProperty('--visible-viewport-top', `${vv.offsetTop}px`);
-    root.style.setProperty('--visible-viewport-height', `${vv.height}px`);
+    scrim.style.setProperty('--visible-viewport-top', `${vv.offsetTop}px`);
+    scrim.style.setProperty('--visible-viewport-height', `${vv.height}px`);
     // The keyboard opening (or closing) is a height change. A dialog that has just been squeezed
     // into what is left may now hold its focused field below its own fold, so reveal it there.
     // Fields on the page are left to the browser: Safari already reveals those itself, and in the
@@ -64,21 +74,21 @@ export function trackVisibleViewport() {
   const schedule = () => {
     if (!frame) frame = requestAnimationFrame(publish);
   };
-  // Moving to another field in a dialog with the keyboard already up resizes nothing.
+  // Moving to another field in the dialog with the keyboard already up resizes nothing.
   const onFocusIn = () => requestAnimationFrame(() => revealFocusedField({ onPage: false }));
 
   publish();
   vv.addEventListener('resize', schedule);
   vv.addEventListener('scroll', schedule);
-  document.addEventListener('focusin', onFocusIn);
+  scrim.addEventListener('focusin', onFocusIn);
 
   return () => {
     vv.removeEventListener('resize', schedule);
     vv.removeEventListener('scroll', schedule);
-    document.removeEventListener('focusin', onFocusIn);
+    scrim.removeEventListener('focusin', onFocusIn);
     if (frame) cancelAnimationFrame(frame);
-    root.style.removeProperty('--visible-viewport-top');
-    root.style.removeProperty('--visible-viewport-height');
+    scrim.style.removeProperty('--visible-viewport-top');
+    scrim.style.removeProperty('--visible-viewport-height');
   };
 }
 

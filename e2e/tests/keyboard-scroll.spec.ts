@@ -22,8 +22,9 @@ import { addExerciseToRoutine, logSetButton, searchField, searchFor, searchScree
 //     "native"`), i.e. a short viewport. Driven with setViewportSize.
 //   - Safari's: the window stays full height and only the VISUAL viewport shrinks and pans. A
 //     Chromium page can't fake visualViewport, so the dialog spec publishes the two values the app
-//     derives from it (`--visible-viewport-top` / `-height`) itself; that the app publishes them
-//     from visualViewport is pinned by visibleViewport.test.js.
+//     derives from it (`--visible-viewport-top` / `-height`) itself, onto the dialog's scrim where
+//     the app puts them; that the app publishes them from visualViewport is pinned by
+//     visibleViewport.test.js.
 
 // iPhone portrait width, with the height left above an open keyboard.
 const KEYBOARD_UP = { width: 390, height: 420 };
@@ -87,11 +88,20 @@ test.describe('the keyboard and scrolling', () => {
     const dialog = page.getByRole('dialog');
     await dialogSettled(dialog);
 
+    // The app publishes the visible part onto the open dialog's scrim, never the page's root:
+    // custom properties inherit, and on the root every keyboard frame restyled the whole page.
+    const published = await dialog.evaluate((el) => ({
+      scrim: (el.parentElement as HTMLElement).style.getPropertyValue('--visible-viewport-height'),
+      root: document.documentElement.style.getPropertyValue('--visible-viewport-height'),
+    }));
+    expect(published.scrim, 'published onto the scrim').not.toBe('');
+    expect(published.root, 'never onto the root').toBe('');
+
     // Safari with the keyboard up: the visible part is 250..610 of a full-height page.
-    await page.evaluate(() => {
-      const root = document.documentElement.style;
-      root.setProperty('--visible-viewport-top', '250px');
-      root.setProperty('--visible-viewport-height', '360px');
+    await dialog.evaluate((el) => {
+      const scrim = (el.parentElement as HTMLElement).style;
+      scrim.setProperty('--visible-viewport-top', '250px');
+      scrim.setProperty('--visible-viewport-height', '360px');
     });
     await expectWithin(dialog, 250, 610, 'add exercise dialog');
     await expectWithin(dialog.getByRole('button', { name: 'Close' }), 250, 610, 'close button');

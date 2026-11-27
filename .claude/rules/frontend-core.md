@@ -219,10 +219,17 @@ Every "where is the keyboard?" and "scroll the focused field into view" goes thr
 platform. A second way is the bug — this area had three before (a fixed 132px guess, a native-only
 reveal that ignored the sticky chrome, and none at all for dialogs on the web).
 
-- **`trackVisibleViewport`** (mounted once by `FocusedFieldKeeper`) publishes `visualViewport` as
-  `--visible-viewport-top` / `--visible-viewport-height` on the root element, and reveals a focused
-  field inside a dialog when the keyboard opens or focus moves. Without `visualViewport` (jsdom)
-  nothing is published and readers fall back to the full viewport.
+- **`trackVisibleViewport(scrim)`** is started by each open `Modal` on its own scrim (a layout effect,
+  before the rest-position measurement) and publishes `visualViewport` as `--visible-viewport-top` /
+  `--visible-viewport-height` **on that scrim**, and reveals a focused field inside the dialog when
+  the keyboard opens or focus moves. Without `visualViewport` (jsdom) nothing is published and the
+  scrim falls back to the full viewport.
+  - **⚠️ Never on the root element, and never app-wide (2026-11-27).** It ran from boot in
+    `FocusedFieldKeeper` and published on the root; custom properties inherit, so every keyboard frame
+    on every screen restyled the whole page, long after the Log search stopped reading them (#635).
+    It was moved as the leading suspect for History flashing blank and losing its sticky chrome in
+    Safari when the keyboard closed mid-scroll (`ExerciseFilterBar`'s dismiss-on-drag).
+    `visibleViewport.test.js` and `keyboard-scroll.spec.ts` assert the root never gets them.
 - **`revealFocusedField`** is the one reveal: inside a Modal it scrolls the panel
   (`[data-modal-panel]`) clear of its sticky header (`[data-modal-header]`); on the page it keeps
   clear of the MEASURED `.app-chrome` at the top and the keyboard + `SessionBar` at the bottom. On

@@ -32,6 +32,7 @@ function modalWithField({ top, bottom, headerHeight = 60, fieldTop, fieldBottom 
 }
 
 const root = document.documentElement;
+let scrim;
 let stop = () => {};
 
 beforeEach(() => {
@@ -40,14 +41,15 @@ beforeEach(() => {
     return 1;
   });
   vi.stubGlobal('innerHeight', 800);
+  // An open Modal's backdrop: what the tracker publishes onto.
+  scrim = document.createElement('div');
+  document.body.appendChild(scrim);
 });
 
 afterEach(() => {
   stop();
   stop = () => {};
   document.body.innerHTML = '';
-  root.style.removeProperty('--visible-viewport-top');
-  root.style.removeProperty('--visible-viewport-height');
   vi.unstubAllGlobals();
 });
 
@@ -55,38 +57,38 @@ describe('trackVisibleViewport', () => {
   // Every reader falls back to the full viewport, i.e. exactly the behaviour before this existed.
   it('publishes nothing where there is no visualViewport', () => {
     vi.stubGlobal('visualViewport', undefined);
-    stop = trackVisibleViewport();
-    expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('');
+    stop = trackVisibleViewport(scrim);
+    expect(scrim.style.getPropertyValue('--visible-viewport-height')).toBe('');
   });
 
   it('publishes the visible part of the screen, and follows the keyboard opening', () => {
     const vv = fakeVisualViewport({ height: 800 });
     vi.stubGlobal('visualViewport', vv);
-    stop = trackVisibleViewport();
-    expect(root.style.getPropertyValue('--visible-viewport-top')).toBe('0px');
-    expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('800px');
+    stop = trackVisibleViewport(scrim);
+    expect(scrim.style.getPropertyValue('--visible-viewport-top')).toBe('0px');
+    expect(scrim.style.getPropertyValue('--visible-viewport-height')).toBe('800px');
 
     // The keyboard opens and Safari pans the view down to the field.
     vv.height = 420;
     vv.offsetTop = 180;
     vv.dispatchEvent(new Event('resize'));
-    expect(root.style.getPropertyValue('--visible-viewport-top')).toBe('180px');
-    expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('420px');
+    expect(scrim.style.getPropertyValue('--visible-viewport-top')).toBe('180px');
+    expect(scrim.style.getPropertyValue('--visible-viewport-height')).toBe('420px');
   });
 
   it('follows a pan with no resize', () => {
     const vv = fakeVisualViewport({ height: 420 });
     vi.stubGlobal('visualViewport', vv);
-    stop = trackVisibleViewport();
+    stop = trackVisibleViewport(scrim);
     vv.offsetTop = 90;
     vv.dispatchEvent(new Event('scroll'));
-    expect(root.style.getPropertyValue('--visible-viewport-top')).toBe('90px');
+    expect(scrim.style.getPropertyValue('--visible-viewport-top')).toBe('90px');
   });
 
   it('reveals a dialog field the keyboard left below the fold of its panel', () => {
     const vv = fakeVisualViewport({ height: 800 });
     vi.stubGlobal('visualViewport', vv);
-    stop = trackVisibleViewport();
+    stop = trackVisibleViewport(scrim);
     // The panel has been squeezed into 0..420, and the field sits at 500..540 inside it.
     const { panel, input } = modalWithField({ top: 0, bottom: 420, fieldTop: 500, fieldBottom: 540 });
     input.focus();
@@ -101,7 +103,7 @@ describe('trackVisibleViewport', () => {
   it('leaves a field on the page to the browser', () => {
     const vv = fakeVisualViewport({ height: 800 });
     vi.stubGlobal('visualViewport', vv);
-    stop = trackVisibleViewport();
+    stop = trackVisibleViewport(scrim);
     const input = document.createElement('input');
     box(input, 600, 640);
     input.scrollIntoView = vi.fn();
@@ -113,11 +115,34 @@ describe('trackVisibleViewport', () => {
     expect(input.scrollIntoView).not.toHaveBeenCalled();
   });
 
+  // Custom properties inherit: on the root, every keyboard frame restyled the whole page, which is
+  // the leading suspect for History flashing blank when the keyboard closed mid-scroll in Safari.
+  it('publishes onto the dialog only, never the root element', () => {
+    const vv = fakeVisualViewport({ height: 800 });
+    vi.stubGlobal('visualViewport', vv);
+    stop = trackVisibleViewport(scrim);
+    vv.height = 420;
+    vv.dispatchEvent(new Event('resize'));
+    expect(scrim.style.getPropertyValue('--visible-viewport-height')).toBe('420px');
+    expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('');
+    expect(root.style.getPropertyValue('--visible-viewport-top')).toBe('');
+  });
+
+  it('reveals a dialog field when focus moves to it with the keyboard already up', () => {
+    vi.stubGlobal('visualViewport', fakeVisualViewport({ height: 420 }));
+    const { panel, input } = modalWithField({ top: 0, bottom: 420, fieldTop: 500, fieldBottom: 540 });
+    scrim.appendChild(panel);
+    stop = trackVisibleViewport(scrim);
+    panel.scrollTop = 100;
+    input.focus();
+    expect(panel.scrollTop).toBe(232);
+  });
+
   it('removes what it published when stopped', () => {
     vi.stubGlobal('visualViewport', fakeVisualViewport());
-    const stopNow = trackVisibleViewport();
+    const stopNow = trackVisibleViewport(scrim);
     stopNow();
-    expect(root.style.getPropertyValue('--visible-viewport-height')).toBe('');
+    expect(scrim.style.getPropertyValue('--visible-viewport-height')).toBe('');
   });
 });
 
