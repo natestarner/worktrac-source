@@ -922,6 +922,15 @@ catalog row by id), so it shows exactly what the strip would.
 - Not a connectivity branch: `parity-exercise-preview.spec.ts` covers the picker in all four
   modes (verified red by hiding muscles offline).
 
+## The landscape layout needs a WIDTH gate, not just `orientation` (2026-11-27)
+
+`index.css`'s two-column Log layout is `(orientation: landscape) and (min-width: 640px) and
+(max-height: 900px)`. **Don't drop the `min-width`.** Brave on iPhone and Chrome on Android shrink
+the page above the keyboard, so a portrait phone typing a weight is ~390x300, which CSS calls
+"landscape". Without the width gate the form's grid column computed to 0px (on prod from July to
+2026-11-27). The same goes for any new height-based query. `log-keyboard-shrink.spec.ts`
+(`@critical`) pins it. `docs/incidents/2026-11-27-brave-keyboard-collapses-log-form.md`.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls
