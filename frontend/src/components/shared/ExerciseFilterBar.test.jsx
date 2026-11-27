@@ -33,23 +33,19 @@ describe('ExerciseFilterBar keyboard', () => {
     expect(field()).not.toHaveFocus();
   });
 
-  it('a finger dragging the page puts the keyboard away', () => {
+  // Closing the keyboard mid-scroll made Safari redraw History while it coasted (2026-11-27), so a
+  // drag keeps the keyboard up; index.css hides the SessionBar while this field has focus instead.
+  it('a finger dragging the page keeps the keyboard up', () => {
     render(<ExerciseFilterBar {...baseProps({ text: 'bench' })} />);
     act(() => field().focus());
     touch('touchStart', document.body, 400);
-    touch('touchMove', document.body, 380);
-    expect(field()).not.toHaveFocus();
+    touch('touchMove', document.body, 200);
+    expect(field()).toHaveFocus();
   });
 
-  it('a tap with a wobble in it, or a drag on the field itself, keeps typing', () => {
-    render(<ExerciseFilterBar {...baseProps({ text: 'bench' })} />);
-    act(() => field().focus());
-    touch('touchStart', document.body, 400);
-    touch('touchMove', document.body, 396);
-    expect(field()).toHaveFocus();
-    touch('touchStart', field(), 400);
-    touch('touchMove', field(), 300);
-    expect(field()).toHaveFocus();
+  it('carries the class the SessionBar hides behind', () => {
+    render(<ExerciseFilterBar {...baseProps()} />);
+    expect(field()).toHaveClass('exercise-filter-input');
   });
 });
 

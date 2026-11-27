@@ -244,6 +244,6 @@ not from `main` at `39ac5398`, which lacks the ghost-click fix.
 | The layer as shipped | `main` at `39ac5398` (#630, #632, #633) |
 | The unmerged ghost-click fix | branch `fix/search-tap-focus` (`4a89ae71`); worktree `.claude/worktrees/fix-search-layer-scroll` |
 | Its parallel simulator copy | branch `diag/search-tap-focus-2` (same commit); **deleted 2026-11-26** with the other leftovers (worktrees `search-settle`, `testflight-1-4-round2`; branches `fix/search-settles-at-top`, `fix/1-4-round-two`, `diag/search-settle-sample-2`). Only `fix/search-tap-focus` is kept |
-| History's and PRs' search (a different field) | `ExerciseFilterBar.jsx`: a real field mid-page, kept as it is; it puts the keyboard away on the Search key and when a finger drags the page (2026-11-26), because scrolling its matches with the keyboard up left the SessionBar riding on the keyboard in Safari and the app |
+| History's and PRs' search (a different field) | `ExerciseFilterBar.jsx`: a real field mid-page, kept as it is; it puts the keyboard away on the Search key. A drag-to-dismiss (2026-11-26) made Safari redraw the page mid-scroll and was replaced (2026-11-27) by hiding the SessionBar while the field has focus |
 | The post-mortem | `docs/incidents/2026-11-26-search-layer-sized-from-visual-viewport.md` |
 | TestFlight builds | 1.5.0 (38) = #630; (39) = #632; run 40 uploaded nothing |

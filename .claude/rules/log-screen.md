@@ -672,6 +672,12 @@ opened**. Here nothing moves.
     deferred copy of the term, so a keystroke never waits on a long list. `keyboard-scroll.spec.ts`
     pins it deterministically: zero result rows exist at the instant the field takes the focus
     (213 without the deferral).
+- **The screen waits for the LIBRARY (`useExercises`' `loading`), not the person's own list**
+  (2026-11-27). It waited on `personExercisesLoading`, which usually lands first, so right after
+  sign-up (and on lower under load) it said "All exercises" over "No exercises yet" until the
+  library arrived. With no library on the device and its fetch paused or failing it says the library
+  needs a connection (`unavailable`, on `resilience.md`'s register). `search-library-loading.spec.ts`
+  holds the library response to pin it.
 - Enter (the keyboard's Search key) blurs the field so every result can be seen; scrolling does not
   (the person may still be typing).
 - Searching never hides or replaces anything on the Log page (the 2026-11-08 first-letter jump came

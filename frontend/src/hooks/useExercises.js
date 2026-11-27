@@ -20,5 +20,10 @@ export function useExercises() {
     [queryClient],
   );
 
-  return { exercises: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
+  // `unavailable`: no library on this device and its fetch paused (offline) or failing, so it will
+  // not arrive by waiting. A skeleton there is a spinner over a request that may never succeed, and
+  // an empty list claims the library is empty; the search screen says it needs a connection instead
+  // (resilience.md's register). Keyed on the READ's state, never on connectivity.
+  const unavailable = query.data === undefined && (query.isPaused || query.isError);
+  return { exercises: query.data ?? [], loading: query.isLoading, unavailable, isFetching: query.isFetching, refetch };
 }
