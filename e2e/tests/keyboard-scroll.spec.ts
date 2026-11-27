@@ -182,9 +182,25 @@ test.describe('the exercise search screen', () => {
 
   test('with nothing typed it lists the whole library A-Z; typing narrows it, clearing brings it back', async ({ page, request }) => {
     await registerHousehold(page, request, 'Browse');
+    // The list is drawn AFTER the tap: the field is focused inside the tap's click handler, so
+    // anything drawn on mount delays the keyboard (~200 rows held the tap 0.65-1.4s on a phone-speed
+    // CPU). So at the instant the field takes the focus, no result row may exist yet.
+    await page.evaluate(() => {
+      document.addEventListener(
+        'focusin',
+        (e) => {
+          // The field, not the Log page's trigger button of the same name.
+          const el = e.target as HTMLElement;
+          if (el.tagName !== 'INPUT' || el.getAttribute('aria-label') !== 'Search all exercises') return;
+          (window as any).__rowsAtFocus ??= document.querySelectorAll('section button[id][aria-label]').length;
+        },
+        true,
+      );
+    });
     await searchTrigger(page).click();
     const screen = searchScreen(page);
     await expect(screen.getByText('All exercises', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__rowsAtFocus), 'rows drawn inside the tap').toBe(0);
     // Each result row is the button carrying the exercise's id (ExerciseSearchResults).
     const rowNames = () => screen.locator('button[id][aria-label]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
     const all = await rowNames();

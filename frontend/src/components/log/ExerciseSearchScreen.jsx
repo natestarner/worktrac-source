@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import SectionLabel from '../shared/SectionLabel';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
@@ -28,11 +28,21 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
   // "Preview exercise" on a result (its muscles and video before choosing it). Local: the screen
   // unmounts on close, and a preview never outlives the search it came from.
   const [preview, setPreview] = useState(null);
-  const searching = exerciseSearch.trim().length > 0;
   // Nothing typed lists the whole library A-Z, to browse; typing narrows it to ranked matches.
+  //
+  // ⚠️ The list is drawn AFTER the tap, never inside it. LogTab opens this screen with flushSync and
+  // focuses the field in the same click handler (that is what raises the iPhone keyboard), so
+  // whatever this screen draws on mount is drawn before the field gets the focus. The whole library
+  // is ~200 rows: drawn on mount it held the tap for 0.65-1.4s on a phone-speed CPU (Chromium,
+  // 4-6x throttle, 2026-11-26), against ~80ms for the field alone. `useDeferredValue(true, false)`
+  // mounts with the list off and draws it in a background render a moment later; the deferred term
+  // keeps each keystroke from waiting on a long list too.
+  const listShown = useDeferredValue(true, false);
+  const term = useDeferredValue(exerciseSearch);
+  const searching = term.trim().length > 0;
   const results = useMemo(
-    () => (searching ? searchExercises(catalog, exerciseSearch) : allSearchableExercises(catalog)),
-    [searching, catalog, exerciseSearch],
+    () => (searching ? searchExercises(catalog, term) : allSearchableExercises(catalog)),
+    [searching, catalog, term],
   );
 
   function handleKeyDown(event) {
@@ -76,7 +86,7 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
       <div className="exercise-search-body">
         {loading ? (
           <Skeleton width="100%" height={46} radius={16} style={sectionSpacing} />
-        ) : (
+        ) : listShown ? (
           <>
             {!searching && (
               <p className="exercise-search-hint">Search by name, another name for it, or a muscle it works.</p>
@@ -85,19 +95,20 @@ export default function ExerciseSearchScreen({ fieldRef, catalog, loading, onSel
               <SectionLabel style={sectionLabelSpacing}>{searching ? 'Search results' : 'All exercises'}</SectionLabel>
               <ExerciseSearchResults
                 results={results}
-                term={exerciseSearch}
+                term={term}
                 onSelect={onSelectExercise}
                 onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
                 emptyMessage={
                   searching
-                    ? `No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`
+                    ? `No exercises match "${term}". Try a shorter word, or add it as your own below.`
                     : 'No exercises yet. Add your own below.'
                 }
               />
             </div>
           </>
-        )}
-        {!loading && (
+        ) : null}
+        {/* With the list, so it does not draw at the top and then jump below it. */}
+        {!loading && listShown && (
           <Button onClick={() => onAddExercise(exerciseSearch)} fullWidth>
             + Add your own exercise
           </Button>

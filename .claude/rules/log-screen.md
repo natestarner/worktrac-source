@@ -662,6 +662,13 @@ opened**. Here nothing moves.
   own exercise still hides a library twin), so typing only ever narrows the list. Alphabetical, never
   by use: the same reason the picker is never reordered (below). The routine editor's search is
   unchanged: nothing listed until typed.
+  - **⚠️ The list is drawn AFTER the tap** (`useDeferredValue(true, false)` in
+    `ExerciseSearchScreen`). Whatever the screen draws on mount is drawn inside `openSearch`'s
+    `flushSync`, before the focus that raises the keyboard; ~200 rows there held the tap 0.65-1.4s
+    on a phone-speed CPU (Chromium 4-6x throttle), ~40-110ms without. The results also follow a
+    deferred copy of the term, so a keystroke never waits on a long list. `keyboard-scroll.spec.ts`
+    pins it deterministically: zero result rows exist at the instant the field takes the focus
+    (213 without the deferral).
 - Enter (the keyboard's Search key) blurs the field so every result can be seen; scrolling does not
   (the person may still be typing).
 - Searching never hides or replaces anything on the Log page (the 2026-11-08 first-letter jump came
