@@ -289,7 +289,7 @@ export default function AppSettingsTab() {
                   position: 'relative',
                 }}
               >
-                <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{unit}</span>
+                <span style={{ visibility: loading ? 'hidden' : undefined }}>{unit}</span>
                 {loading && (
                   <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Spinner size={14} color={textColor} />
@@ -351,7 +351,7 @@ export default function AppSettingsTab() {
                       position: 'relative',
                     }}
                   >
-                    <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{label}</span>
+                    <span style={{ visibility: loading ? 'hidden' : undefined }}>{label}</span>
                     {loading && (
                       <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Spinner size={14} color={textColor} />
@@ -418,7 +418,7 @@ export default function AppSettingsTab() {
                     position: 'relative',
                   }}
                 >
-                  <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{label}</span>
+                  <span style={{ visibility: loading ? 'hidden' : undefined }}>{label}</span>
                   {loading && (
                     <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Spinner size={14} color={textColor} />

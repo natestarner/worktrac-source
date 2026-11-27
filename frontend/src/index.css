@@ -823,11 +823,15 @@ button.search-trigger:active {
 
 /* While History's or PRs' search field has focus, the SessionBar is hidden: Safari keeps a fixed
    bottom bar just above the keyboard, so scrolling the matches with the keyboard up drew the bar
-   over them (2026-11-26). `visibility`, not `display`: nothing changes size, so nothing reflows.
-   This replaced closing the keyboard on a drag, which made Safari redraw the page mid-scroll and
-   History flash blank (2026-11-27; ExerciseFilterBar.jsx). */
+   over them (2026-11-26). This replaced closing the keyboard on a drag, which made Safari redraw the
+   page mid-scroll and History flash blank (2026-11-27; ExerciseFilterBar.jsx).
+   `display: none`: it removes the bar and everything in it. With `visibility: hidden`, "End
+   workout" still showed (2026-11-27), because Button's label span set an explicit `visibility:
+   visible`, which overrides a hidden ancestor (fixed in Button.jsx too). The bar is position: fixed,
+   so removing it moves nothing on the page, and the space .app-shell reserves for it is a token,
+   not a measurement. */
 .app-shell:has(.exercise-filter-input:focus) .session-bar {
-  visibility: hidden;
+  display: none;
 }
 
 /* While the search screen is up: the chrome goes, so the search bar is the top of the page and the

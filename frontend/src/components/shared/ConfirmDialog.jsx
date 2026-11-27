@@ -44,7 +44,7 @@ export default function ConfirmDialog() {
           Cancel
         </button>
         <button onClick={handleDelete} disabled={pending} className="pressable" style={{ ...deleteButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: pending ? 'hidden' : 'visible' }}>
+          <span style={{ visibility: pending ? 'hidden' : undefined }}>
             {confirmDialog?.confirmLabel ?? 'Delete'}
           </span>
           {pending && (
