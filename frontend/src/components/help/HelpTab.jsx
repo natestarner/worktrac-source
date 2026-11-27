@@ -228,8 +228,8 @@ export default function HelpTab() {
         <Note title="Everyone keeps their own place">
           <p>
             Switching to your son and back doesn&rsquo;t disturb anything of yours. Each person keeps
-            their own open tab, their own exercise screen, their own half-typed search box and their
-            own running rest timer. Timers keep counting in the background while someone else is on
+            their own open tab, their own exercise screen, their own half-typed weight and reps and
+            their own running rest timer. Timers keep counting in the background while someone else is on
             screen.
           </p>
         </Note>
@@ -432,8 +432,8 @@ export default function HelpTab() {
         </p>
         <ol className="help-steps">
           <li>
-            On the <T>Log</T> tab, tap <T>+ Add your own exercise</T> at the bottom of the picker. If
-            you&rsquo;d already typed a name into the search box, it arrives prefilled.
+            On the <T>Log</T> tab, tap <T>+ Add your own exercise</T> at the bottom of the picker, or
+            at the bottom of a search, where whatever you typed arrives prefilled.
           </li>
           <li>
             Choose what it&rsquo;s measured in: <strong>Weight &amp; reps</strong> (the usual, for
