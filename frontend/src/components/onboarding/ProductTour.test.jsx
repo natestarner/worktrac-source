@@ -48,7 +48,6 @@ function baseAppState(overrides = {}) {
   return {
     activePersonId: 7,
     selectedExerciseId: null,
-    exerciseSearch: '',
     weightDraft: null,
     repsDraft: 8,
     durationDraft: 30,
@@ -57,7 +56,6 @@ function baseAppState(overrides = {}) {
     draftSource: 'prefill',
     selectExercise: vi.fn(),
     backToPicker: vi.fn(),
-    setExerciseSearch: vi.fn(),
     setDraft: vi.fn(),
     ...overrides,
   };
@@ -210,12 +208,11 @@ describe('ProductTour sample weight on steps 5-6', () => {
 });
 
 describe('ProductTour restore on exit', () => {
-  // Mirrors the plan's e2e scenario: search "dead", have an exercise open, take the tour from
+  // Mirrors the plan's e2e scenario: have an exercise open, take the tour from
   // Help, step forward twice, then bail -- everything must land back exactly where it was.
   function snapshotAppState() {
     return {
       selectedExerciseId: 42,
-      exerciseSearch: 'dead',
       weightDraft: 225,
       repsDraft: 3,
       durationDraft: 45,
@@ -224,12 +221,11 @@ describe('ProductTour restore on exit', () => {
       draftSource: 'user',
       selectExercise: vi.fn(),
       backToPicker: vi.fn(),
-      setExerciseSearch: vi.fn(),
       setDraft: vi.fn(),
     };
   }
 
-  it('Skip tour restores the exercise, search, all six draft fields, and the pathname', () => {
+  it('Skip tour restores the exercise, all six draft fields, and the pathname', () => {
     const appState = snapshotAppState();
     renderTour({ initialPath: '/app/help', appState });
 
@@ -242,7 +238,6 @@ describe('ProductTour restore on exit', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Skip tour' }));
 
     expect(appState.selectExercise).toHaveBeenCalledWith(42);
-    expect(appState.setExerciseSearch).toHaveBeenCalledWith('dead');
     expect(appState.setDraft).toHaveBeenCalledWith({
       exerciseId: 42,
       weight: 225,
@@ -257,7 +252,7 @@ describe('ProductTour restore on exit', () => {
 
   // Verified non-vacuous: this is the exact case docs/incidents/2026-08-12-... exists for --
   // deleting the restore would leave 42 selected forever instead of putting the person back on
-  // Help with their exercise, search and draft exactly as they left them.
+  // Help with their exercise and draft exactly as they left them.
   it('Escape performs the identical restore', () => {
     const appState = snapshotAppState();
     renderTour({ initialPath: '/app/help', appState });
@@ -269,7 +264,6 @@ describe('ProductTour restore on exit', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
 
     expect(appState.selectExercise).toHaveBeenCalledWith(42);
-    expect(appState.setExerciseSearch).toHaveBeenCalledWith('dead');
     expect(appState.setDraft).toHaveBeenCalledWith(
       expect.objectContaining({ exerciseId: 42, weight: 225, reps: 3, durationSeconds: 45, setCount: 2, source: 'user' }),
     );

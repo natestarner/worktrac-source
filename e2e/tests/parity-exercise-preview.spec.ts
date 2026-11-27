@@ -1,6 +1,6 @@
 import { Page, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, logSetAt, pickExercise, clearSearch, searchFor, searchScreen, searchField } from './support/exercises';
+import { addExerciseToRoutine, logSetAt, pickExercise, closeSearch, searchFor, searchScreen, searchField } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // "Preview exercise": an exercise's muscles (and how-to video, where it has one) BEFORE choosing
@@ -32,7 +32,7 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
     // Warm the catalog while online, as any device that has opened the picker has.
     await searchFor(page, EXERCISE);
     await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-    await clearSearch(page);
+    await closeSearch(page);
   },
   navigate: async () => {},
   act: async (page) => {
@@ -54,7 +54,7 @@ forEachConnectivityMode<void>('previewing a search result shows its muscles with
     await expect(searchField(page)).toHaveValue(EXERCISE);
     await expect(page.getByRole('button', { name: 'Log set' })).toHaveCount(0);
     // Leave the picker as found: the harness ends on the tab bar.
-    await clearSearch(page);
+    await closeSearch(page);
   },
 });
 

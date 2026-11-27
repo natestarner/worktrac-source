@@ -7,8 +7,10 @@ where the code lives. If search on the Log tab ever needs to change again, read 
 **Where it ended up:** a **search screen** (`feat/search-screen`). On the Log page the field is a
 button that looks like a field. A tap switches the Log tab to an ordinary page: the field at the
 top, Cancel beside it, and the results below in normal document flow, scrolled by the page itself.
-The real field is focused in the same click handler, so iOS raises the keyboard. The current rules
-are in `.claude/rules/log-screen.md`. Everything below is history.
+The real field is focused in the same click handler, so iOS raises the keyboard. Since 2026-11-27
+what is typed lives only on that screen, so Cancel leaves the next search empty; it used to be the
+person's saved draft, a leftover from when the field sat on the Log page. The current rules are in
+`.claude/rules/log-screen.md`. Everything below is history.
 
 ## The constraint that drove all of it
 

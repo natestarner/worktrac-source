@@ -2,9 +2,6 @@ import { createRef } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ExerciseSearchScreen from './ExerciseSearchScreen';
-import { useAppState } from '../../context/AppStateContext';
-
-vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 // The preview sheet has its own tests; here it only has to open.
 vi.mock('../exercise/ExercisePreview', () => ({
   ExercisePreviewSheet: ({ exerciseName }) => <div role="dialog" aria-label={`Preview ${exerciseName}`} />,
@@ -16,13 +13,13 @@ const catalog = [
   { id: 13, name: 'Bench Press' },
 ];
 
+// `search` is typed into the field, the way a person does: the text is the screen's own state.
 function renderScreen({ search = '', ...props } = {}) {
-  const setExerciseSearch = vi.fn();
-  useAppState.mockReturnValue({ exerciseSearch: search, setExerciseSearch });
   const handlers = { onSelectExercise: vi.fn(), onAddExercise: vi.fn(), onCancel: vi.fn() };
   const fieldRef = createRef();
-  render(<ExerciseSearchScreen fieldRef={fieldRef} catalog={catalog} loading={false} {...handlers} {...props} />);
-  return { ...handlers, setExerciseSearch, fieldRef };
+  const view = render(<ExerciseSearchScreen fieldRef={fieldRef} catalog={catalog} loading={false} {...handlers} {...props} />);
+  if (search) fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: search } });
+  return { ...handlers, fieldRef, view };
 }
 
 describe('ExerciseSearchScreen', () => {
@@ -60,10 +57,14 @@ describe('ExerciseSearchScreen', () => {
     expect(screen.queryByRole('button', { name: 'Bench Press' })).toBeNull();
   });
 
-  it('typing writes the person’s draft', () => {
-    const { setExerciseSearch } = renderScreen();
-    fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: 'ben' } });
-    expect(setExerciseSearch).toHaveBeenCalledWith('ben');
+  // Cancel means "never mind": LogTab unmounts the screen on close, and the next one starts empty.
+  it('what was typed goes with the screen: a new one starts empty', () => {
+    const { view } = renderScreen({ search: 'ben' });
+    expect(screen.getByPlaceholderText('Search all exercises')).toHaveValue('ben');
+    view.unmount();
+    renderScreen();
+    expect(screen.getByPlaceholderText('Search all exercises')).toHaveValue('');
+    expect(screen.getByText('All exercises')).toBeInTheDocument();
   });
 
   it('choosing a result hands it to LogTab', () => {

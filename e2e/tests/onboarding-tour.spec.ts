@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, closeSearch, searchFor, searchTrigger } from './support/exercises';
+import { pickExercise, searchFor, searchTrigger } from './support/exercises';
 
 // The first-run guided tour. Full design: the plan at
 // C:\Users\natha\.claude\plans\when-a-user-logs-steady-giraffe.md (components/onboarding/).
@@ -236,32 +236,7 @@ for (const viewport of GEOMETRY_VIEWPORTS) {
 }
 
 test.describe('Escape skips and restores', () => {
-  // The exact risk the restore mechanism exists for: SELECT_EXERCISE clears exerciseSearch as a
-  // side effect, and the tour's own step 5 calls it internally -- so without the restore, taking
-  // the tour would silently wipe out a half-typed search.
-  test('restores a half-typed search that the tour would otherwise clear', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Odalys', { keepWelcome: true });
-    await dismissWelcomeAndSearch(page);
-
-    await searchFor(page, 'dead');
-    // The search screen hides the header; its Cancel keeps what was typed.
-    await closeSearch(page);
-    await openHelp(page);
-
-    await page.getByRole('button', { name: 'Take the tour' }).click();
-    await clickContinue(page);
-    await clickContinue(page); // step 3, still exercise:'none' -- search hasn't been touched yet
-
-    await page.keyboard.press('Escape');
-
-    await expect(page).toHaveURL(/\/app\/help/);
-    await expect(page.getByRole('dialog')).toBeHidden();
-
-    await page.getByRole('link', { name: 'Log', exact: true }).click();
-    await expect(searchTrigger(page)).toHaveText('dead');
-  });
-
-  // The other half: an exercise open when the tour starts must reopen after Escape, even though
+  // An exercise open when the tour starts must reopen after Escape, even though
   // the tour's own arrange-effect calls backToPicker() internally for steps 1-4.
   test('restores the exercise that was open when the tour started', async ({ page, request }) => {
     await registerHousehold(page, request, 'Thaddeus', { keepWelcome: true });

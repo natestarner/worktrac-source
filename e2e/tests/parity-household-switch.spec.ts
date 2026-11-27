@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { addMemberLogin, registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, clearSearch, searchFor } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -41,7 +41,7 @@ const ROW_LABEL = 'BW × 8';
 async function warmCatalog(page: Page) {
   await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 async function openAccountMenu(page: Page) {

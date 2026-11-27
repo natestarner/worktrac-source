@@ -283,7 +283,7 @@ looks rows up by.
 ## Every person has their own independent client-side state
 
 Whatever a person is currently doing or viewing — tab/screen, selected exercise, routine position,
-draft weight/reps, search text, an in-progress past-session edit, an active rest timer — **must
+draft weight/reps, an in-progress past-session edit, an active rest timer — **must
 survive switching to another person and back**. Nothing representing "what this person is doing
 right now" may live as a single global value. This is the client-side mirror of the backend's
 per-person data separation.

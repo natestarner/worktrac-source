@@ -56,7 +56,6 @@ export default function LogTab() {
     forgetRoutineStepsLogged,
     doneEditingSession,
     updateEditingSession,
-    setExerciseSearch,
     clearVolumePrCelebrated,
   } = useAppState();
 
@@ -149,8 +148,8 @@ export default function LogTab() {
   }
 
   // Cancel (and Escape) = Back: the search entry is popped, and Back's own handling (below) closes
-  // the screen. With no entry pushed there is nothing to pop, so it closes directly. The typed text
-  // is KEPT -- it is this person's draft (AppStateContext, per person).
+  // the screen. With no entry pushed there is nothing to pop, so it closes directly. What was typed
+  // goes with the screen (ExerciseSearchScreen's own state): Cancel means "never mind".
   function cancelSearch() {
     searchFieldRef.current?.blur();
     if (searchEntryPushedRef.current) navigate(-1);
@@ -369,7 +368,6 @@ export default function LogTab() {
   // and why it hung for the full retry backoff under lie-fi.
   function handleExerciseCreated(created) {
     setAddExerciseName(null);
-    setExerciseSearch('');
     if (created?.id) selectExercise(created.id);
   }
 

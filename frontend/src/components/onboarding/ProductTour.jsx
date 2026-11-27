@@ -39,7 +39,6 @@ export default function ProductTour() {
   const {
     activePersonId,
     selectedExerciseId,
-    exerciseSearch,
     weightDraft,
     repsDraft,
     durationDraft,
@@ -48,7 +47,6 @@ export default function ProductTour() {
     draftSource,
     selectExercise,
     backToPicker,
-    setExerciseSearch,
     setDraft,
   } = useAppState();
 
@@ -77,7 +75,6 @@ export default function ProductTour() {
     snapshotRef.current = {
       pathname: location.pathname,
       selectedExerciseId,
-      exerciseSearch,
       scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
       weightDraft,
       repsDraft,
@@ -259,10 +256,6 @@ export default function ProductTour() {
     // restored value -- see docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md.
     if (snap.selectedExerciseId != null) selectExercise(snap.selectedExerciseId);
     else backToPicker();
-    // exerciseSearch is not politeness: SELECT_EXERCISE clears it as a side effect
-    // (AppStateContext.jsx), so restoring the exercise above may have just wiped a half-typed
-    // search -- put it back explicitly, after, rather than relying on order-of-dispatch luck.
-    setExerciseSearch(snap.exerciseSearch);
     setDraft({
       exerciseId: snap.draftExerciseId,
       weight: snap.weightDraft,

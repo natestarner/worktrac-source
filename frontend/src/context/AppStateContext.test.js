@@ -79,27 +79,16 @@ describe('AppStateContext reducer', () => {
     expect(active(state).lastTab).toBe('/app/routines');
   });
 
-  it('keeps each person an in-progress past-session edit and a half-typed exercise search', () => {
+  it('keeps each person an in-progress past-session edit', () => {
     let state = withPerson(1);
     const session = { id: 5, startedAt: '2026-01-01T00:00:00Z' };
     state = reducer(state, { type: 'START_EDITING_SESSION', session });
-    state = reducer(state, { type: 'SET_EXERCISE_SEARCH', value: 'bench' });
 
     state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
-    expect(active(state).exerciseSearch).toBe('');
     expect(active(state).editingSession).toBeNull();
 
     state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
     expect(active(state).editingSession).toEqual(session);
-    expect(active(state).exerciseSearch).toBe('bench');
-  });
-
-  it('selecting an exercise clears any in-progress search text', () => {
-    let state = withPerson(1);
-    state = reducer(state, { type: 'SET_EXERCISE_SEARCH', value: 'bench' });
-    state = reducer(state, { type: 'SELECT_EXERCISE', exerciseId: 5 });
-    expect(active(state).selectedExerciseId).toBe(5);
-    expect(active(state).exerciseSearch).toBe('');
   });
 
   it('starting a routine selects its first exercise', () => {

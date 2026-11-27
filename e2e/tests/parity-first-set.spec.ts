@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise, tapLogSet, clearSearch, searchFor } from './support/exercises';
+import { dismissPrCelebration, pickExercise, tapLogSet, closeSearch, searchFor } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // The FIRST set of a workout -- the one that implicitly creates the session -- used to appear,
@@ -40,7 +40,7 @@ const ROW_LABEL = 'BW × 8';
 async function warmCatalog(page: import('@playwright/test').Page) {
   await searchFor(page, EXERCISE);
   await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
-  await clearSearch(page);
+  await closeSearch(page);
 }
 
 forEachConnectivityMode<void>('the first set of a workout never blinks out', {
