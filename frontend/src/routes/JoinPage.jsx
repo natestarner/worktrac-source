@@ -233,7 +233,7 @@ export default function JoinPage() {
               className="btn btn-primary btn-lg btn-full pressable"
               style={{ position: 'relative' }}
             >
-              <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Join household</span>
+              <span style={{ visibility: submitting ? 'hidden' : undefined }}>Join household</span>
               {submitting && (
                 <span style={spinnerWrapStyle}>
                   <Spinner color="currentColor" />
@@ -292,7 +292,7 @@ export default function JoinPage() {
             </div>
 
             <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ position: 'relative' }}>
-              <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Join household</span>
+              <span style={{ visibility: submitting ? 'hidden' : undefined }}>Join household</span>
               {submitting && (
                 <span style={spinnerWrapStyle}>
                   <Spinner color="currentColor" />

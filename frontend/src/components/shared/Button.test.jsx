@@ -89,3 +89,17 @@ describe('Button minimum pending duration', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+// An explicit `visibility: visible` on the label overrides a hidden ancestor: "End workout" showed
+// over the page while the SessionBar around it was hidden (2026-11-27). The label may only ever say
+// `hidden`, and otherwise inherits.
+describe('Button label visibility', () => {
+  it('inherits its visibility unless pending, so a hidden parent hides it', () => {
+    render(
+      <div style={{ visibility: 'hidden' }}>
+        <Button>End workout</Button>
+      </div>,
+    );
+    expect(screen.getByText('End workout').style.visibility).toBe('');
+  });
+});

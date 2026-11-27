@@ -243,11 +243,14 @@ reveal that ignored the sticky chrome, and none at all for dialogs on the web).
   visible-viewport scrim for the reason in "Modals" above.
 - **History's and PRs' search field: the keyboard goes away on the Search key (or a tap outside),
   NEVER on a drag; the SessionBar is hidden while the field has focus** (`.app-shell:has(.exercise-filter-input:focus) .session-bar`,
-  `visibility`, so nothing reflows). Safari keeps a fixed bottom bar just above the keyboard, so with
+  `display: none`, which removes everything in it; the bar is fixed, so that moves nothing).
+  With `visibility: hidden`, "End workout" still showed, because Button's label span set an explicit
+  `visibility: visible`. **A child never sets `visibility: visible`** (Button, ConfirmDialog,
+  AppSettingsTab now pass `undefined`): it punches through any hidden ancestor. Safari keeps a fixed bottom bar just above the keyboard, so with
   the keyboard up the bar covered the matches (2026-11-26). The first fix closed the keyboard when a
   finger dragged the page, and closing it mid-scroll made Safari redraw History while it coasted:
   the list flashed blank and the sticky chrome vanished (2026-11-27). **Don't bring back
-  dismiss-on-drag**, and don't hide the bar with `display` (the page would reflow under the keyboard).
+  dismiss-on-drag**.
   Pinned by `ExerciseFilterBar.test.jsx` and `history-filter.spec.ts`'s touch block (each half red
   against its regression).
 - **`--sticky-chrome-clearance` is measured, not guessed.** `AppShell`'s `publishChromeHeight`
