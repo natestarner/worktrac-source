@@ -1884,6 +1884,11 @@ button.person-row {
   top: var(--safe-top);
   z-index: var(--z-app-chrome);
   background: var(--color-bg);
+  /* EXPERIMENT (2026-11-27): its own compositing layer, for Brave on iPhone, where with the keyboard
+     up the sticky chrome flickered while scrolling and History showed through it. Nothing fixed
+     lives inside the chrome (dialogs portal to <body>), and sticky + z-index already makes it a
+     stacking context, so this changes when it is drawn, not where. Revert if Brave is unchanged. */
+  will-change: transform;
 }
 
 /* Hairline under the sticky chrome, so content scrolling beneath it has a clean
